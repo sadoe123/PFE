@@ -20,12 +20,8 @@ services:
       - ./connectors:/app/connectors
       - ./api:/app/api
       - ./db:/app/db
-      # Option 1 : fichiers uploadés via UI
       - uploads_data:/app/uploads
-      # Option 2 : dossier local Windows monté dans Docker
       - C:/Users:/mnt/host/Users
-      # Option 3 : si tu as un partage réseau, monte-le ici
-      # - //serveur/partage:/mnt/network/serveur/partage
     command: >
       uvicorn api.main:app
         --host 0.0.0.0 --port 8000 --reload
@@ -40,10 +36,10 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   # ── UI (serveur statique) ─────────────────────────────────
   ui:
@@ -108,6 +104,28 @@ services:
       - "8080:8080"
     depends_on:
       - postgres
+    networks:
+      - onepilot_net
+    restart: unless-stopped
+
+  # ── Jupyter Lab (ML notebooks) ────────────────────────────
+  jupyter:
+    image: jupyter/scipy-notebook:latest
+    container_name: onepilot_jupyter
+    ports:
+      - "8888:8888"
+    environment:
+      JUPYTER_ENABLE_LAB: "yes"
+      JUPYTER_TOKEN: "onepilot2025"
+    volumes:
+      - ./notebooks:/home/jovyan/work
+    command: >
+      start-notebook.sh
+        --NotebookApp.token=onepilot2025
+        --NotebookApp.password=''
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - onepilot_net
     restart: unless-stopped

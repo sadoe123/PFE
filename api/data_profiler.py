@@ -1,0 +1,705 @@
+"""
+OnePilot – data_profiler.py
+§2.2.4 Profiling des données avancé — Multi-connecteur générique
+
+Dépendances : SQLAlchemy + pyodbc (déjà installés), requests (déjà installé)
+Aucune nouvelle dépendance requise — fonctionne avec ce qui est déjà dans requirements.txt
+"""
+from __future__ import annotations
+
+import re
+import json
+import logging
+import asyncio
+import math
+from collections import Counter
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
+from uuid import UUID
+
+logger = logging.getLogger(__name__)
+
+# ══════════════════════════════════════════════════════════════════════
+# PATTERNS SÉMANTIQUES
+# ══════════════════════════════════════════════════════════════════════
+
+PATTERNS = {
+    "email":       re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}$"),
+    "uuid":        re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I),
+    "url":         re.compile(r"^https?://[^\s]+$"),
+    "phone":       re.compile(r"^[\+\d][\d\s\-\(\)\.]{6,20}$"),
+    "iban":        re.compile(r"^[A-Z]{2}\d{2}[A-Z0-9]{4}\d{7}([A-Z0-9]?){0,16}$"),
+    "siret":       re.compile(r"^\d{14}$"),
+    "siren":       re.compile(r"^\d{9}$"),
+    "zip_fr":      re.compile(r"^\d{5}$"),
+    "iso_date":    re.compile(r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2})?"),
+    "date_fr":     re.compile(r"^\d{2}/\d{2}/\d{4}$"),
+    "currency":    re.compile(r"^[\$\u20ac\xa3\xa5]\s*[\d,\.]+|[\d,\.]+\s*[\$\u20ac\xa3\xa5]$"),
+    "json_str":    re.compile(r"^\s*[\{\[]"),
+    "boolean_str": re.compile(r"^(true|false|yes|no|oui|non|1|0)$", re.I),
+    "alpha_code":  re.compile(r"^[A-Z0-9\-_]{2,20}$"),
+}
+
+SEMANTIC_LABELS = {
+    "email":       {"icon": "\u2709\ufe0f",  "label": "Email",         "color": "#818cf8"},
+    "uuid":        {"icon": "\U0001f511",    "label": "UUID",          "color": "#f59e0b"},
+    "url":         {"icon": "\U0001f310",    "label": "URL",           "color": "#06b6d4"},
+    "phone":       {"icon": "\U0001f4de",    "label": "Telephone",     "color": "#8b5cf6"},
+    "iban":        {"icon": "\U0001f3e6",    "label": "IBAN",          "color": "#10b981"},
+    "siret":       {"icon": "\U0001f3e2",    "label": "SIRET",         "color": "#f97316"},
+    "siren":       {"icon": "\U0001f3e2",    "label": "SIREN",         "color": "#f97316"},
+    "zip_fr":      {"icon": "\U0001f4ee",    "label": "Code postal",   "color": "#ec4899"},
+    "iso_date":    {"icon": "\U0001f4c5",    "label": "Date ISO",      "color": "#22d3ee"},
+    "date_fr":     {"icon": "\U0001f4c5",    "label": "Date FR",       "color": "#22d3ee"},
+    "currency":    {"icon": "\U0001f4b0",    "label": "Montant",       "color": "#84cc16"},
+    "json_str":    {"icon": "\U0001f4e6",    "label": "JSON",          "color": "#a78bfa"},
+    "boolean_str": {"icon": "\u26a1",        "label": "Booleen",       "color": "#fb923c"},
+    "alpha_code":  {"icon": "\U0001f3f7\ufe0f","label": "Code metier", "color": "#94a3b8"},
+    "numeric":     {"icon": "\U0001f522",    "label": "Numerique",     "color": "#34d399"},
+    "text":        {"icon": "\U0001f4dd",    "label": "Texte",         "color": "#9ca3af"},
+    "pk":          {"icon": "\U0001f5dd\ufe0f","label": "Cle primaire","color": "#fbbf24"},
+    "fk":          {"icon": "\U0001f517",    "label": "Cle etrangere", "color": "#60a5fa"},
+    "date_col":    {"icon": "\U0001f4c5",    "label": "Date",          "color": "#22d3ee"},
+    "amount_col":  {"icon": "\U0001f4b0",    "label": "Montant",       "color": "#84cc16"},
+    "flag_col":    {"icon": "\U0001f6a9",    "label": "Flag/Statut",   "color": "#fb923c"},
+    "unknown":     {"icon": "\u2753",        "label": "Inconnu",       "color": "#6b7280"},
+}
+
+# ══════════════════════════════════════════════════════════════════════
+# UTILITAIRES
+# ══════════════════════════════════════════════════════════════════════
+
+def _safe_float(v: Any) -> Optional[float]:
+    try:
+        f = float(v)
+        return None if math.isnan(f) or math.isinf(f) else round(f, 4)
+    except (TypeError, ValueError):
+        return None
+
+
+def _percentile(sorted_vals: List[float], p: float) -> Optional[float]:
+    if not sorted_vals:
+        return None
+    idx = (len(sorted_vals) - 1) * p / 100
+    lo, hi = int(idx), min(int(idx) + 1, len(sorted_vals) - 1)
+    return round(sorted_vals[lo] + (sorted_vals[hi] - sorted_vals[lo]) * (idx - lo), 4)
+
+
+def detect_pattern(values: List[str]) -> Tuple[str, float]:
+    if not values:
+        return "unknown", 0.0
+    sample = [str(v).strip() for v in values if v is not None and str(v).strip()]
+    if not sample:
+        return "unknown", 0.0
+    counts: Dict[str, int] = {}
+    for val in sample:
+        for name, rx in PATTERNS.items():
+            if rx.match(val):
+                counts[name] = counts.get(name, 0) + 1
+                break
+    if not counts:
+        return "text", 1.0
+    best = max(counts, key=lambda k: counts[k])
+    conf = round(counts[best] / len(sample), 3)
+    return (best, conf) if conf >= 0.5 else ("text", 1.0)
+
+
+def classify_column(col_name: str, col_type: str,
+                    is_pk: bool, is_fk: bool, pattern: str) -> str:
+    if is_pk:
+        return "pk"
+    if is_fk:
+        return "fk"
+    n = col_name.lower()
+    t = col_type.lower()
+    if any(x in n for x in ["date", "time", "at", "created", "updated", "modified"]):
+        if any(x in t for x in ["date", "time", "timestamp"]):
+            return "date_col"
+    if any(x in n for x in ["amount", "montant", "total", "price", "prix",
+                              "cost", "revenue", "balance", "solde"]):
+        return "amount_col"
+    if any(x in n for x in ["flag", "is_", "active", "enabled", "status",
+                              "statut", "bool", "indicator"]):
+        return "flag_col"
+    if pattern in SEMANTIC_LABELS and pattern not in ("text", "unknown"):
+        return pattern
+    if any(x in t for x in ["int", "numeric", "decimal", "float", "double"]):
+        return "numeric"
+    return "text"
+
+
+# ══════════════════════════════════════════════════════════════════════
+# CONNEXION SQLALCHEMY — réutilise pyodbc déjà installé
+# ══════════════════════════════════════════════════════════════════════
+
+def _detect_odbc_driver() -> str:
+    """Détecte automatiquement le driver ODBC SQL Server disponible."""
+    try:
+        import pyodbc
+        available = [d for d in pyodbc.drivers()
+                     if "SQL Server" in d or "ODBC" in d.upper()]
+        for preferred in ["ODBC Driver 18 for SQL Server",
+                          "ODBC Driver 17 for SQL Server",
+                          "ODBC Driver 13 for SQL Server",
+                          "SQL Server"]:
+            if preferred in available:
+                logger.info(f"[Profiler] Driver ODBC détecté: {preferred}")
+                return preferred
+        if available:
+            logger.info(f"[Profiler] Driver ODBC fallback: {available[0]}")
+            return available[0]
+    except Exception as e:
+        logger.warning(f"[Profiler] pyodbc.drivers() erreur: {e}")
+    return "ODBC Driver 18 for SQL Server"
+
+
+def _build_url(source_dict: Dict) -> str:
+    ct   = (source_dict.get("connector_type") or "").lower()
+    opts = source_dict.get("options") or {}
+    if isinstance(opts, str):
+        try:
+            opts = json.loads(opts)
+        except Exception:
+            opts = {}
+
+    host = source_dict.get("host")          or opts.get("host", "localhost")
+    port = source_dict.get("port")          or opts.get("port")
+    db   = source_dict.get("database_name") or opts.get("database_name", "")
+    user = source_dict.get("username")      or opts.get("username", "")
+    pwd  = source_dict.get("password")      or opts.get("password", "")
+
+    if any(x in ct for x in ["mssql", "sql_server", "sqlserver"]) or (
+            not any(x in ct for x in ["postgres", "pg", "mysql", "sqlite",
+                                       "odata", "rest", "file", "csv", "json"])):
+        driver = _detect_odbc_driver()
+        port   = port or 1433
+        driver_enc = driver.replace(" ", "+")
+        return (
+            f"mssql+pyodbc://{user}:{pwd}@{host}:{port}/{db}"
+            f"?driver={driver_enc}"
+            "&TrustServerCertificate=yes&Encrypt=no"
+        )
+    if "postgres" in ct or ct == "pg":
+        port = port or 5432
+        return f"postgresql+psycopg2://{user}:{pwd}@{host}:{port}/{db}"
+    if "mysql" in ct:
+        port = port or 3306
+        return f"mysql+pymysql://{user}:{pwd}@{host}:{port}/{db}"
+    if "sqlite" in ct:
+        return f"sqlite:///{db}"
+    driver = _detect_odbc_driver()
+    port   = port or 1433
+    driver_enc = driver.replace(" ", "+")
+    return (
+        f"mssql+pyodbc://{user}:{pwd}@{host}:{port}/{db}"
+        f"?driver={driver_enc}"
+        "&TrustServerCertificate=yes&Encrypt=no"
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# PROFILING SQL SYNCHRONE (appelé dans thread)
+# ══════════════════════════════════════════════════════════════════════
+
+def _sync_profile_sql(source_dict: Dict, table_name: str,
+                       fields: List[Dict], sample_size: int) -> Dict:
+    from sqlalchemy import create_engine, text
+
+    ct  = (source_dict.get("connector_type") or "").lower()
+    url = _build_url(source_dict)
+
+    try:
+        engine = create_engine(url, pool_pre_ping=True,
+                                pool_size=1, max_overflow=0,
+                                connect_args={"timeout": 30})
+    except Exception:
+        engine = create_engine(url, pool_pre_ping=True)
+
+    try:
+        with engine.connect() as conn:
+            try:
+                if any(x in ct for x in ["mssql", "sql_server", "sqlserver"]):
+                    cnt = conn.execute(text(f"SELECT COUNT_BIG(*) FROM [{table_name}]")).scalar()
+                elif "mysql" in ct:
+                    cnt = conn.execute(text(f"SELECT COUNT(*) FROM `{table_name}`")).scalar()
+                else:
+                    cnt = conn.execute(text(f'SELECT COUNT(*) FROM "{table_name}"')).scalar()
+                total_rows = int(cnt or 0)
+            except Exception:
+                total_rows = 0
+
+            try:
+                if any(x in ct for x in ["mssql", "sql_server", "sqlserver"]):
+                    sql = f"SELECT TOP {sample_size} * FROM [{table_name}]"
+                elif "mysql" in ct:
+                    sql = f"SELECT * FROM `{table_name}` LIMIT {sample_size}"
+                else:
+                    sql = f'SELECT * FROM "{table_name}" LIMIT {sample_size}'
+
+                result    = conn.execute(text(sql))
+                col_names = list(result.keys())
+                rows      = result.fetchall()
+            except Exception as e:
+                engine.dispose()
+                return _empty_profile(table_name, fields, f"Erreur sample: {e}")
+
+        engine.dispose()
+
+        columns_profile = []
+        for field in fields:
+            col = field["name"]
+            if col not in col_names:
+                continue
+            idx    = col_names.index(col)
+            values = [r[idx] for r in rows]
+            columns_profile.append(_compute_single_column(col, field, values, total_rows))
+
+        return {
+            "table":        table_name,
+            "total_rows":   total_rows,
+            "sampled_rows": len(rows),
+            "columns":      columns_profile,
+            "profiled_at":  datetime.utcnow().isoformat(),
+            "error":        None,
+        }
+
+    except Exception as e:
+        logger.error(f"[Profiler] SQL {table_name}: {e}")
+        try:
+            engine.dispose()
+        except Exception:
+            pass
+        return _empty_profile(table_name, fields, str(e))
+
+
+# ══════════════════════════════════════════════════════════════════════
+# CALCUL STATS PAR COLONNE
+# ══════════════════════════════════════════════════════════════════════
+
+def _compute_single_column(col_name: str, field: Dict,
+                            values: List[Any], total_rows: int) -> Dict:
+    n        = len(values)
+    is_pk    = field.get("is_primary_key", False)
+    is_fk    = field.get("is_foreign_key",  False)
+    col_type = field.get("type", "string")
+
+    nulls        = sum(1 for v in values if v is None)
+    null_rate    = round(nulls / n, 4) if n else 0.0
+    non_nulls    = [v for v in values if v is not None]
+    str_vals     = [str(v) for v in non_nulls]
+    counts_map   = Counter(str_vals)
+    unique_count = len(counts_map)
+    unique_rate  = round(unique_count / n, 4) if n else 0.0
+    duplicates   = sum(1 for c in counts_map.values() if c > 1)
+    dup_rate     = round(duplicates / unique_count, 4) if unique_count else 0.0
+    top_values   = [{"value": v, "count": c} for v, c in counts_map.most_common(5)]
+
+    num_stats: Dict = {}
+    numeric_vals = [f for v in non_nulls for f in [_safe_float(v)] if f is not None]
+    if numeric_vals:
+        numeric_vals.sort()
+        mean = sum(numeric_vals) / len(numeric_vals)
+        num_stats = {
+            "min":    numeric_vals[0],
+            "max":    numeric_vals[-1],
+            "mean":   round(mean, 4),
+            "median": _percentile(numeric_vals, 50),
+            "p25":    _percentile(numeric_vals, 25),
+            "p75":    _percentile(numeric_vals, 75),
+            "p95":    _percentile(numeric_vals, 95),
+            "std":    round(math.sqrt(
+                sum((x - mean) ** 2 for x in numeric_vals) / len(numeric_vals)
+            ), 4) if len(numeric_vals) > 1 else 0.0,
+        }
+        mn, mx = numeric_vals[0], numeric_vals[-1]
+        if mx > mn:
+            bsize   = (mx - mn) / 10
+            buckets = [0] * 10
+            for v in numeric_vals:
+                buckets[min(int((v - mn) / bsize), 9)] += 1
+            num_stats["histogram"] = {"buckets": buckets, "min": mn,
+                                       "max": mx, "bucket_size": round(bsize, 4)}
+
+    text_stats: Dict = {}
+    pattern_name, pattern_conf = "unknown", 0.0
+    if str_vals and col_type in ("string", "text", "varchar", "char", "nvarchar"):
+        lengths = sorted(len(s) for s in str_vals)
+        pattern_name, pattern_conf = detect_pattern(str_vals[:500])
+        text_stats = {
+            "min_length":   lengths[0]  if lengths else 0,
+            "max_length":   lengths[-1] if lengths else 0,
+            "avg_length":   round(sum(lengths) / len(lengths), 1) if lengths else 0,
+            "pattern":      pattern_name,
+            "pattern_conf": pattern_conf,
+        }
+    elif numeric_vals:
+        pattern_name, pattern_conf = "numeric", 1.0
+
+    outliers_count = 0
+    if numeric_vals and num_stats.get("p25") is not None and num_stats.get("p75") is not None:
+        iqr = num_stats["p75"] - num_stats["p25"]
+        lo  = num_stats["p25"] - 1.5 * iqr
+        hi  = num_stats["p75"] + 1.5 * iqr
+        outliers_count = sum(1 for v in numeric_vals if v < lo or v > hi)
+
+    semantic = classify_column(col_name, col_type, is_pk, is_fk, pattern_name)
+    sem_meta = SEMANTIC_LABELS.get(semantic, SEMANTIC_LABELS["unknown"])
+
+    quality_score = max(0, 100 - int(null_rate * 40) - int(dup_rate * 20)
+                        - (min(20, int(outliers_count / n * 100)) if outliers_count and n else 0))
+
+    issues = []
+    if null_rate > 0.3:
+        issues.append({"type": "high_null_rate",
+                       "msg": f"{int(null_rate*100)}% de valeurs nulles",
+                       "severity": "error" if null_rate > 0.8 else "warning"})
+    if dup_rate > 0.5 and not is_fk and unique_count > 1:
+        issues.append({"type": "duplicates",
+                       "msg": f"{duplicates} valeurs dupliquees", "severity": "info"})
+    if outliers_count > 0:
+        issues.append({"type": "outliers",
+                       "msg": f"{outliers_count} outliers (IQR)", "severity": "info"})
+    if is_pk and unique_rate < 1.0:
+        issues.append({"type": "pk_not_unique",
+                       "msg": "Cle primaire non unique !", "severity": "error"})
+
+    return {
+        "name":          col_name,
+        "type":          col_type,
+        "is_pk":         is_pk,
+        "is_fk":         is_fk,
+        "semantic":      semantic,
+        "sem_icon":      sem_meta["icon"],
+        "sem_label":     sem_meta["label"],
+        "sem_color":     sem_meta["color"],
+        "total":         n,
+        "null_count":    nulls,
+        "null_rate":     null_rate,
+        "unique_count":  unique_count,
+        "unique_rate":   unique_rate,
+        "dup_rate":      dup_rate,
+        "top_values":    top_values,
+        "numeric_stats": num_stats,
+        "text_stats":    text_stats,
+        "outliers":      outliers_count,
+        "quality_score": quality_score,
+        "issues":        issues,
+        "pattern":       text_stats.get("pattern", pattern_name),
+        "pattern_conf":  text_stats.get("pattern_conf", pattern_conf),
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════
+# PROFILING OData / REST / FILE (synchrone → thread)
+# ══════════════════════════════════════════════════════════════════════
+
+def _sync_profile_odata(source_dict: Dict, entity_name: str,
+                         fields: List[Dict], sample_size: int) -> Dict:
+    import requests
+    opts     = _parse_opts(source_dict)
+    base_url = opts.get("base_url") or source_dict.get("host") or ""
+    if not base_url:
+        return _empty_profile(entity_name, fields, "URL OData manquante")
+    try:
+        url  = f"{base_url.rstrip('/')}/{entity_name}?$top={sample_size}&$format=json"
+        data = requests.get(url, timeout=30).json()
+        items = data.get("value", data) if isinstance(data, dict) else data
+        return _profile_records(entity_name, fields,
+                                items if isinstance(items, list) else [items])
+    except Exception as e:
+        return _empty_profile(entity_name, fields, str(e))
+
+
+def _sync_profile_rest(source_dict: Dict, entity_name: str,
+                        fields: List[Dict], sample_size: int) -> Dict:
+    import requests
+    opts     = _parse_opts(source_dict)
+    base_url = opts.get("base_url") or source_dict.get("host") or ""
+    try:
+        data  = requests.get(f"{base_url.rstrip('/')}/{entity_name}", timeout=30).json()
+        items = data if isinstance(data, list) else [data]
+        return _profile_records(entity_name, fields, items[:sample_size])
+    except Exception as e:
+        return _empty_profile(entity_name, fields, str(e))
+
+
+def _sync_profile_file(source_dict: Dict, entity_name: str,
+                        fields: List[Dict], sample_size: int) -> Dict:
+    import csv as csv_mod, io
+    opts      = _parse_opts(source_dict)
+    file_path = opts.get("file_path") or opts.get("uploaded_path") or ""
+    if not file_path:
+        return _empty_profile(entity_name, fields, "Chemin fichier manquant")
+    try:
+        ext = file_path.lower().split(".")[-1]
+        with open(file_path, "r", encoding="utf-8-sig") as f:
+            content = f.read()
+        if ext == "csv":
+            reader = csv_mod.DictReader(io.StringIO(content))
+            rows = [r for i, r in enumerate(reader) if i < sample_size]
+        else:
+            data = json.loads(content)
+            rows = (data if isinstance(data, list) else [data])[:sample_size]
+        return _profile_records(entity_name, fields, rows)
+    except Exception as e:
+        return _empty_profile(entity_name, fields, str(e))
+
+
+def _parse_opts(source_dict: Dict) -> Dict:
+    opts = source_dict.get("options") or {}
+    if isinstance(opts, str):
+        try:
+            return json.loads(opts)
+        except Exception:
+            return {}
+    return opts
+
+
+def _profile_records(entity_name: str, fields: List[Dict], records: List[Dict]) -> Dict:
+    if not records:
+        return _empty_profile(entity_name, fields, "Aucun enregistrement")
+    n = len(records)
+    return {
+        "table":        entity_name,
+        "total_rows":   n,
+        "sampled_rows": n,
+        "columns":      [_compute_single_column(f["name"], f, [r.get(f["name"]) for r in records], n)
+                         for f in fields],
+        "profiled_at":  datetime.utcnow().isoformat(),
+        "error":        None,
+    }
+
+
+def _empty_profile(entity_name: str, fields: List[Dict], error: str) -> Dict:
+    return {"table": entity_name, "total_rows": 0, "sampled_rows": 0,
+            "columns": [], "profiled_at": datetime.utcnow().isoformat(), "error": error}
+
+
+# ══════════════════════════════════════════════════════════════════════
+# POINT D'ENTRÉE ASYNC PRINCIPAL
+# ══════════════════════════════════════════════════════════════════════
+
+async def profile_entity(source_id: UUID, entity_name: str,
+                          sample_size: int = 5000) -> Dict:
+    from .database import get_pg_pool
+    pool = await get_pg_pool()
+
+    async with pool.acquire() as conn:
+        source_row = await conn.fetchrow(
+            """SELECT connector_type, host, port, database_name,
+                      username, options
+               FROM data_sources WHERE id=$1""", source_id)
+        if not source_row:
+            return _empty_profile(entity_name, [], "Source introuvable")
+        source_dict = dict(source_row)
+
+        secret_rows = await conn.fetch(
+            "SELECT secret_key, secret_value FROM connection_secrets WHERE source_id=$1",
+            source_id)
+        for sr in secret_rows:
+            if sr["secret_key"] == "password":
+                source_dict["password"] = sr["secret_value"]
+            else:
+                source_dict[sr["secret_key"]] = sr["secret_value"]
+        if "password" not in source_dict:
+            source_dict["password"] = ""
+
+        entity_row = await conn.fetchrow(
+            "SELECT id FROM source_entities WHERE source_id=$1 AND name=$2",
+            source_id, entity_name)
+        fields = []
+        if entity_row:
+            rows = await conn.fetch(
+                """SELECT name, data_type, is_primary_key, is_foreign_key
+                   FROM entity_fields WHERE entity_id=$1 ORDER BY position""",
+                entity_row["id"])
+            fields = [{"name": r["name"], "type": r["data_type"] or "string",
+                       "is_primary_key": r["is_primary_key"],
+                       "is_foreign_key": r["is_foreign_key"]} for r in rows]
+
+    ct = (source_dict.get("connector_type") or "").lower()
+
+    if any(x in ct for x in ["mssql", "sql_server", "sqlserver",
+                               "mysql", "postgres", "sqlite", "sql"]):
+        result = await asyncio.to_thread(
+            _sync_profile_sql, source_dict, entity_name, fields, sample_size)
+    elif "odata" in ct:
+        result = await asyncio.to_thread(
+            _sync_profile_odata, source_dict, entity_name, fields, sample_size)
+    elif any(x in ct for x in ["rest", "api", "http"]):
+        result = await asyncio.to_thread(
+            _sync_profile_rest, source_dict, entity_name, fields, sample_size)
+    elif any(x in ct for x in ["csv", "excel", "file", "json"]):
+        result = await asyncio.to_thread(
+            _sync_profile_file, source_dict, entity_name, fields, sample_size)
+    else:
+        result = _empty_profile(entity_name, fields,
+                                f"Connecteur '{ct}' non supporte pour le profiling")
+
+    await _cache_profile(source_id, entity_name, result)
+    return result
+
+
+# ══════════════════════════════════════════════════════════════════════
+# FIX P2 — PROFILING COMPLET DE TOUTE LA SOURCE (toutes les entités)
+# Nouvelle fonction appelée par POST /sources/{id}/profile/all
+# ══════════════════════════════════════════════════════════════════════
+
+async def profile_source_all(
+    source_id:   UUID,
+    sample_size: int  = 1000,
+    batch_size:  int  = 5,
+    skip_errors: bool = True,
+) -> Dict:
+    """
+    Profile toutes les entités d'une source en séquence par micro-batches.
+    Reprend là où il s'est arrêté (skip entités déjà profilées sans erreur).
+    Retourne un résumé progressif.
+    """
+    from .database import get_pg_pool
+    pool = await get_pg_pool()
+
+    async with pool.acquire() as conn:
+        # Toutes les entités de la source
+        all_entities = await conn.fetch(
+            "SELECT name FROM source_entities WHERE source_id=$1 ORDER BY name",
+            source_id)
+
+        # Entités déjà profilées avec succès → on les skippe
+        done_entities = await conn.fetch(
+            """SELECT entity_name FROM entity_profiles
+               WHERE source_id=$1
+               AND profile_data->>'error' IS NULL
+               AND (profile_data->>'total_rows')::int > 0""",
+            source_id)
+
+    done_set     = {r["entity_name"] for r in done_entities}
+    todo         = [r["name"] for r in all_entities if r["name"] not in done_set]
+    total        = len(all_entities)
+    already_done = len(done_set)
+
+    logger.info(f"[profile_all] {source_id}: {already_done} déjà profilées, {len(todo)} restantes")
+
+    success_count = already_done
+    error_count   = 0
+    errors        = []
+
+    # Traitement par micro-batches pour ne pas saturer la mémoire
+    for i in range(0, len(todo), batch_size):
+        batch = todo[i:i + batch_size]
+        tasks = [profile_entity(source_id, name, sample_size) for name in batch]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for name, result in zip(batch, results):
+            if isinstance(result, Exception):
+                error_count += 1
+                if not skip_errors:
+                    raise result
+                errors.append({"entity": name, "error": str(result)})
+            elif result.get("error"):
+                error_count += 1
+                errors.append({"entity": name, "error": result["error"]})
+            else:
+                success_count += 1
+
+        logger.info(
+            f"[profile_all] Progression: {success_count}/{total} "
+            f"({i + len(batch)}/{len(todo)} nouvelles)"
+        )
+
+    return {
+        "total":         total,
+        "success":       success_count,
+        "errors":        error_count,
+        "error_details": errors[:20],   # max 20 erreurs remontées
+        "skipped":       already_done,
+        "message":       f"{success_count}/{total} entités profilées avec succès",
+    }
+
+
+async def profile_source_summary(source_id: UUID) -> Dict:
+    from .database import get_pg_pool
+    pool = await get_pg_pool()
+    try:
+        async with pool.acquire() as conn:
+            cached = await conn.fetch(
+                "SELECT entity_name, profile_data, profiled_at "
+                "FROM entity_profiles WHERE source_id=$1 ORDER BY entity_name",
+                source_id)
+    except Exception:
+        return {"profiled": 0, "total_entities": 0, "avg_quality": None, "top_issues": []}
+
+    if not cached:
+        return {"profiled": 0, "total_entities": 0, "avg_quality": None, "top_issues": []}
+
+    profiles  = [json.loads(r["profile_data"]) if isinstance(r["profile_data"], str)
+                 else r["profile_data"] for r in cached]
+    all_cols  = [c for p in profiles for c in p.get("columns", [])]
+    avg_q     = round(sum(c["quality_score"] for c in all_cols) / len(all_cols), 1) if all_cols else None
+
+    issues = []
+    for p in profiles:
+        for c in p.get("columns", []):
+            for iss in c.get("issues", []):
+                issues.append({"table": p["table"], "column": c["name"], **iss})
+    issues.sort(key=lambda x: {"error": 0, "warning": 1, "info": 2}.get(x["severity"], 3))
+
+    return {"profiled": len(profiles), "total_entities": len(profiles),
+            "avg_quality": avg_q, "top_issues": issues[:20],
+            "profiled_at": cached[-1]["profiled_at"].isoformat() if cached else None}
+
+
+async def _cache_profile(source_id: UUID, entity_name: str, profile: Dict):
+    from .database import get_pg_pool
+    pool = await get_pg_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS entity_profiles (
+                id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                source_id   UUID NOT NULL,
+                entity_name VARCHAR(500) NOT NULL,
+                profile_data JSONB NOT NULL,
+                profiled_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(source_id, entity_name)
+            )""")
+        await conn.execute("""
+            INSERT INTO entity_profiles (source_id, entity_name, profile_data, profiled_at)
+            VALUES ($1, $2, $3::jsonb, NOW())
+            ON CONFLICT (source_id, entity_name)
+            DO UPDATE SET profile_data=$3::jsonb, profiled_at=NOW()
+        """, source_id, entity_name, json.dumps(profile))
+
+
+# ══════════════════════════════════════════════════════════════════════
+# FIX P1 — get_cached_profile : signature harmonisée
+# Accepte (source_id, entity_name) OU (source_id, entity_name, db_conn)
+# main.py l'appelait avec 3 args → crash silencieux corrigé
+# ══════════════════════════════════════════════════════════════════════
+
+async def get_cached_profile(
+    source_id:   UUID,
+    entity_name: str,
+    db_conn=None,   # ← FIX P1 : paramètre optionnel accepté mais géré en interne
+) -> Optional[Dict]:
+    """
+    Retourne le profil mis en cache pour une entité.
+    db_conn est accepté pour compatibilité avec main.py mais non utilisé
+    (on ouvre toujours notre propre connexion pour éviter les conflits de transaction).
+    """
+    from .database import get_pg_pool
+    pool = await get_pg_pool()
+    try:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT profile_data, profiled_at FROM entity_profiles "
+                "WHERE source_id=$1 AND entity_name=$2",
+                source_id, entity_name)
+            if row:
+                p = (json.loads(row["profile_data"])
+                     if isinstance(row["profile_data"], str)
+                     else dict(row["profile_data"]))
+                p["cached_at"] = row["profiled_at"].isoformat()
+                return p
+    except Exception as e:
+        logger.warning(f"[get_cached_profile] {entity_name}: {e}")
+    return None
