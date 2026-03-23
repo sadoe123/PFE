@@ -22,9 +22,14 @@ services:
       - ./db:/app/db
       - uploads_data:/app/uploads
       - C:/Users:/mnt/host/Users
+    # FIX 1: --reload supprimé — WatchFiles tuait le sync en plein milieu
+    # FIX 2: --timeout-keep-alive 300 pour les syncs longs (1264 entités ~60-120s)
     command: >
       uvicorn api.main:app
-        --host 0.0.0.0 --port 8000 --reload
+        --host 0.0.0.0
+        --port 8000
+        --workers 1
+        --timeout-keep-alive 300
         --log-level info
     depends_on:
       postgres:
@@ -37,9 +42,11 @@ services:
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
-      timeout: 10s
+      # FIX 3: timeout 10s→60s — le healthcheck échouait pendant un sync actif
+      timeout: 60s
       retries: 5
-      start_period: 30s
+      # FIX 4: start_period augmenté pour laisser le temps au premier sync de finir
+      start_period: 60s
 
   # ── UI (serveur statique) ─────────────────────────────────
   ui:

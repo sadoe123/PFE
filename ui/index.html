@@ -230,6 +230,9 @@ html,body{height:100%;background:var(--bg-0);color:var(--text-0);font-family:var
 .upload-zone-icon{font-size:32px;margin-bottom:8px;}
 .upload-zone-text{font-size:13px;color:var(--text-1);}
 .upload-zone-hint{font-size:11px;color:var(--text-3);margin-top:4px;}
+.cb-state-open{color:var(--red)!important;}
+.cb-state-half{color:var(--yellow)!important;}
+.cb-state-closed{color:var(--green)!important;}
 .upload-progress{margin-top:12px;padding:12px;background:var(--bg-3);border-radius:var(--radius);border:1px solid var(--border);font-size:12px;}
 
 /* ── TEST BOX ── */
@@ -392,6 +395,8 @@ html,body{height:100%;background:var(--bg-0);color:var(--text-0);font-family:var
 .method-chip.chip-fuzzy.active-chip { background: rgba(255,125,59,0.12); border-color: var(--orange); color: var(--orange); }
 .method-chip.chip-view.active-chip  { background: var(--green-glow); border-color: var(--green); color: var(--green); }
 .method-chip.chip-ml.active-chip    { background: rgba(255,201,77,0.12); border-color: var(--yellow); color: var(--yellow); }
+.method-chip.chip-cross             { border-color: rgba(34,211,238,0.4); color: #22d3ee; }
+.method-chip.chip-cross.active-chip { background: rgba(34,211,238,0.1); border-color: #22d3ee; color: #22d3ee; }
 
 /* Slider confiance */
 .conf-slider-wrap {
@@ -590,6 +595,48 @@ input[type=range].conf-slider {
   backdrop-filter: blur(8px);
 }
 html.light .graph-legend { background: rgba(255,255,255,0.92); }
+html.light .graph-container { background: #f0f5fb; }
+html.light .graph-container::before { opacity: 0.6; }
+
+/* ── FIX6: Light mode — badges méthode ── */
+html.light .method-badge        { background:#e8edf2; color:#37474f; border-color:#b0bec5; }
+html.light .method-explicit     { background:#d4edda; color:#1b5e20; border-color:#a5d6a7; }
+html.light .method-value        { background:#dce8ff; color:#0052cc; border-color:#90caf9; }
+html.light .method-name         { background:#ede7f6; color:#4527a0; border-color:#ce93d8; }
+html.light .method-fuzzy        { background:#fde3cc; color:#c85000; border-color:#ffab76; }
+html.light .method-view         { background:#e0f7fa; color:#006064; border-color:#80deea; }
+html.light .method-ml           { background:#fff8e1; color:#7c5a00; border-color:#ffe082; }
+/* Light mode — validation badges */
+html.light .val-ok              { background:#d4edda; color:#1b5e20; border-color:#a5d6a7; }
+html.light .val-ko              { background:#fde8e8; color:#b71c1c; border-color:#ef9a9a; }
+html.light .val-pending         { background:#e8edf2; color:#37474f; border-color:#b0bec5; }
+/* Light mode — confidence */
+html.light .conf-high           { color:#1b5e20; }
+html.light .conf-medium         { color:#7c4700; }
+html.light .conf-low            { color:#b71c1c; }
+/* Light mode — rel sidebar */
+html.light .rel-tbl-item        { color:#1a2e3f; border-bottom-color:#d8e4ee; }
+html.light .rel-tbl-item:hover  { background:#dce8f7; color:#0052cc; }
+html.light .rel-tbl-item.active { background:#0052cc; color:#fff; border-left-color:#003d99; }
+html.light .rel-tbl-item.active .rel-tbl-count { background:rgba(255,255,255,0.25); color:#fff; }
+html.light .rel-tbl-count       { background:#dce8f7; color:#37474f; border-color:#b0cce0; }
+/* Light mode — method chips */
+html.light .method-chip                           { background:#f0f4f8; border-color:#c8d8e8; color:#37474f; }
+html.light .method-chip:hover                     { background:#dce8f7; border-color:#90b8d4; color:#0052cc; }
+html.light .method-chip.active-chip               { background:#dce8ff; border-color:#0052cc; color:#0052cc; }
+html.light .method-chip.chip-explicit.active-chip { background:#d4edda; border-color:#1b5e20; color:#1b5e20; }
+html.light .method-chip.chip-value.active-chip    { background:#dce8ff; border-color:#0052cc; color:#0052cc; }
+html.light .method-chip.chip-name.active-chip     { background:#ede7f6; border-color:#4527a0; color:#4527a0; }
+html.light .method-chip.chip-fuzzy.active-chip    { background:#fde3cc; border-color:#c85000; color:#c85000; }
+html.light .method-chip.chip-view.active-chip     { background:#e0f7fa; border-color:#006064; color:#006064; }
+html.light .method-chip.chip-ml.active-chip       { background:#fff8e1; border-color:#7c5a00; color:#7c5a00; }
+/* Light mode — status badges */
+html.light .sb-active  { background:#d4edda; color:#1b5e20; }
+html.light .sb-error   { background:#fde8e8; color:#b71c1c; }
+html.light .sb-pending { background:#e8edf2; color:#37474f; }
+/* Light mode — graph node info */
+html.light .graph-node-info { background:#fff; border-color:#a8c0d5; }
+html.light .gni-title       { color:#0052cc; }
 .legend-item { display: flex; align-items: center; gap: 6px; color: var(--text-1); }
 .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 
@@ -901,10 +948,10 @@ html.light .graph-legend { background: rgba(255,255,255,0.92); }
 
   <!-- HEADER -->
   <header class="header">
-    <div class="logo" onclick="showView('overview')" title="OnePilot v2.0">
+    <div class="logo" onclick="showView('overview')" title="OnePilot ">
       <img class="logo-img" src="logo-onepilot.png" alt="OnePilot Logo">
       <span>One<span class="logo-sep">/</span>Pilot</span>
-      <span class="logo-sub">v2.0</span>
+      <span class="logo-sub"></span>
     </div>
     <div class="header-divider"></div>
     <div class="header-spacer"></div>
@@ -1028,16 +1075,11 @@ html.light .graph-legend { background: rgba(255,255,255,0.92); }
           <input class="rel-search-input" id="relGlobalSearch" placeholder="🔍 Rechercher table..." oninput="applyRelFilters()">
 
           <div class="method-chips" id="methodChips">
-            <div class="method-chip chip-explicit" data-method="explicit" onclick="toggleMethodChip(this)" title="Clés étrangères SQL déclarées">🔑 FK réelles</div>
-            <div class="method-chip chip-value" data-method="value" onclick="toggleMethodChip(this)" title="Détection par analyse des valeurs">📊 Valeurs</div>
-            <div class="method-chip chip-name" data-method="name" onclick="toggleMethodChip(this)" title="Détection par noms de colonnes">🏷 Noms</div>
-            <div class="method-chip chip-fuzzy" data-method="fuzzy" onclick="toggleMethodChip(this)" title="Correspondance approximative">〜 Fuzzy</div>
-            <div class="method-chip chip-view" data-method="view_join" onclick="toggleMethodChip(this)" title="Jointures extraites des vues SQL">👁 Vues SQL</div>
-            <div class="method-chip chip-ml" data-method="ml" onclick="toggleMethodChip(this)" title="Prédictions par Machine Learning">🤖 ML</div>
+            <!-- Chips rendus dynamiquement par renderMethodChips(sourceType) -->
           </div>
 
           <div class="conf-slider-wrap">
-            <span>Conf ≥</span>
+            <span title="🎚 Seuil de confiance minimum&#10;&#10;0% → affiche TOUTES les relations (par défaut)&#10;50% → cache les relations peu fiables&#10;80%+ → garde seulement les très fiables&#10;&#10;La confiance mesure la certitude de la détection :&#10;• FK réelles / Vues SQL = 100% (certitude absolue)&#10;• ML = 95-99% (modèle entraîné)&#10;• Noms = 80-90% (convention de nommage)&#10;• Fuzzy = 60-70% (approximation)">Conf ≥ ⓘ</span>
             <input type="range" class="conf-slider" id="confSlider" min="0" max="100" value="0" oninput="applyRelFilters(); document.getElementById('confSliderVal').textContent=this.value+'%'">
             <span id="confSliderVal" style="min-width:34px;color:var(--text-0);font-weight:600;">0%</span>
           </div>
@@ -1049,7 +1091,7 @@ html.light .graph-legend { background: rgba(255,255,255,0.92); }
           <button class="btn btn-secondary btn-sm" id="mlTrainBtn" onclick="runMLTrain(relSourceId)" title="Entraîner le modèle ML et prédire de nouvelles relations">🤖 ML</button>
           <button class="btn btn-refresh btn-sm" onclick="runDiscover(relSourceId)" title="Relancer la détection de relations">↻ Relancer</button>
           <div style="width:1px;height:20px;background:var(--border);margin:0 2px;"></div>
-          <button class="btn btn-back btn-sm" onclick="showView('detail');setRoute('#source/'+relSourceId)">Retour</button>
+          <button class="btn btn-back btn-sm" onclick="goBackToRelDetail()">Retour</button>
         </div>
       </div>
 
@@ -1274,7 +1316,7 @@ html.light .graph-legend { background: rgba(255,255,255,0.92); }
     </div>
     <div style="display:flex;gap:6px;flex-shrink:0;align-items:center;">
       <span id="profQualityBadge" style="font-family:var(--font-mono);font-size:11px;padding:3px 10px;border-radius:10px;border:1px solid var(--border);"></span>
-      <button class="btn btn-ghost btn-sm" onclick="showView('detail');setRoute('#source/'+profSourceId)">← Retour</button>
+      <button class="btn btn-ghost btn-sm" onclick="goBackToProfDetail()">← Retour</button>
     </div>
   </div>
 
@@ -1362,31 +1404,14 @@ html.light .graph-legend { background: rgba(255,255,255,0.92); }
 
 <!-- MODAL IMPORT FK SSMS -->
 <div class="ssms-overlay" id="ssmsOverlay" onclick="if(event.target===this)closeSsms()">
-  <div class="ssms-modal">
+  <div class="ssms-modal" id="ssmsModalBox">
     <div class="ssms-header">
-      <span class="ssms-title">📥 Import FK réelles — SSMS / SQL Server</span>
+      <span class="ssms-title" id="ssmsModalTitle">📥 Import de relations</span>
       <button class="btn btn-ghost btn-sm btn-icon" onclick="closeSsms()">✕</button>
     </div>
-    <div class="ssms-body">
-      <div style="font-size:12px;color:var(--text-2);line-height:1.6;">Exécute cette requête dans SSMS sur ta base, puis colle le résultat ci-dessous :</div>
-      <div style="background:var(--bg-0);border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-family:var(--font-mono);font-size:10px;color:var(--accent);white-space:pre-wrap;user-select:all;cursor:text;">SELECT fk.name AS fk_name,
-    tp.name AS source_table, cp.name AS source_column,
-    tr.name AS target_table, cr.name AS target_column
-FROM sys.foreign_keys fk
-JOIN sys.foreign_key_columns fkc ON fk.object_id = fkc.constraint_object_id
-JOIN sys.tables tp  ON fkc.parent_object_id  = tp.object_id
-JOIN sys.columns cp ON fkc.parent_object_id  = cp.object_id AND fkc.parent_column_id  = cp.column_id
-JOIN sys.tables tr  ON fkc.referenced_object_id  = tr.object_id
-JOIN sys.columns cr ON fkc.referenced_object_id  = cr.object_id AND fkc.referenced_column_id = cr.column_id
-ORDER BY tp.name, cp.name;</div>
-      <div style="font-size:11px;color:var(--text-3);margin-top:4px;">
-        💡 <b style="color:var(--text-1);">2 façons de coller :</b> 
-        (1) Sélectionner tout dans SSMS → Ctrl+C → Coller ici &nbsp;|&nbsp;
-        (2) Clic droit → <b style="color:var(--text-1);">Enregistrer les résultats en tant que...</b> → CSV → ouvrir le fichier → tout copier-coller
-      </div>
-      <textarea class="ssms-textarea" id="ssmsInput" placeholder="Colle ici le résultat SSMS (avec ou sans en-têtes, CSV ou tabulé)…" oninput="previewSsms()"></textarea>
-      <div style="font-size:11px;color:var(--text-2);">Aperçu :</div>
-      <div class="ssms-preview" id="ssmsPreview" style="color:var(--text-3);font-style:italic;">Colle tes données ci-dessus pour voir l'aperçu…</div>
+    <!-- Corps entièrement rendu par renderFkModal(sourceType) -->
+    <div class="ssms-body" id="ssmsModalBody">
+      <div style="padding:24px;text-align:center;color:var(--text-3);">Chargement...</div>
     </div>
     <div class="ssms-footer">
       <span id="ssmsCount" style="font-family:var(--font-mono);font-size:12px;color:var(--text-2);margin-right:auto;align-self:center;"></span>
@@ -1508,7 +1533,7 @@ function getCategoryIcon(type) {
     rest:'🔗', odata:'⚡', graphql:'◈', soap:'📮',
     sap_rfc:'🔷', sap_odata:'🔶', dynamics365:'🟦',
     sage_x3:'🟩', sage_100:'🟢', sage_cloud:'☁️',
-    file_csv:'📄', file_excel:'📊', file_json:'📋'
+    file_csv:'📄', file_excel:'📊', file_json:'📋', file_parquet:'🗃', file_avro:'🗄', file_xlsx:'📗'
   };
   return icons[type] || '🔌';
 }
@@ -1582,14 +1607,23 @@ function showView(v) {
 }
 
 // ── HEALTH ────────────────────────────────────────────
+var _apiWasOffline = false;
+
 async function checkApiHealth() {
   try {
     var h = await apiFetch('/health');
-    var ok = h.status === 'healthy';
+    var ok = h.status === 'healthy' || h.status === 'degraded';
     document.getElementById('apiStatus').innerHTML =
-      '<div class="dot" style="background:' + (ok?'var(--green)':'var(--orange)') + '"></div>' +
-      '<span>API: ' + (ok?'OK':'Dégradé') + ' · PG: ' + (h.checks&&h.checks.postgres||'?') + ' · Redis: ' + (h.checks&&h.checks.redis||'?') + '</span>';
+      '<div class="dot" style="background:' + (h.status==='healthy'?'var(--green)':'var(--orange)') + '"></div>' +
+      '<span>API: ' + (h.status==='healthy'?'OK':'Dégradé') + ' · PG: ' + (h.checks&&h.checks.postgres||'?') + ' · Redis: ' + (h.checks&&h.checks.redis||'?') + '</span>';
+    // Si l'API était hors ligne et revient → recharger automatiquement
+    if (_apiWasOffline) {
+      _apiWasOffline = false;
+      await loadConnectorTypes();
+      await loadSources();
+    }
   } catch(e) {
+    _apiWasOffline = true;
     document.getElementById('apiStatus').innerHTML =
       '<div class="dot" style="background:var(--red)"></div><span>API: Hors ligne</span>';
   }
@@ -1617,7 +1651,7 @@ async function loadConnectorTypes() {
     connectorTypes = {
       database:{label:'Base de données',types:[{id:'postgresql',label:'PostgreSQL',icon:'🐘',default_port:5432},{id:'mysql',label:'MySQL',icon:'🐬',default_port:3306},{id:'mssql',label:'SQL Server',icon:'🪟',default_port:1433},{id:'sqlite',label:'SQLite',icon:'📁',default_port:null},{id:'sage_100',label:'SAGE 100',icon:'🟢',default_port:1433}]},
       webservice:{label:'Web Service / ERP',types:[{id:'rest',label:'REST API',icon:'🔗',default_port:null},{id:'odata',label:'OData',icon:'⚡',default_port:null},{id:'graphql',label:'GraphQL',icon:'◈',default_port:null},{id:'soap',label:'SOAP / WSDL',icon:'📮',default_port:null},{id:'sap_rfc',label:'SAP RFC/BAPI',icon:'🔷',default_port:3300},{id:'sap_odata',label:'SAP OData (S/4)',icon:'🔶',default_port:443},{id:'dynamics365',label:'Dynamics 365',icon:'🟦',default_port:null},{id:'sage_x3',label:'SAGE X3',icon:'🟩',default_port:null},{id:'sage_cloud',label:'SAGE Business Cloud',icon:'☁️',default_port:null}]},
-      file:{label:'Fichiers',types:[{id:'file_csv',label:'CSV',icon:'📄',default_port:null},{id:'file_excel',label:'Excel',icon:'📊',default_port:null},{id:'file_json',label:'JSON',icon:'📋',default_port:null}]}
+      file:{label:'Fichiers',types:[{id:'file_csv',label:'CSV',icon:'📄',default_port:null},{id:'file_excel',label:'Excel (.xls)',icon:'📊',default_port:null},{id:'file_xlsx',label:'Excel multi-feuilles',icon:'📗',default_port:null},{id:'file_json',label:'JSON',icon:'📋',default_port:null},{id:'file_parquet',label:'Parquet (Big Data)',icon:'🗃',default_port:null},{id:'file_avro',label:'Avro (Streaming)',icon:'🗄',default_port:null}]}
     };
   }
 }
@@ -1835,6 +1869,18 @@ async function openRelationsView(sourceId) {
   relAllData = [];
   relFilteredData = [];
   relActiveChips = {};
+  // FIX1: reset graphe complet pour isolation entre sources
+  if (gfxAnimId) { cancelAnimationFrame(gfxAnimId); gfxAnimId = null; }
+  gfxNodes = {};
+  gfxEdges = [];
+  gfxSelectedNode = null;
+  gfxViewTx = 0; gfxViewTy = 0; gfxViewScale = 1;
+  var edgesG = document.getElementById('graphEdges');
+  var nodesG = document.getElementById('graphNodes');
+  if (edgesG) edgesG.innerHTML = '';
+  if (nodesG) nodesG.innerHTML = '';
+  var nodeInfo = document.getElementById('graphNodeInfo');
+  if (nodeInfo) nodeInfo.classList.remove('visible');
   gfxInitialized = false;
 
   // Mettre à jour le nom source dans la top bar
@@ -1864,21 +1910,43 @@ async function loadRelationsData(sourceId) {
     var data = await apiFetch('/sources/' + sourceId + '/relations');
     relAllData = data.relations || [];
     document.getElementById('relTopCount').textContent = '(' + relAllData.length + ' relations)';
+    if (relAllData.length === 0) {
+      toast('⚠️ Aucune relation détectée — clique sur ↻ Relancer pour découvrir les relations', 'warn');
+    }
 
-    // Marquer les chips sans données (opacité réduite + tooltip)
-    var countByMethod = {explicit:0, value:0, name:0, fuzzy:0};
+    // ── Déterminer le type de source pour les chips adaptatifs ─────
+    var srcObj = allSources.find(function(s){ return s.id === sourceId; });
+    var srcType = srcObj ? (srcObj.connector_type || '').toLowerCase() : '';
+    // Rendre les chips adaptés au type de source
+    renderMethodChips(srcType);
+
+    // ── Compter les relations par méthode (dynamique) ──────────────
+    var countByMethod = {};
     relAllData.forEach(function(r) {
-      var m = r.detection_method || '';
-      if (m.includes('explicit')) countByMethod.explicit++;
-      else if (m.includes('value')) countByMethod.value++;
-      else if (m.includes('name') || m.includes('pascal') || m.includes('snake') || m.includes('m2m')) countByMethod.name++;
-      else if (m.includes('fuzzy')) countByMethod.fuzzy++;
+      var m = (r.detection_method || '').toLowerCase();
+      // Normaliser vers les clés de chip
+      var key;
+      if (m.includes('explicit') || m === 'explicit_fk') key = 'explicit';
+      else if (m.includes('view'))                         key = 'view_join';
+      else if (m.includes('ml') || m.includes('xgboost') || m.includes('predicted')) key = 'ml';
+      else if (m.includes('value') || m.includes('overlap')) key = 'value';
+      else if (m.includes('name') || m.includes('pascal') || m.includes('m2m') || m.includes('snake')) key = 'name';
+      else if (m.includes('fuzzy'))                        key = 'fuzzy';
+      else if (m.includes('cross'))                        key = 'cross_source';
+      else                                                  key = m;
+      countByMethod[key] = (countByMethod[key] || 0) + 1;
     });
+
+    // Mettre à jour opacité + tooltip des chips rendus
     document.querySelectorAll('.method-chip').forEach(function(c) {
       var key = c.getAttribute('data-method');
       var cnt = countByMethod[key] || 0;
       c.style.opacity = cnt === 0 ? '0.3' : '1';
-      c.title = cnt + ' relations';
+      // Conserver le title original + ajouter le count
+      var baseTitle = c.getAttribute('title') || '';
+      if (!baseTitle.includes('relations')) {
+        c.setAttribute('title', baseTitle + (cnt > 0 ? ' (' + cnt + ' relations)' : ' (aucune)'));
+      }
       if (cnt === 0) c.classList.remove('active-chip');
     });
 
@@ -1887,11 +1955,171 @@ async function loadRelationsData(sourceId) {
     initSqlAutocomplete();
   } catch(e) {
     document.getElementById('relSidebarScroll').innerHTML =
-      '<div style="padding:16px;color:var(--red);font-size:12px;">Erreur: ' + e.message + '</div>';
+      '<div style="padding:16px;color:var(--red);font-size:12px;">❌ Erreur chargement relations: ' + e.message + '</div>';
+    toast('Erreur relations : ' + e.message, 'error');
   }
 }
 
 // ── FILTRES ───────────────────────────────────────────
+
+// ══════════════════════════════════════════════════════════════
+// CHIPS MÉTHODE ADAPTATIFS — selon le type de source
+// ══════════════════════════════════════════════════════════════
+
+// Config des chips par type de source
+// Chaque chip : {method, class, icon, label, title}
+var CHIPS_BY_SOURCE_TYPE = {
+  // ── Bases SQL (toutes les méthodes disponibles) ─────────────
+  mssql: [
+    {method:'explicit',  cls:'chip-explicit', icon:'🔑', label:'FK réelles',  title:'Clés étrangères SQL Server déclarées'},
+    {method:'view_join', cls:'chip-view',     icon:'👁',  label:'Vues SQL',   title:'Jointures extraites des vues SQL Server'},
+    {method:'name',      cls:'chip-name',     icon:'🏷',  label:'Noms',       title:'Détection par nommage (PascalCase, suffixes _id)'},
+    {method:'fuzzy',     cls:'chip-fuzzy',    icon:'〜',  label:'Fuzzy',      title:'Correspondance approximative (Levenshtein)'},
+    {method:'value',     cls:'chip-value',    icon:'📊',  label:'Valeurs',    title:'Overlap statistique des valeurs'},
+    {method:'ml',        cls:'chip-ml',       icon:'🤖',  label:'ML',         title:'Prédictions par Machine Learning'},
+  ],
+  postgresql: [
+    {method:'explicit',  cls:'chip-explicit', icon:'🔑', label:'FK réelles',  title:'Clés étrangères PostgreSQL déclarées'},
+    {method:'view_join', cls:'chip-view',     icon:'👁',  label:'Vues',       title:'Jointures depuis les vues PG'},
+    {method:'name',      cls:'chip-name',     icon:'🏷',  label:'Noms',       title:'Détection par nommage'},
+    {method:'fuzzy',     cls:'chip-fuzzy',    icon:'〜',  label:'Fuzzy',      title:'Correspondance approximative'},
+    {method:'value',     cls:'chip-value',    icon:'📊',  label:'Valeurs',    title:'Overlap statistique'},
+    {method:'ml',        cls:'chip-ml',       icon:'🤖',  label:'ML',         title:'Machine Learning'},
+  ],
+  mysql: [
+    {method:'explicit',  cls:'chip-explicit', icon:'🔑', label:'FK réelles',  title:'Clés étrangères MySQL déclarées'},
+    {method:'name',      cls:'chip-name',     icon:'🏷',  label:'Noms',       title:'Détection par nommage'},
+    {method:'fuzzy',     cls:'chip-fuzzy',    icon:'〜',  label:'Fuzzy',      title:'Correspondance approximative'},
+    {method:'value',     cls:'chip-value',    icon:'📊',  label:'Valeurs',    title:'Overlap statistique'},
+    {method:'ml',        cls:'chip-ml',       icon:'🤖',  label:'ML',         title:'Machine Learning'},
+  ],
+  sqlite: [
+    {method:'explicit',  cls:'chip-explicit', icon:'🔑', label:'FK déclarées', title:'Clés étrangères SQLite'},
+    {method:'name',      cls:'chip-name',     icon:'🏷',  label:'Noms',        title:'Détection par nommage'},
+    {method:'ml',        cls:'chip-ml',       icon:'🤖',  label:'ML',          title:'Machine Learning'},
+  ],
+  sage_100: [
+    {method:'explicit',  cls:'chip-explicit', icon:'🔑', label:'FK SAGE 100', title:'Relations SAGE 100 (SQL Server)'},
+    {method:'name',      cls:'chip-name',     icon:'🏷',  label:'Noms',       title:'Convention nommage SAGE (F_COMPTET...)'},
+    {method:'ml',        cls:'chip-ml',       icon:'🤖',  label:'ML',         title:'Machine Learning'},
+  ],
+  // ── OData ───────────────────────────────────────────────────
+  odata: [
+    {method:'explicit',  cls:'chip-explicit', icon:'🌐', label:'NavigationProp', title:'OData NavigationProperties ($expand)'},
+    {method:'name',      cls:'chip-name',     icon:'🏷',  label:'Noms',          title:'Détection par nommage OData'},
+    {method:'ml',        cls:'chip-ml',       icon:'🤖',  label:'ML',            title:'Machine Learning'},
+  ],
+  sap_odata: [
+    {method:'explicit',  cls:'chip-explicit', icon:'🔶', label:'NAV SAP OData', title:'NavigationProperties SAP OData'},
+    {method:'name',      cls:'chip-name',     icon:'🏷',  label:'Noms',         title:'Convention nommage SAP'},
+    {method:'ml',        cls:'chip-ml',       icon:'🤖',  label:'ML',           title:'Machine Learning'},
+  ],
+  sap_rfc: [
+    {method:'explicit',  cls:'chip-explicit', icon:'🔷', label:'FK ABAP DDIC', title:'Relations déclarées dans le DDIC SAP'},
+    {method:'name',      cls:'chip-name',     icon:'🏷',  label:'Noms',        title:'Convention nommage ABAP (MANDT, BUKRS...)'},
+    {method:'ml',        cls:'chip-ml',       icon:'🤖',  label:'ML',          title:'Machine Learning'},
+  ],
+  // ── Microsoft Dynamics ──────────────────────────────────────
+  dynamics365: [
+    {method:'explicit',  cls:'chip-explicit', icon:'🟦', label:'Lookup fields',  title:'Lookup fields Dynamics 365'},
+    {method:'name',      cls:'chip-name',     icon:'🏷',  label:'Noms',          title:'Convention nommage Dynamics (account_id...)'},
+    {method:'ml',        cls:'chip-ml',       icon:'🤖',  label:'ML',            title:'Machine Learning'},
+  ],
+  // ── SAGE X3 / Cloud ─────────────────────────────────────────
+  sage_x3: [
+    {method:'explicit',  cls:'chip-explicit', icon:'🟩', label:'FK SAGE X3',   title:'Relations objets SAGE X3'},
+    {method:'name',      cls:'chip-name',     icon:'🏷',  label:'Noms',         title:'Convention nommage SAGE X3'},
+    {method:'ml',        cls:'chip-ml',       icon:'🤖',  label:'ML',           title:'Machine Learning'},
+  ],
+  sage_cloud: [
+    {method:'name',      cls:'chip-name',     icon:'🏷',  label:'Noms',         title:'Relations via nommage REST'},
+    {method:'ml',        cls:'chip-ml',       icon:'🤖',  label:'ML',           title:'Machine Learning'},
+  ],
+  // ── REST / GraphQL / SOAP ───────────────────────────────────
+  rest: [
+    {method:'name',      cls:'chip-name',     icon:'🏷',  label:'Noms',     title:'Détection par nommage (id, _id, ref...)'},
+    {method:'value',     cls:'chip-value',    icon:'📊',  label:'Valeurs',  title:'Overlap statistique des valeurs'},
+    {method:'ml',        cls:'chip-ml',       icon:'🤖',  label:'ML',       title:'Machine Learning'},
+  ],
+  graphql: [
+    {method:'explicit',  cls:'chip-explicit', icon:'◈',  label:'Types GraphQL', title:'Relations définies dans le schema GraphQL'},
+    {method:'name',      cls:'chip-name',     icon:'🏷',  label:'Noms',         title:'Détection par nommage'},
+    {method:'ml',        cls:'chip-ml',       icon:'🤖',  label:'ML',           title:'Machine Learning'},
+  ],
+  soap: [
+    {method:'name',      cls:'chip-name',     icon:'🏷',  label:'Noms WSDL',  title:'Relations extraites du WSDL'},
+    {method:'ml',        cls:'chip-ml',       icon:'🤖',  label:'ML',         title:'Machine Learning'},
+  ],
+  // ── Fichiers ─────────────────────────────────────────────────
+  file_csv: [
+    {method:'value',     cls:'chip-value',    icon:'📊',  label:'Valeurs',  title:'Overlap statistique des colonnes'},
+    {method:'name',      cls:'chip-name',     icon:'🏷',  label:'Noms',     title:'Détection par nommage des colonnes'},
+    {method:'ml',        cls:'chip-ml',       icon:'🤖',  label:'ML',       title:'Machine Learning'},
+  ],
+  file_excel: [
+    {method:'value',     cls:'chip-value',    icon:'📊',  label:'Valeurs',  title:'Overlap statistique des colonnes Excel'},
+    {method:'name',      cls:'chip-name',     icon:'🏷',  label:'Noms',     title:'Détection par nommage'},
+    {method:'ml',        cls:'chip-ml',       icon:'🤖',  label:'ML',       title:'Machine Learning'},
+  ],
+  file_xlsx: [
+    {method:'value',     cls:'chip-value',    icon:'📊',  label:'Valeurs',  title:'Overlap statistique colonnes'},
+    {method:'name',      cls:'chip-name',     icon:'🏷',  label:'Noms',     title:'Nommage colonnes'},
+    {method:'ml',        cls:'chip-ml',       icon:'🤖',  label:'ML',       title:'Machine Learning'},
+  ],
+  file_json: [
+    {method:'name',      cls:'chip-name',     icon:'🏷',  label:'Noms',     title:'Détection par nommage JSON'},
+    {method:'value',     cls:'chip-value',    icon:'📊',  label:'Valeurs',  title:'Overlap statistique'},
+    {method:'ml',        cls:'chip-ml',       icon:'🤖',  label:'ML',       title:'Machine Learning'},
+  ],
+  file_parquet: [
+    {method:'value',     cls:'chip-value',    icon:'📊',  label:'Valeurs',  title:'Overlap statistique Parquet'},
+    {method:'name',      cls:'chip-name',     icon:'🏷',  label:'Noms',     title:'Nommage colonnes'},
+    {method:'ml',        cls:'chip-ml',       icon:'🤖',  label:'ML',       title:'Machine Learning'},
+  ],
+  file_avro: [
+    {method:'name',      cls:'chip-name',     icon:'🏷',  label:'Noms',     title:'Nommage champs Avro'},
+    {method:'ml',        cls:'chip-ml',       icon:'🤖',  label:'ML',       title:'Machine Learning'},
+  ],
+};
+
+// Chips par défaut si type inconnu
+var CHIPS_DEFAULT = [
+  {method:'explicit', cls:'chip-explicit', icon:'🔑', label:'FK réelles', title:'Clés étrangères déclarées'},
+  {method:'value',    cls:'chip-value',    icon:'📊', label:'Valeurs',    title:'Overlap statistique'},
+  {method:'name',     cls:'chip-name',     icon:'🏷', label:'Noms',       title:'Détection par nommage'},
+  {method:'fuzzy',    cls:'chip-fuzzy',    icon:'〜', label:'Fuzzy',      title:'Correspondance approximative'},
+  {method:'view_join',cls:'chip-view',     icon:'👁', label:'Vues SQL',   title:'Jointures vues SQL'},
+  {method:'ml',       cls:'chip-ml',       icon:'🤖', label:'ML',         title:'Machine Learning'},
+];
+
+// ── Rendre les chips selon le type de source courant ──────
+function renderMethodChips(sourceType) {
+  var container = document.getElementById('methodChips');
+  if (!container) return;
+
+  var chips = CHIPS_BY_SOURCE_TYPE[sourceType] || CHIPS_DEFAULT;
+
+  // Ajouter chip Cross-source si relations cross-source existent
+  var hasCross = relAllData.some(function(r) {
+    return r.detection_method === 'cross_source' || r.cross_source;
+  });
+  if (hasCross) {
+    chips = chips.concat([
+      {method:'cross_source', cls:'chip-cross', icon:'🔗', label:'Cross-source', title:'Relations entre sources différentes'}
+    ]);
+  }
+
+  container.innerHTML = chips.map(function(chip) {
+    var isActive = relActiveChips[chip.method];
+    return '<div class="method-chip ' + chip.cls + (isActive?' active-chip':'') + '" ' +
+      'data-method="' + chip.method + '" ' +
+      'onclick="toggleMethodChip(this)" ' +
+      'title="' + chip.title + '">' +
+      chip.icon + ' ' + chip.label +
+    '</div>';
+  }).join('');
+}
+
 function toggleMethodChip(el) {
   el.classList.toggle('active-chip');
   applyRelFilters();
@@ -1918,13 +2146,15 @@ function applyRelFilters() {
     if (activeChips.length > 0) {
       var m = r.detection_method || '';
       var match = activeChips.some(function(chip) {
-        if (chip === 'explicit') return m.includes('explicit');
-        if (chip === 'value')    return m.includes('value');
-        if (chip === 'name')     return m.includes('name') || m.includes('pascal') || m.includes('snake') || m.includes('m2m');
-        if (chip === 'fuzzy')    return m.includes('fuzzy');
-        if (chip === 'view_join') return m.includes('view_join') || m.includes('view');
-        if (chip === 'ml')       return m.includes('ml_') || m.includes('xgboost') || m.includes('heuristic');
-        return false;
+        if (chip === 'explicit')     return m.includes('explicit') || m === 'explicit_fk';
+        if (chip === 'value')        return m.includes('value') && !m.includes('view');
+        if (chip === 'name')         return m.includes('name') || m.includes('pascal') || m.includes('snake') || m.includes('m2m');
+        if (chip === 'fuzzy')        return m.includes('fuzzy');
+        if (chip === 'view_join')    return m.includes('view_join') || m.includes('view');
+        if (chip === 'ml')           return m.includes('ml_') || m.includes('ml_predicted') || m.includes('xgboost') || m.includes('heuristic') || m === 'ml_predicted';
+        if (chip === 'cross_source') return m.includes('cross') || (r.cross_source === true);
+        // Fallback : correspondance directe
+        return m === chip || m.includes(chip);
       });
       if (!match) return false;
     }
@@ -1932,7 +2162,7 @@ function applyRelFilters() {
   });
 
   renderRelSidebar();
-  renderRelTable();
+  renderRelTable(relSelectedTable);  // FIX4: respecter la table sélectionnée
   renderRelGraph();
   updateRelSQL();
 }
@@ -1965,6 +2195,7 @@ function renderRelSidebar() {
     emptyMsg = '<div style="padding:20px 12px;text-align:center;color:var(--text-3);font-size:12px;line-height:1.6;">' +
       '<div style="font-size:20px;margin-bottom:8px;">∅</div>' +
       (chipNames ? 'Aucune relation de type <b style=\'color:var(--text-1)\'>' + chipNames + '</b>.' : 'Aucun résultat.') +
+      (chipNames && chipNames.includes('ML') ? '<br><span style=\'font-size:11px;margin-top:6px;display:block;color:var(--yellow);\'>💡 Clique sur <b>🤖 ML</b> (bouton haut) pour entraîner le modèle.</span>' : '') +
       '<br><span style="font-size:11px;margin-top:4px;display:block;">Désactive les filtres ou ajuste la confiance.</span></div>';
   }
   document.getElementById('relSidebarScroll').innerHTML = html || emptyMsg;
@@ -2036,7 +2267,10 @@ function renderRelTable(filterTable) {
       '<td style="color:var(--text-1);cursor:pointer;" onclick="selectRelTable(\'' + r.source_entity.replace(/'/g,"\\'") + '\')" title="' + r.source_entity + '">' + r.source_entity + '</td>' +
       '<td style="color:var(--accent);font-weight:600;" title="' + r.source_field + '">' + r.source_field + '</td>' +
       '<td style="color:var(--text-3);">→</td>' +
-      '<td style="font-weight:500;cursor:pointer;" onclick="selectRelTable(\'' + (r.target_entity||'').replace(/'/g,"\\'") + '\')" title="' + (r.target_entity||'') + '">' + (r.target_entity||'—') + '</td>' +
+      '<td style="font-weight:500;cursor:pointer;" onclick="selectRelTable(\'' + (r.target_entity||'').replace(/'/g,"\\'") + '\')" title="' + (r.target_entity||'') + '">' +
+        (r.target_entity||'—') +
+        (r.cross_source || r.target_source_id ? ' <span title="Relation cross-source : ' + (r.target_source_name||'autre source') + '" style="font-size:9px;padding:1px 5px;border-radius:4px;background:rgba(34,211,238,0.12);color:#22d3ee;margin-left:4px;">🔗 ' + (r.target_source_name||'cross') + '</span>' : '') +
+      '</td>' +
       '<td style="color:var(--green);" title="' + (r.target_field||'') + '">' + (r.target_field||'—') + '</td>' +
       '<td class="' + cc + '">' + conf + '%</td>' +
       '<td><span class="' + methodClass(r.detection_method) + '">' + methodIcon(r.detection_method) + ' ' + (r.detection_method||'—') + '</span></td>' +
@@ -2071,7 +2305,7 @@ async function validateRel(relId, confirmed) {
   try {
     await apiFetch('/relations/' + relId + '/validate', {
       method: 'POST',
-      body: JSON.stringify({confirmed: confirmed})
+      body: JSON.stringify({is_confirmed: confirmed})
     });
     toast(confirmed ? '✓ Relation confirmée' : '✗ Relation rejetée', confirmed ? 'success' : 'error');
     var rel = relAllData.find(function(r) { return r.id == relId; });
@@ -2106,17 +2340,18 @@ async function runMLTrain(sourceId) {
       toast('⚠ ' + trainResult.message, 'warn');
       return;
     }
-    var modelType = trainResult.model_type || 'heuristic';
-    var posCount  = trainResult.positive_count || 0;
-    var auc       = trainResult.val_auc ? ' · AUC=' + trainResult.val_auc : '';
-    toast('Modèle ' + modelType + ' entraîné sur ' + posCount + ' FK' + auc, 'success');
+    var modelType = trainResult.model_type || trainResult.model_name || 'heuristic';
+    var posCount  = trainResult.positive_count || trainResult.n_positifs || 0;
+    var auc       = (trainResult.val_auc || trainResult.roc_auc) ? ' · AUC=' + (trainResult.val_auc || trainResult.roc_auc) : '';
+    var f1        = trainResult.f1 ? ' · F1=' + trainResult.f1 : '';
+    toast('✅ Modèle ' + modelType + ' · ' + posCount + ' FK entraînées' + auc + f1, 'success');
 
     // 2. Predict
     toast('Prédiction de nouvelles relations...', 'info');
-    var predResult = await apiFetch('/sources/' + sourceId + '/ml/predict?min_confidence=0.65&max_results=300&save=true', {method:'POST'});
-    var predicted = predResult.predicted || 0;
-    var saved     = (predResult.saved || {}).inserted || 0;
-    toast('🤖 ML: ' + predicted + ' prédictions · ' + saved + ' nouvelles sauvegardées', 'success');
+    var predResult = await apiFetch('/sources/' + sourceId + '/ml/predict', {method:'POST'});
+    var saved     = predResult.inserted || 0;
+    var avgConf   = predResult.avg_confidence ? ' · conf=' + (predResult.avg_confidence * 100).toFixed(0) + '%' : '';
+    toast('🤖 ML: ' + saved + ' nouvelles relations sauvegardées' + avgConf, 'success');
 
     // 3. Reload relations
     await loadRelationsData(sourceId);
@@ -2130,7 +2365,7 @@ async function runMLTrain(sourceId) {
 
     // 5. Afficher feature importance si XGBoost
     if (trainResult.feature_importance && Object.keys(trainResult.feature_importance).length > 0) {
-      showMLImportance(trainResult.feature_importance, modelType, trainResult.val_auc);
+      showMLImportance(trainResult.feature_importance, modelType, trainResult.val_auc || trainResult.roc_auc);
     }
   } catch(e) {
     toast('Erreur ML : ' + e.message, 'error');
@@ -2292,8 +2527,17 @@ function renderRelGraph() {
     var relCount = tableRelCount[name] || 0;
     var r = Math.min(36, 18 + relCount * 0.8);
     var label = name.length > 14 ? name.slice(0,12)+'…' : name;
-    var fillColor = relCount >= 10 ? 'rgba(0,212,255,0.15)' : relCount >= 5 ? 'rgba(167,139,250,0.12)' : 'rgba(30,40,55,0.9)';
-    var strokeColor = relCount >= 10 ? 'var(--accent)' : relCount >= 5 ? 'var(--purple)' : 'var(--border-hi)';
+    var isLight = document.documentElement.classList.contains('light');
+    var fillColor = relCount >= 10
+      ? (isLight ? 'rgba(0,130,200,0.12)'  : 'rgba(0,212,255,0.15)')
+      : relCount >= 5
+      ? (isLight ? 'rgba(100,60,200,0.10)' : 'rgba(167,139,250,0.12)')
+      : (isLight ? 'rgba(240,245,252,0.95)': 'rgba(30,40,55,0.9)');
+    var strokeColor = relCount >= 10
+      ? (isLight ? '#0052cc' : 'var(--accent)')
+      : relCount >= 5
+      ? (isLight ? '#5c35b5' : 'var(--purple)')
+      : (isLight ? '#b0c8e0' : 'var(--border-hi)');
 
     var rect2 = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
     var w = Math.max(label.length * 6 + 20, 60);
@@ -2311,7 +2555,7 @@ function renderRelGraph() {
     text.setAttribute('dominant-baseline', 'middle');
     text.setAttribute('font-family', 'IBM Plex Mono, monospace');
     text.setAttribute('font-size', '9');
-    text.setAttribute('fill', 'var(--text-0)');
+    text.setAttribute('fill', isLight ? '#1a2e3f' : 'var(--text-0)');
     text.setAttribute('pointer-events', 'none');
     text.textContent = label;
 
@@ -2590,7 +2834,10 @@ async function loadRelStats(sourceId) {
   try {
     var stats = await apiFetch('/sources/' + sourceId + '/relations/stats');
     if (stats && stats.total > 0) updateRelStatsUI(stats);
-  } catch(e) { /* silencieux */ }
+  } catch(e) {
+    document.getElementById('testSub').textContent = 'Erreur sync : ' + e.message;
+    document.getElementById('testIcon').textContent = '⚠️';
+  }
 }
 
 function renderRelStats() {
@@ -2962,10 +3209,45 @@ function wizardPrev() {
 }
 
 // ── FORM BUILDER ──────────────────────────────────────
+
+// ── SCHEMA SQL IMPORT ──────────────────────────────────
+function setSchemaSqlMode(mode) {
+  document.getElementById('schemaSqlZone').style.display = 'block';
+  document.getElementById('schemaSqlFile').style.display = mode === 'file' ? 'block' : 'none';
+  document.getElementById('schemaSqlText').style.display = mode === 'text' ? 'block' : 'none';
+  document.getElementById('schemaModeFile').className = 'btn btn-sm ' + (mode==='file'?'btn-primary':'btn-secondary');
+  document.getElementById('schemaModeText').className = 'btn btn-sm ' + (mode==='text'?'btn-primary':'btn-secondary');
+}
+
+async function loadSchemaFile(input) {
+  var file = input.files[0]; if (!file) return;
+  var statusEl = document.getElementById('schemaFileStatus');
+  statusEl.innerHTML = '<span style="color:var(--text-3);">⏳ Lecture...</span>';
+  try {
+    var text = await file.text();
+    formData.schema_sql = text;
+    var tableMatches = text.match(/CREATE TABLE/gi) || [];
+    var csvLines = text.split('\n').filter(function(l){ return l.trim() && !l.startsWith('#'); });
+    var info = tableMatches.length > 0
+      ? tableMatches.length + ' CREATE TABLE détectés'
+      : (csvLines.length - 1) + ' colonnes détectées';
+    statusEl.innerHTML = '<span style="color:var(--green);">✅ ' + file.name + ' chargé — ' + info + '</span>';
+  } catch(e) {
+    statusEl.innerHTML = '<span style="color:var(--red);">❌ Erreur: ' + e.message + '</span>';
+  }
+}
+
+function updateSheetOptions(val) {
+  var sel = document.getElementById('sheetSelector');
+  if (sel) sel.style.display = val === 'select' ? 'block' : 'none';
+  formData.sheet_mode = val;
+  if (val !== 'select') formData.sheet_name = null;
+}
+
 function buildForm() {
   var isDB   = ['postgresql','mysql','mssql','sqlite','sage_100'].indexOf(selectedType) >= 0;
   var isWS   = ['rest','odata','graphql','soap','sap_rfc','sap_odata','dynamics365','sage_x3','sage_cloud'].indexOf(selectedType) >= 0;
-  var isFile = ['file_csv','file_excel','file_json'].indexOf(selectedType) >= 0;
+  var isFile = ['file_csv','file_excel','file_xlsx','file_json','file_parquet','file_avro'].indexOf(selectedType) >= 0;
   var icon   = getCategoryIcon(selectedType);
   var types  = connectorTypes[selectedCategory] && connectorTypes[selectedCategory].types || [];
   var typeObj = types.find(function(t) { return t.id === selectedType; });
@@ -2981,13 +3263,68 @@ function buildForm() {
     '<input type="text" class="form-input" id="f_desc" placeholder="Optionnel" oninput="formData.description=this.value"></div></div>';
 
   if (isFile) {
+    var isExcel2   = (selectedType === 'file_excel' || selectedType === 'file_xlsx');
+    var isParquet2 = (selectedType === 'file_parquet');
+    var isAvro2    = (selectedType === 'file_avro');
+    var acceptMap  = {
+      file_csv:     '.csv,.txt,.tsv',
+      file_excel:   '.xlsx,.xls,.ods',
+      file_xlsx:    '.xlsx,.xls,.ods',
+      file_json:    '.json',
+      file_parquet: '.parquet,.parq',
+      file_avro:    '.avro',
+    };
+    var hintMap = {
+      file_csv:     'CSV, TSV, TXT délimités',
+      file_excel:   'Excel .xlsx / .xls — multi-feuilles supporté',
+      file_xlsx:    'Excel .xlsx / .xls — multi-feuilles supporté',
+      file_json:    'JSON (tableau ou objet)',
+      file_parquet: 'Parquet — format colonnaire Big Data (Spark, Pandas, DuckDB)',
+      file_avro:    'Avro — format binaire sérialisé (Kafka, Hadoop)',
+    };
+    var iconMap = { file_csv:'📄', file_excel:'📊', file_xlsx:'📗', file_json:'📋', file_parquet:'🗜', file_avro:'🔷' };
+    var acceptStr = acceptMap[selectedType] || '.csv,.json,.xlsx';
+    var hintStr   = hintMap[selectedType]   || 'Sélectionnez un fichier';
+    var iconStr   = iconMap[selectedType]   || '📂';
+
+    var extraHtml = '';
+    if (isExcel2) {
+      extraHtml = '<div class="form-group" style="margin-top:10px;">' +
+        '<label class="form-label">Feuilles à importer</label>' +
+        '<div style="display:flex;gap:8px;">' +
+          '<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;"><input type="radio" name="sheetMode" value="all" checked onchange="updateSheetOptions(this.value)"> Toutes</label>' +
+          '<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;"><input type="radio" name="sheetMode" value="first" onchange="updateSheetOptions(this.value)"> Première seulement</label>' +
+          '<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;"><input type="radio" name="sheetMode" value="select" onchange="updateSheetOptions(this.value)"> Choisir</label>' +
+        '</div>' +
+        '<div id="sheetSelector" style="display:none;margin-top:6px;">' +
+          '<input type="text" class="form-input mono" id="f_sheet_name" placeholder="ex: Sheet1, Ventes, Clients..." oninput="formData.sheet_name=this.value">' +
+          '<div style="font-size:10px;color:var(--text-3);margin-top:2px;">Séparer par virgule pour plusieurs feuilles : Sheet1, Sheet2</div>' +
+        '</div>' +
+        '<div style="font-size:10px;color:var(--text-3);margin-top:6px;">Chaque feuille sera importée comme une entité séparée (ex: Ventes → entité "Ventes")</div>' +
+      '</div>';
+    } else if (isParquet2) {
+      extraHtml = '<div style="margin-top:10px;padding:10px 12px;background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.2);border-radius:6px;">' +
+        '<div style="font-size:12px;font-weight:600;color:var(--accent);margin-bottom:4px;">🗜 Parquet — Format colonnaire Big Data</div>' +
+        '<div style="font-size:11px;color:var(--text-2);">Utilisé par Apache Spark, Pandas, DuckDB, AWS Athena. Très efficace pour les grands volumes grâce à la compression colonnaire (Snappy, Gzip, Zstd).</div>' +
+        '<div style="font-size:10px;color:var(--text-3);margin-top:4px;">OnePilot lit le schéma (.schema) et un échantillon des données pour l\'indexation.</div>' +
+      '</div>';
+    } else if (isAvro2) {
+      extraHtml = '<div style="margin-top:10px;padding:10px 12px;background:rgba(100,80,255,0.07);border:1px solid rgba(100,80,255,0.25);border-radius:6px;">' +
+        '<div style="font-size:12px;font-weight:600;color:#a78bfa;margin-bottom:4px;">🔷 Avro — Format binaire sérialisé</div>' +
+        '<div style="font-size:11px;color:var(--text-2);">Utilisé par Apache Kafka et Hadoop pour les pipelines de données en temps réel. Le schéma JSON est embarqué dans le fichier.</div>' +
+        '<div style="font-size:10px;color:var(--text-3);margin-top:4px;">OnePilot extrait automatiquement le schéma Avro embarqué pour l\'indexation.</div>' +
+      '</div>';
+    }
+
     html += '<div class="form-section"><div class="form-section-title">Fichier</div>' +
       '<div class="form-group"><label class="form-label">Uploader <span class="required">*</span></label>' +
       '<div class="upload-zone" onclick="document.getElementById(\'f_file\').click()">' +
-      '<input type="file" id="f_file" accept=".csv,.json,.txt,.xlsx" onchange="uploadFileAndStore(this)">' +
-      '<div class="upload-zone-icon">📂</div><div class="upload-zone-text">Cliquez pour sélectionner</div>' +
-      '<div class="upload-zone-hint">CSV, JSON, TXT, XLSX</div></div>' +
-      '<div id="uploadStatus" class="upload-progress" style="display:none;"></div></div></div>';
+      '<input type="file" id="f_file" accept="' + acceptStr + '" onchange="uploadFileAndStore(this, selectedType)">' +
+      '<div class="upload-zone-icon">' + iconStr + '</div>' +
+      '<div class="upload-zone-text">Cliquez pour sélectionner</div>' +
+      '<div class="upload-zone-hint">' + hintStr + '</div></div>' +
+      '<div id="uploadStatus" class="upload-progress" style="display:none;"></div>' +
+      extraHtml + '</div></div>';
   } else if (isDB) {
     html += '<div class="form-section"><div class="form-section-title">Connexion</div>' +
       '<div class="form-row"><div class="form-group"><label class="form-label">Hôte <span class="required">*</span></label>' +
@@ -3002,7 +3339,9 @@ function buildForm() {
       '<div class="form-row"><div class="form-group"><label class="form-label">Utilisateur</label>' +
       '<input type="text" class="form-input" id="f_user" oninput="formData.username=this.value"></div>' +
       '<div class="form-group"><label class="form-label">Mot de passe</label>' +
-      '<input type="password" class="form-input" id="f_pass" oninput="formData.password=this.value"></div></div></div>';
+      '<input type="password" class="form-input" id="f_pass" oninput="formData.password=this.value"></div></div></div>' +
+
+      renderSchemaSection(selectedType);
   } else if (isWS) {
     html += '<div class="form-section"><div class="form-section-title">Connexion</div>' +
       '<div class="form-group"><label class="form-label">URL <span class="required">*</span></label>' +
@@ -3012,8 +3351,54 @@ function buildForm() {
       '<select class="form-select" id="f_auth" onchange="updateAuthFields(this.value)">' +
       '<option value="none">Aucune</option><option value="basic">Basic</option>' +
       '<option value="bearer">Bearer Token</option><option value="api_key">API Key</option></select></div>' +
-      '<div id="authFields"></div></div>';
+      '<div id="authFields"></div></div>' +
+      '<div class="form-section">' +
+        '<div class="form-section-title" style="display:flex;align-items:center;gap:8px;cursor:pointer;" onclick="toggleCbSection()">' +
+          '⚡ Circuit Breaker & Résilience <span id="cbChevron" style="margin-left:auto;font-size:10px;color:var(--text-3);">▼ Afficher</span>' +
+        '</div>' +
+        '<div id="cbSection" style="display:none;">' +
+          '<div style="padding:8px 10px;background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.15);border-radius:6px;margin-bottom:12px;font-size:11px;color:var(--text-2);">' +
+            '🛡️ Le <b>Circuit Breaker</b> protège votre API contre les surcharges. Si trop d\'erreurs surviennent, il coupe automatiquement les appels pendant un délai, puis reteste progressivement.' +
+          '</div>' +
+          '<div class="form-row">' +
+            '<div class="form-group"><label class="form-label">Timeout requête (sec)</label>' +
+              '<input type="number" class="form-input mono" id="f_cb_timeout" value="30" min="1" max="300" oninput="formData.cb_timeout=parseInt(this.value)||30"></div>' +
+            '<div class="form-group"><label class="form-label">Retry max</label>' +
+              '<input type="number" class="form-input mono" id="f_cb_retry" value="3" min="0" max="10" oninput="formData.cb_retry=parseInt(this.value)||3"></div>' +
+          '</div>' +
+          '<div class="form-row">' +
+            '<div class="form-group"><label class="form-label">Seuil ouverture (nb erreurs)</label>' +
+              '<input type="number" class="form-input mono" id="f_cb_threshold" value="5" min="1" max="50" oninput="formData.cb_threshold=parseInt(this.value)||5"></div>' +
+            '<div class="form-group"><label class="form-label">Délai reset (sec)</label>' +
+              '<input type="number" class="form-input mono" id="f_cb_reset" value="60" min="5" max="600" oninput="formData.cb_reset=parseInt(this.value)||60"></div>' +
+          '</div>' +
+          '<div class="form-row">' +
+            '<div class="form-group"><label class="form-label">Backoff initial (ms)</label>' +
+              '<input type="number" class="form-input mono" id="f_cb_backoff" value="500" min="100" max="10000" step="100" oninput="formData.cb_backoff=parseInt(this.value)||500"></div>' +
+            '<div class="form-group"><label class="form-label">Rate limit (req/min)</label>' +
+              '<input type="number" class="form-input mono" id="f_cb_ratelimit" value="60" min="1" max="10000" oninput="formData.cb_ratelimit=parseInt(this.value)||60"></div>' +
+          '</div>' +
+          '<div class="form-group">' +
+            '<label class="form-label">Stratégie backoff</label>' +
+            '<select class="form-select" id="f_cb_strategy" onchange="formData.cb_strategy=this.value">' +
+              '<option value="exponential">Exponentiel (x2 à chaque retry)</option>' +
+              '<option value="linear">Linéaire (délai fixe)</option>' +
+              '<option value="jitter">Jitter (aléatoire ±50%) — recommandé</option>' +
+            '</select>' +
+          '</div>' +
+          '<div style="margin-top:8px;padding:8px 10px;background:var(--bg-2);border-radius:6px;font-size:10px;color:var(--text-3);font-family:var(--font-mono);">État : <span id="cbStateLabel" style="color:var(--green);">🟢 FERMÉ</span> · Erreurs : <span id="cbErrCount">0</span> / <span id="cbThresholdDisplay">5</span> · Prochain reset : <span id="cbResetIn">—</span></div>' +
+        '</div>' +
+      '</div>';
   }
+
+function toggleCbSection() {
+  var s = document.getElementById('cbSection');
+  var c = document.getElementById('cbChevron');
+  if (!s) return;
+  var open = s.style.display !== 'none';
+  s.style.display = open ? 'none' : 'block';
+  c.textContent = open ? '▼ Afficher' : '▲ Masquer';
+}
 
   document.getElementById('formContent').innerHTML = html;
   if (isDB && formData.defaultPort) {
@@ -3022,7 +3407,7 @@ function buildForm() {
   }
 }
 
-async function uploadFileAndStore(input) {
+async function uploadFileAndStore(input, fileType) {
   var file = input.files[0]; if (!file) return;
   var statusEl = document.getElementById('uploadStatus');
   statusEl.style.display = 'block';
@@ -3034,14 +3419,492 @@ async function uploadFileAndStore(input) {
     if (!r.ok) throw new Error(data.detail || 'Erreur upload');
     uploadedFilePath = data.uploaded_path;
     formData.base_url = data.uploaded_path;
-    formData.options = {uploaded_path: data.uploaded_path};
-    statusEl.innerHTML = '<div style="color:var(--green);font-weight:500;margin-bottom:6px;">✅ ' + data.filename + ' uploadé</div>' +
+    formData.options = {uploaded_path: data.uploaded_path, file_type: fileType || 'file_csv'};
+
+    var ext = file.name.split('.').pop().toLowerCase();
+    var isExcelMulti = (fileType === 'file_xlsx') || (fileType === 'file_excel' && (ext === 'xlsx' || ext === 'xls'));
+
+    // Détection feuilles Excel si multi-feuilles
+    var sheetsHtml = '';
+    if (isExcelMulti && data.sheets && data.sheets.length > 0) {
+      // Init : toutes les feuilles sélectionnées par défaut
+      formData.options.selected_sheets = data.sheets.slice();
+      formData.options.all_sheets = false;
+
+      sheetsHtml = '<div style="margin-top:10px;">' +
+        '<label class="form-label" style="margin-bottom:6px;">📋 Feuilles à importer' +
+          ' <span style="color:var(--text-3);font-size:10px;">(' + data.sheets.length + ' feuilles — cochez celles à importer)</span>' +
+        '</label>' +
+        '<div style="display:flex;gap:6px;margin-bottom:8px;">' +
+          '<button type="button" onclick="selectAllSheets(true)" style="font-size:10px;padding:2px 8px;border-radius:4px;border:1px solid var(--border);background:var(--bg-2);color:var(--text-2);cursor:pointer;">✅ Tout sélectionner</button>' +
+          '<button type="button" onclick="selectAllSheets(false)" style="font-size:10px;padding:2px 8px;border-radius:4px;border:1px solid var(--border);background:var(--bg-2);color:var(--text-2);cursor:pointer;">☐ Tout désélectionner</button>' +
+        '</div>' +
+        '<div id="sheetCheckboxes" style="display:flex;flex-wrap:wrap;gap:6px;">' +
+        data.sheets.map(function(s) {
+          var sid = 'sheet_' + s.replace(/[^a-zA-Z0-9]/g,'_');
+          return '<label style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:6px;border:1px solid var(--accent);background:rgba(0,212,255,0.06);font-size:11px;cursor:pointer;">' +
+            '<input type="checkbox" id="' + sid + '" value="' + s.replace(/"/g,'&quot;') + '" checked onchange="updateSelectedSheets()">' +
+            s + '</label>';
+        }).join('') +
+        '</div>' +
+        '<div id="sheetPreview" style="margin-top:8px;font-size:10px;color:var(--text-3);">' +
+          'Toutes les feuilles sélectionnées (<b style="color:var(--accent);">' + data.sheets.length + '</b>)' +
+        '</div>' +
+      '</div>';
+    } else if (isExcelMulti && (!data.sheets || data.sheets.length === 0)) {
+      formData.options.all_sheets = true;
+      sheetsHtml = '<div style="margin-top:8px;font-size:10px;color:var(--yellow);">⚠️ Feuilles non détectées — toutes les feuilles seront importées</div>';
+    }
+
+    // Info Parquet / Avro
+    var bigDataHtml = '';
+    if (fileType === 'file_parquet') {
+      bigDataHtml = '<div style="margin-top:8px;padding:8px 10px;background:rgba(99,102,241,0.08);border-radius:6px;font-size:11px;color:var(--text-2);">' +
+        '🗃 <b>Parquet</b> — Format columaire compressé (Big Data / Spark / Hadoop). Lecture optimisée pour grandes volumétries.</div>';
+    } else if (fileType === 'file_avro') {
+      bigDataHtml = '<div style="margin-top:8px;padding:8px 10px;background:rgba(99,102,241,0.08);border-radius:6px;font-size:11px;color:var(--text-2);">' +
+        '🗄 <b>Avro</b> — Format binaire avec schéma intégré (Kafka / Streaming). Idéal pour les pipelines événementiels.</div>';
+    }
+
+    statusEl.innerHTML =
+      '<div style="color:var(--green);font-weight:500;margin-bottom:6px;">✅ ' + data.filename + ' uploadé</div>' +
       '<div style="color:var(--text-2);font-size:11px;">' + (data.column_count || (data.columns&&data.columns.length||0)) + ' colonnes : ' +
-      '<span style="color:var(--accent);font-family:var(--font-mono)">' + (data.columns||[]).join(', ') + '</span></div>';
+      '<span style="color:var(--accent);font-family:var(--font-mono)">' + (data.columns||[]).slice(0,8).join(', ') + (data.columns&&data.columns.length>8?'…':'') + '</span></div>' +
+      sheetsHtml + bigDataHtml;
+
   } catch(e) {
     statusEl.innerHTML = '<div style="color:var(--red);">❌ ' + e.message + '</div>';
     uploadedFilePath = null;
   }
+}
+
+
+// ══════════════════════════════════════════════════════
+// IMPORT SCHÉMA SQL — CSV ou DDL
+// ══════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════
+// CIRCUIT BREAKER — Section options avancées connecteur
+// ══════════════════════════════════════════════════════
+
+
+// ══════════════════════════════════════════════════════════════
+// SCHÉMA ADAPTATIF — s'adapte selon le type de source
+// ══════════════════════════════════════════════════════════════
+
+var SCHEMA_CONFIG = {
+  // ── Bases SQL ───────────────────────────────────────────────
+  mssql: {
+    label:       '🗒 Schéma SQL Server (T-SQL)',
+    hint:        'Collez vos instructions CREATE TABLE T-SQL, ou exportez depuis SSMS',
+    placeholder: 'CREATE TABLE [dbo].[Clients] (\n  [ClientID]   INT          IDENTITY(1,1) PRIMARY KEY,\n  [Nom]        NVARCHAR(100) NOT NULL,\n  [Email]      NVARCHAR(200) NULL,\n  [DateCreation] DATETIME   DEFAULT GETDATE()\n);\n\nCREATE TABLE [dbo].[Commandes] (\n  [CmdID]    INT IDENTITY(1,1) PRIMARY KEY,\n  [ClientID] INT NOT NULL REFERENCES [dbo].[Clients]([ClientID]),\n  [Montant]  DECIMAL(10,2) NOT NULL\n);',
+    ssms_tip:    'Dans SSMS : clic droit sur la table → Script Table as → CREATE To → New Query Editor Window',
+    ssms_query:  "-- Exporter le schéma complet depuis SSMS :\nSELECT\n  t.name AS table_name,\n  c.name AS column_name,\n  tp.name AS data_type,\n  c.max_length,\n  c.is_nullable,\n  CASE WHEN pk.column_id IS NOT NULL THEN 1 ELSE 0 END AS is_pk,\n  CASE WHEN fk.parent_column_id IS NOT NULL THEN 1 ELSE 0 END AS is_fk\nFROM sys.tables t\nJOIN sys.columns c ON c.object_id = t.object_id\nJOIN sys.types tp ON tp.user_type_id = c.user_type_id\nLEFT JOIN (\n  SELECT ic.object_id, ic.column_id FROM sys.index_columns ic\n  JOIN sys.indexes i ON i.object_id = ic.object_id AND i.is_primary_key = 1\n  WHERE ic.index_id = i.index_id\n) pk ON pk.object_id = c.object_id AND pk.column_id = c.column_id\nLEFT JOIN sys.foreign_key_columns fk ON fk.parent_object_id = c.object_id AND fk.parent_column_id = c.column_id\nORDER BY t.name, c.column_id;",
+    tabs:        ['sql', 'csv', 'query'],
+  },
+  postgresql: {
+    label:       '🐘 Schéma PostgreSQL',
+    hint:        'Collez vos CREATE TABLE PostgreSQL, ou copiez depuis psql',
+    placeholder: 'CREATE TABLE clients (\n  id         SERIAL PRIMARY KEY,\n  nom        VARCHAR(100) NOT NULL,\n  email      VARCHAR(200) UNIQUE,\n  created_at TIMESTAMP DEFAULT NOW()\n);\n\nCREATE TABLE commandes (\n  id         SERIAL PRIMARY KEY,\n  client_id  INTEGER REFERENCES clients(id),\n  montant    NUMERIC(10,2) NOT NULL\n);',
+    ssms_tip:    'Dans psql : \\d tablename (description) ou pg_dump --schema-only',
+    ssms_query:  "-- Exporter le schéma depuis PostgreSQL :\nSELECT\n  t.table_name,\n  c.column_name,\n  c.data_type,\n  c.is_nullable,\n  CASE WHEN tc.constraint_type = 'PRIMARY KEY' THEN 'YES' ELSE 'NO' END AS is_pk,\n  CASE WHEN kcu2.column_name IS NOT NULL THEN 'YES' ELSE 'NO' END AS is_fk\nFROM information_schema.tables t\nJOIN information_schema.columns c ON c.table_name = t.table_name AND c.table_schema = t.table_schema\nLEFT JOIN information_schema.key_column_usage kcu ON kcu.table_name = t.table_name AND kcu.column_name = c.column_name\nLEFT JOIN information_schema.table_constraints tc ON tc.constraint_name = kcu.constraint_name AND tc.constraint_type = 'PRIMARY KEY'\nLEFT JOIN information_schema.key_column_usage kcu2 ON kcu2.table_name = t.table_name AND kcu2.column_name = c.column_name\nLEFT JOIN information_schema.table_constraints tc2 ON tc2.constraint_name = kcu2.constraint_name AND tc2.constraint_type = 'FOREIGN KEY'\nWHERE t.table_schema = 'public' AND t.table_type = 'BASE TABLE'\nORDER BY t.table_name, c.ordinal_position;",
+    tabs:        ['sql', 'csv', 'query'],
+  },
+  mysql: {
+    label:       '🐬 Schéma MySQL / MariaDB',
+    hint:        'Collez vos CREATE TABLE MySQL, ou exportez depuis phpMyAdmin / MySQL Workbench',
+    placeholder: 'CREATE TABLE `clients` (\n  `id`         INT AUTO_INCREMENT PRIMARY KEY,\n  `nom`        VARCHAR(100) NOT NULL,\n  `email`      VARCHAR(200) UNIQUE,\n  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP\n) ENGINE=InnoDB;\n\nCREATE TABLE `commandes` (\n  `id`        INT AUTO_INCREMENT PRIMARY KEY,\n  `client_id` INT NOT NULL,\n  `montant`   DECIMAL(10,2) NOT NULL,\n  FOREIGN KEY (`client_id`) REFERENCES `clients`(`id`)\n) ENGINE=InnoDB;',
+    ssms_tip:    'Dans MySQL : SHOW CREATE TABLE nom_table; ou mysqldump --no-data',
+    ssms_query:  "-- Exporter le schéma MySQL :\nSELECT\n  t.TABLE_NAME AS table_name,\n  c.COLUMN_NAME AS column_name,\n  c.DATA_TYPE AS data_type,\n  c.IS_NULLABLE AS is_nullable,\n  CASE WHEN c.COLUMN_KEY = 'PRI' THEN 'YES' ELSE 'NO' END AS is_pk,\n  CASE WHEN c.COLUMN_KEY = 'MUL' THEN 'YES' ELSE 'NO' END AS is_fk\nFROM information_schema.TABLES t\nJOIN information_schema.COLUMNS c ON c.TABLE_NAME = t.TABLE_NAME AND c.TABLE_SCHEMA = t.TABLE_SCHEMA\nWHERE t.TABLE_SCHEMA = DATABASE()\nORDER BY t.TABLE_NAME, c.ORDINAL_POSITION;",
+    tabs:        ['sql', 'csv', 'query'],
+  },
+  sqlite: {
+    label:       '📁 Schéma SQLite',
+    hint:        'Collez vos CREATE TABLE SQLite, ou copiez depuis DB Browser for SQLite',
+    placeholder: 'CREATE TABLE clients (\n  id         INTEGER PRIMARY KEY AUTOINCREMENT,\n  nom        TEXT NOT NULL,\n  email      TEXT UNIQUE\n);',
+    ssms_tip:    'Dans SQLite CLI : .schema tablename ou SELECT sql FROM sqlite_master',
+    ssms_query:  "-- Exporter le schéma SQLite :\nSELECT\n  m.name AS table_name,\n  p.name AS column_name,\n  p.type AS data_type,\n  p.\"notnull\" AS not_null,\n  p.pk AS is_pk\nFROM sqlite_master m\nJOIN pragma_table_info(m.name) p\nWHERE m.type = 'table'\nORDER BY m.name, p.cid;",
+    tabs:        ['sql', 'csv', 'query'],
+  },
+  sage_100: {
+    label:       '🟢 Schéma SAGE 100 (SQL Server)',
+    hint:        'SAGE 100 utilise SQL Server — collez le DDL T-SQL ou la requête d\'export',
+    placeholder: 'CREATE TABLE [dbo].[F_COMPTET] (\n  [CT_Num]    CHAR(17) NOT NULL PRIMARY KEY,\n  [CT_Intitule] CHAR(35),\n  [CT_Type]   SMALLINT\n);',
+    ssms_tip:    'Connexion SAGE 100 via ODBC — utilisez SSMS pour exporter le schéma',
+    ssms_query:  "-- Tables SAGE 100 (SQL Server) :\nSELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE\nFROM INFORMATION_SCHEMA.COLUMNS\nWHERE TABLE_NAME LIKE 'F_%' OR TABLE_NAME LIKE 'P_%' OR TABLE_NAME LIKE 'G_%'\nORDER BY TABLE_NAME, ORDINAL_POSITION;",
+    tabs:        ['sql', 'csv', 'query'],
+  },
+  // ── SAP ─────────────────────────────────────────────────────
+  sap_rfc: {
+    label:       '🔷 Tables SAP (ABAP DDIC)',
+    hint:        'SAP RFC n\'utilise pas SQL — collez les noms de tables ABAP à explorer',
+    placeholder: 'MARA\nMARC\nKNA1\nLFA1\nVBAK\nVBAP\nBKPF\nBSEG',
+    ssms_tip:    'Dans SE11 : rechercher les tables ABAP. Dans SE16N : explorer les données.',
+    ssms_query:  "-- Tables SAP disponibles (via RFC_READ_TABLE) :\n-- Coller directement les noms de tables ABAP (une par ligne)\n-- Exemples courants :\n-- MARA = Articles  |  MARC = Articles par usine\n-- KNA1 = Clients   |  LFA1 = Fournisseurs\n-- VBAK = Commandes |  BKPF = En-têtes pièces comptables",
+    tabs:        ['tables', 'csv'],
+  },
+  sap_odata: {
+    label:       '🔶 SAP OData — $metadata',
+    hint:        'SAP OData expose son schéma via $metadata — entrez l\'URL du service',
+    placeholder: 'https://sap-server.company.com/sap/opu/odata/sap/API_SALES_ORDER_SRV/$metadata',
+    ssms_tip:    'Dans SAP Fiori : parcourez les services OData disponibles dans /sap/bc/adt/odata',
+    ssms_query:  "-- URL $metadata SAP OData :\n-- https://hostname/sap/opu/odata/sap/SERVICE_NAME/$metadata\n-- Les entités seront extraites automatiquement",
+    tabs:        ['odata', 'csv'],
+  },
+  // ── Microsoft ───────────────────────────────────────────────
+  dynamics365: {
+    label:       '🟦 Entités Dynamics 365',
+    hint:        'Dynamics 365 utilise des entités logiques — collez les noms d\'entités',
+    placeholder: 'account\ncontact\nopportunity\nlead\nincident\nproductpricelist\nsalesorder\ninvoice',
+    ssms_tip:    'Dans Dynamics : Paramètres → Personnalisations → Explorer les entités. Ou via /api/data/v9.2/EntityDefinitions',
+    ssms_query:  "-- Entités Dynamics 365 (une par ligne) :\n-- account = Comptes\n-- contact = Contacts\n-- opportunity = Opportunités\n-- lead = Prospects\n-- incident = Tickets SAV\n-- salesorder = Commandes",
+    tabs:        ['entities', 'csv'],
+  },
+  // ── SAGE ERP ─────────────────────────────────────────────────
+  sage_x3: {
+    label:       '🟩 Objets SAGE X3',
+    hint:        'SAGE X3 utilise des objets métier — collez les codes objets à explorer',
+    placeholder: 'CUSTOMER\nSUPPLIER\nITMMASTER\nSONDER\nSINVOICE\nGACCENTRY\nFACILITY\nBPARTNER',
+    ssms_tip:    'Dans SAGE X3 : Administration → Développement → Dictionnaire → Objets',
+    ssms_query:  "-- Objets SAGE X3 courants :\n-- CUSTOMER = Clients      |  SUPPLIER = Fournisseurs\n-- ITMMASTER = Articles     |  SORDER = Commandes ventes\n-- SINVOICE = Factures      |  GACCENTRY = Écritures compta\n-- FACILITY = Établissements|  BPARTNER = Tiers",
+    tabs:        ['entities', 'csv'],
+  },
+  sage_cloud: {
+    label:       '☁️ Ressources SAGE Business Cloud',
+    hint:        'SAGE Cloud expose ses ressources via API REST — sélectionnez les ressources',
+    placeholder: 'ledger_accounts\njournals\ncontacts\nsales_invoices\npurchase_invoices\nproducts',
+    ssms_tip:    'Documentation API : https://developer.sage.com/accounting/reference/',
+    ssms_query:  "-- Ressources SAGE Business Cloud :\n-- ledger_accounts = Comptes comptables\n-- contacts        = Clients/Fournisseurs\n-- sales_invoices  = Factures ventes\n-- products        = Produits/Services",
+    tabs:        ['entities', 'csv'],
+  },
+  // ── Web Services ─────────────────────────────────────────────
+  odata: {
+    label:       '⚡ OData — $metadata URL',
+    hint:        'Entrez l\'URL du service $metadata pour auto-découverte des entités',
+    placeholder: 'https://services.odata.org/V4/Northwind/Northwind.svc/$metadata',
+    ssms_tip:    'L\'URL $metadata expose automatiquement toutes les entités et relations',
+    ssms_query:  null,
+    tabs:        ['odata', 'csv'],
+  },
+  rest: {
+    label:       '🔗 REST API — JSON Schema ou OpenAPI',
+    hint:        'Collez un exemple de réponse JSON ou un schéma OpenAPI pour décrire vos endpoints',
+    placeholder: '{\n  "id": 1,\n  "name": "Client Dupont",\n  "email": "dupont@example.com",\n  "orders": [\n    { "id": 101, "amount": 250.00, "status": "pending" }\n  ]\n}',
+    ssms_tip:    'Collez un exemple JSON de réponse API, OnePilot en déduira la structure',
+    ssms_query:  null,
+    tabs:        ['json', 'csv'],
+  },
+  graphql: {
+    label:       '◈ GraphQL — Introspection Schema',
+    hint:        'Collez votre SDL GraphQL (schema definition) ou le résultat d\'une introspection',
+    placeholder: 'type Query {\n  clients: [Client!]!\n  commande(id: ID!): Commande\n}\n\ntype Client {\n  id: ID!\n  nom: String!\n  email: String\n  commandes: [Commande!]!\n}\n\ntype Commande {\n  id: ID!\n  montant: Float!\n  client: Client!\n}',
+    ssms_tip:    'Dans GraphQL Playground : menu Docs → Schema. Ou introspection query.',
+    ssms_query:  "# Requête d\'introspection GraphQL :\n{ __schema { types { name fields { name type { name } } } } }",
+    tabs:        ['graphql', 'csv'],
+  },
+  soap: {
+    label:       '📮 SOAP — WSDL',
+    hint:        'Collez l\'URL du WSDL ou son contenu XML pour décrire les opérations',
+    placeholder: 'https://webservice.company.com/service?wsdl\n\n-- ou collez le contenu XML du WSDL directement',
+    ssms_tip:    'L\'URL WSDL se termine généralement par ?wsdl ou ?WSDL',
+    ssms_query:  null,
+    tabs:        ['wsdl', 'csv'],
+  },
+};
+
+// Labels des onglets selon le type de source
+var SCHEMA_TAB_LABELS = {
+  sql:      { icon: '🗒', label: 'DDL SQL' },
+  csv:      { icon: '📄', label: 'Importer CSV' },
+  query:    { icon: '📋', label: 'Requête export' },
+  tables:   { icon: '📑', label: 'Noms de tables' },
+  entities: { icon: '📑', label: 'Noms d\'entités' },
+  odata:    { icon: '🌐', label: 'URL $metadata' },
+  json:     { icon: '{ }', label: 'JSON exemple' },
+  graphql:  { icon: '◈',  label: 'SDL Schema' },
+  wsdl:     { icon: '📮', label: 'WSDL URL/XML' },
+};
+
+function renderSchemaSection(srcType) {
+  var cfg = SCHEMA_CONFIG[srcType];
+  if (!cfg) {
+    // Type non reconnu → section générique minimaliste
+    cfg = {
+      label:       '📂 Schéma (optionnel)',
+      hint:        'Décrivez la structure de vos données pour enrichir la détection de relations',
+      placeholder: '',
+      ssms_tip:    null,
+      ssms_query:  null,
+      tabs:        ['csv'],
+    };
+  }
+
+  var tabs     = cfg.tabs;
+  var firstTab = tabs[0];
+
+  // Construire les boutons d'onglets
+  var tabBtns = tabs.map(function(t) {
+    var tl = SCHEMA_TAB_LABELS[t] || {icon:'📄', label:t};
+    var isFirst = t === firstTab;
+    return '<button type="button" id="schTabBtn_' + t + '" onclick="switchSchemaTab(\''+t+'\')" ' +
+      'class="btn btn-sm ' + (isFirst?'btn-primary':'btn-secondary') + '">' +
+      tl.icon + ' ' + tl.label + '</button>';
+  }).join('');
+
+  // Info contextuelle en haut
+  var infoHtml =
+    '<div style="padding:10px 12px;background:rgba(0,212,255,0.05);border:1px solid rgba(0,212,255,0.12);border-radius:8px;margin-bottom:12px;">' +
+      '<div style="font-size:11px;font-weight:600;color:var(--text-1);margin-bottom:4px;">' + cfg.label + '</div>' +
+      '<div style="font-size:10px;color:var(--text-3);">' + cfg.hint + '</div>' +
+      (cfg.ssms_tip ? '<div style="font-size:10px;color:var(--text-3);margin-top:4px;">💡 ' + cfg.ssms_tip + '</div>' : '') +
+    '</div>';
+
+  // Contenu des onglets
+  var tabContents = '';
+
+  // ── DDL SQL ──────────────────────────────────────────────
+  if (tabs.indexOf('sql') >= 0) {
+    tabContents +=
+      '<div id="schTab_sql" style="display:block;">' +
+        '<textarea id="f_schema_sql" rows="7" class="form-input" ' +
+          'style="font-family:var(--font-mono);font-size:11px;resize:vertical;" ' +
+          'placeholder="' + cfg.placeholder.replace(/"/g,'&quot;') + '" ' +
+          'oninput="formData.schema_sql=this.value; previewSchemaSql(this.value)"></textarea>' +
+        '<div id="schemaSqlPreview" style="margin-top:6px;"></div>' +
+      '</div>';
+  }
+
+  // ── Noms de tables / entités ─────────────────────────────
+  if (tabs.indexOf('tables') >= 0 || tabs.indexOf('entities') >= 0) {
+    var tabKey = tabs.indexOf('tables') >= 0 ? 'tables' : 'entities';
+    var isFirst2 = tabKey === firstTab;
+    tabContents +=
+      '<div id="schTab_' + tabKey + '" style="display:' + (isFirst2?'block':'none') + ';">' +
+        '<textarea id="f_schema_entities" rows="7" class="form-input" ' +
+          'style="font-family:var(--font-mono);font-size:11px;resize:vertical;" ' +
+          'placeholder="' + cfg.placeholder.replace(/"/g,'&quot;') + '" ' +
+          'oninput="formData.schema_entities=this.value.split(String.fromCharCode(10)).map(function(l){return l.trim();}).filter(Boolean)"></textarea>' +
+        '<div style="margin-top:6px;font-size:10px;color:var(--text-3);">' +
+          '💡 Un nom par ligne. OnePilot explorera automatiquement chaque entrée.' +
+        '</div>' +
+      '</div>';
+  }
+
+  // ── URL OData ────────────────────────────────────────────
+  if (tabs.indexOf('odata') >= 0) {
+    var isFirst3 = 'odata' === firstTab;
+    tabContents +=
+      '<div id="schTab_odata" style="display:' + (isFirst3?'block':'none') + ';">' +
+        '<input type="url" class="form-input mono" id="f_odata_url" ' +
+          'placeholder="' + cfg.placeholder.replace(/"/g,'&quot;') + '" ' +
+          'oninput="formData.schema_odata_url=this.value">' +
+        '<div style="margin-top:6px;font-size:10px;color:var(--text-3);">' +
+          '🌐 OnePilot parsera automatiquement le $metadata pour extraire toutes les entités et leurs relations NavigationProperty.' +
+        '</div>' +
+      '</div>';
+  }
+
+  // ── JSON exemple ─────────────────────────────────────────
+  if (tabs.indexOf('json') >= 0) {
+    var isFirst4 = 'json' === firstTab;
+    tabContents +=
+      '<div id="schTab_json" style="display:' + (isFirst4?'block':'none') + ';">' +
+        '<textarea id="f_schema_json" rows="7" class="form-input" ' +
+          'style="font-family:var(--font-mono);font-size:11px;resize:vertical;" ' +
+          'placeholder="' + cfg.placeholder.replace(/"/g,'&quot;') + '" ' +
+          'oninput="formData.schema_json=this.value"></textarea>' +
+        '<div style="margin-top:6px;font-size:10px;color:var(--text-3);">' +
+          '{ } Collez un exemple de réponse JSON. OnePilot déduira les types et la structure.' +
+        '</div>' +
+      '</div>';
+  }
+
+  // ── GraphQL SDL ──────────────────────────────────────────
+  if (tabs.indexOf('graphql') >= 0) {
+    var isFirst5 = 'graphql' === firstTab;
+    tabContents +=
+      '<div id="schTab_graphql" style="display:' + (isFirst5?'block':'none') + ';">' +
+        '<textarea id="f_schema_graphql" rows="7" class="form-input" ' +
+          'style="font-family:var(--font-mono);font-size:11px;resize:vertical;" ' +
+          'placeholder="' + cfg.placeholder.replace(/"/g,'&quot;') + '" ' +
+          'oninput="formData.schema_graphql=this.value"></textarea>' +
+      '</div>';
+  }
+
+  // ── WSDL ─────────────────────────────────────────────────
+  if (tabs.indexOf('wsdl') >= 0) {
+    var isFirst6 = 'wsdl' === firstTab;
+    tabContents +=
+      '<div id="schTab_wsdl" style="display:' + (isFirst6?'block':'none') + ';">' +
+        '<input type="text" class="form-input mono" id="f_wsdl_url" ' +
+          'placeholder="https://webservice.company.com/service?wsdl" ' +
+          'oninput="formData.schema_wsdl_url=this.value">' +
+        '<div style="margin-top:8px;">' +
+          '<textarea id="f_wsdl_xml" rows="5" class="form-input" ' +
+            'style="font-family:var(--font-mono);font-size:10px;resize:vertical;" ' +
+            'placeholder="<!-- Ou collez le contenu XML du WSDL ici -->" ' +
+            'oninput="formData.schema_wsdl_xml=this.value"></textarea>' +
+        '</div>' +
+      '</div>';
+  }
+
+  // ── Requête export SQL ────────────────────────────────────
+  if (tabs.indexOf('query') >= 0 && cfg.ssms_query) {
+    tabContents +=
+      '<div id="schTab_query" style="display:none;">' +
+        '<div style="font-size:10px;color:var(--text-2);margin-bottom:8px;">' +
+          '📋 Copiez cette requête dans votre client SQL pour obtenir la liste des tables et colonnes :' +
+        '</div>' +
+        '<div style="position:relative;">' +
+          '<pre style="background:var(--bg-1);border:1px solid var(--border);border-radius:6px;padding:10px;font-size:9px;font-family:var(--font-mono);color:var(--text-2);overflow-x:auto;white-space:pre-wrap;max-height:180px;overflow-y:auto;">' +
+            cfg.ssms_query.replace(/</g,'&lt;').replace(/>/g,'&gt;') +
+          '</pre>' +
+          '<button type="button" onclick="copySchemaQuery()" ' +
+            'style="position:absolute;top:6px;right:6px;font-size:9px;padding:2px 7px;border-radius:4px;border:1px solid var(--border);background:var(--bg-2);color:var(--text-2);cursor:pointer;">' +
+            '📋 Copier' +
+          '</button>' +
+        '</div>' +
+        '<div style="margin-top:8px;font-size:10px;color:var(--text-3);">' +
+          '↑ Résultat CSV → collez-le dans l\'onglet "Importer CSV"' +
+        '</div>' +
+      '</div>';
+  }
+
+  // ── CSV (présent dans tous les types) ────────────────────
+  if (tabs.indexOf('csv') >= 0) {
+    var isFirstCsv = 'csv' === firstTab;
+    tabContents +=
+      '<div id="schTab_csv" style="display:' + (isFirstCsv?'block':'none') + ';">' +
+        '<div class="upload-zone" style="padding:12px 16px;" onclick="document.getElementById(\'f_schema_file\').click()">' +
+          '<input type="file" id="f_schema_file" accept=".csv,.tsv" style="display:none;" onchange="handleSchemaCsvUpload(this)">' +
+          '<div style="font-size:11px;color:var(--text-2);">📄 Uploader un CSV décrivant vos tables</div>' +
+          '<div style="font-size:9px;color:var(--text-3);margin-top:3px;">Format : table_name, column_name, data_type, is_pk, is_fk</div>' +
+        '</div>' +
+        '<div id="schemaCsvStatus" style="margin-top:8px;"></div>' +
+      '</div>';
+  }
+
+  return (
+    '<div class="form-section">' +
+      '<div class="form-section-title" style="margin-bottom:10px;">' +
+        'Import de schéma ' +
+        '<span style="font-size:9px;color:var(--text-3);font-weight:400;">(optionnel — décrit la structure sans connexion directe)</span>' +
+      '</div>' +
+      infoHtml +
+      '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">' + tabBtns + '</div>' +
+      tabContents +
+    '</div>'
+  );
+}
+
+function switchSchemaTab(tab) {
+  // Masquer tous les onglets schéma
+  ['sql','csv','query','tables','entities','odata','json','graphql','wsdl'].forEach(function(t) {
+    var el = document.getElementById('schTab_' + t);
+    if (el) el.style.display = 'none';
+    var btn = document.getElementById('schTabBtn_' + t);
+    if (btn) btn.className = 'btn btn-sm btn-secondary';
+  });
+  // Afficher l'onglet sélectionné
+  var el = document.getElementById('schTab_' + tab);
+  if (el) el.style.display = 'block';
+  var btn = document.getElementById('schTabBtn_' + tab);
+  if (btn) btn.className = 'btn btn-sm btn-primary';
+  formData.schema_import_mode = tab;
+}
+
+function copySchemaQuery() {
+  var pre = document.querySelector('#schTab_query pre');
+  if (!pre) return;
+  navigator.clipboard.writeText(pre.textContent).then(function() {
+    toast('📋 Requête copiée !', 'success');
+  }).catch(function() {
+    toast('Copiez manuellement depuis la zone ci-dessus', 'info');
+  });
+}
+
+function previewSchemaSql(sql) {
+  if (!sql || sql.length < 20) {
+    document.getElementById('schemaSqlPreview').innerHTML = '';
+    return;
+  }
+  // Compter les CREATE TABLE
+  var matches = sql.match(/CREATE\s+TABLE\s+[\[\`\"]?([\w\.]+)[\]\`\"]?/gi) || [];
+  var fkMatches = sql.match(/REFERENCES|FOREIGN\s+KEY/gi) || [];
+  if (matches.length > 0) {
+    document.getElementById('schemaSqlPreview').innerHTML =
+      '<div style="font-size:10px;color:var(--green);margin-top:4px;">' +
+        '✅ ' + matches.length + ' table(s) détectée(s)' +
+        (fkMatches.length ? ' · ' + Math.round(fkMatches.length/2) + ' relation(s) FK' : '') +
+      '</div>';
+  }
+}
+
+
+
+async function handleSchemaCsvUpload(input) {
+  var file = input.files[0]; if (!file) return;
+  var statusEl = document.getElementById('schemaCsvStatus');
+  statusEl.innerHTML = '<div style="font-size:11px;color:var(--text-3);">⏳ Analyse du CSV...</div>';
+  try {
+    var text = await file.text();
+    var lines = text.split('\n').filter(function(l){ return l.trim(); });
+    var header = lines[0].split(',').map(function(h){ return h.trim().replace(/"/g,'').toLowerCase(); });
+    var rows = lines.slice(1).map(function(l){
+      var cols = l.split(',').map(function(c){ return c.trim().replace(/"/g,''); });
+      var obj = {};
+      header.forEach(function(h,i){ obj[h] = cols[i] || ''; });
+      return obj;
+    }).filter(function(r){ return r.table_name || r[header[0]]; });
+
+    // Grouper par table
+    var tables = {};
+    rows.forEach(function(r) {
+      var tbl = r.table_name || r[header[0]] || 'unknown';
+      if (!tables[tbl]) tables[tbl] = [];
+      tables[tbl].push(r);
+    });
+    var tCount = Object.keys(tables).length;
+    formData.schema_csv_data = rows;
+    formData.options = formData.options || {};
+    formData.options.schema_csv = rows;
+
+    statusEl.innerHTML =
+      '<div style="color:var(--green);font-size:11px;font-weight:500;">✅ ' + file.name + ' analysé</div>' +
+      '<div style="font-size:10px;color:var(--text-2);margin-top:4px;">' + tCount + ' tables · ' + rows.length + ' colonnes détectées</div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;">' +
+      Object.keys(tables).slice(0,6).map(function(t){
+        return '<span style="font-size:9px;background:var(--bg-1);padding:2px 6px;border-radius:4px;font-family:var(--font-mono);">' + t + '</span>';
+      }).join('') +
+      (tCount > 6 ? '<span style="font-size:9px;color:var(--text-3);">+' + (tCount-6) + ' autres</span>' : '') +
+      '</div>';
+  } catch(e) {
+    statusEl.innerHTML = '<div style="color:var(--red);font-size:11px;">❌ ' + e.message + '</div>';
+  }
+}
+
+
+function updateSelectedSheets() {
+  var checkboxes = document.querySelectorAll('#sheetCheckboxes input[type=checkbox]');
+  var selected = [];
+  checkboxes.forEach(function(cb) { if (cb.checked) selected.push(cb.value); });
+  formData.options = formData.options || {};
+  formData.options.selected_sheets = selected;
+  formData.options.all_sheets = false;
+  var preview = document.getElementById('sheetPreview');
+  if (preview) {
+    if (selected.length === 0) {
+      preview.innerHTML = '<span style="color:var(--red);">⚠️ Aucune feuille sélectionnée</span>';
+    } else {
+      preview.innerHTML = selected.length + ' feuille(s) sélectionnée(s) : <b style="color:var(--accent);">' + selected.join(', ') + '</b>';
+    }
+  }
+}
+
+function selectAllSheets(checked) {
+  var checkboxes = document.querySelectorAll('#sheetCheckboxes input[type=checkbox]');
+  checkboxes.forEach(function(cb) { cb.checked = checked; });
+  updateSelectedSheets();
 }
 
 function updateAuthFields(type) {
@@ -3066,7 +3929,7 @@ function updateAuthFields(type) {
 async function submitForm() {
   var name = document.getElementById('f_name')&&document.getElementById('f_name').value.trim();
   if (!name) { toast('Le nom est requis', 'error'); return; }
-  var isFile = ['file_csv','file_excel','file_json'].indexOf(selectedType) >= 0;
+  var isFile = ['file_csv','file_excel','file_xlsx','file_json','file_parquet','file_avro'].indexOf(selectedType) >= 0;
   if (isFile && !uploadedFilePath) { toast('Veuillez uploader un fichier', 'error'); return; }
 
   var payload = {
@@ -3076,6 +3939,9 @@ async function submitForm() {
     port:           formData.port || null,
     database_name:  document.getElementById('f_db')&&document.getElementById('f_db').value.trim() || null,
     schema_name:    document.getElementById('f_schema')&&document.getElementById('f_schema').value.trim() || null,
+    schema_sql:     formData.schema_sql || null,
+    sheet_mode:     formData.sheet_mode || null,
+    sheet_name:     formData.sheet_name || null,
     base_url:       uploadedFilePath || document.getElementById('f_url')&&document.getElementById('f_url').value.trim() || null,
     auth_type:      formData.auth_type || 'none',
     username:       formData.username || document.getElementById('f_user')&&document.getElementById('f_user').value.trim() || null,
@@ -3142,20 +4008,335 @@ async function autoSync(id) {
         }).join('') + '</div>';
       document.getElementById('testSub').textContent = r.message;
     }
-  } catch(e) { /* silencieux */ }
+  } catch(e) {
+    document.getElementById('testSub').textContent = 'Erreur sync : ' + e.message;
+    document.getElementById('testIcon').textContent = '⚠️';
+  }
 }
 
 // ── IMPORT FK SSMS ────────────────────────────────────
 var ssmsSourceId = null;
 var ssmsParsed   = [];
 
+
+// ══════════════════════════════════════════════════════
+// IMPORT FK — onglets Coller / Upload CSV
+// ══════════════════════════════════════════════════════
+
+function switchFkTab(tab) {
+  document.getElementById('fkTabPaste').style.display = tab === 'paste' ? 'block' : 'none';
+  document.getElementById('fkTabCsv').style.display   = tab === 'csv'   ? 'block' : 'none';
+  document.getElementById('fkTabPasteBtn').className  = 'btn btn-sm ' + (tab==='paste' ? 'btn-primary' : 'btn-secondary');
+  document.getElementById('fkTabCsvBtn').className    = 'btn btn-sm ' + (tab==='csv'   ? 'btn-primary' : 'btn-secondary');
+}
+
+async function handleFkCsvUpload(input) {
+  var file = input.files[0];
+  if (!file) return;
+  var statusEl = document.getElementById('fkCsvStatus');
+  statusEl.innerHTML = '<div style="font-size:11px;color:var(--text-3);">⏳ Lecture du fichier...</div>';
+
+  try {
+    var text = await file.text();
+    // Réutiliser la logique de previewSsms en injectant dans ssmsInput
+    document.getElementById('ssmsInput').value = text;
+    previewSsms();
+
+    var count = ssmsParsed.length;
+    if (count > 0) {
+      statusEl.innerHTML =
+        '<div style="color:var(--green);font-size:11px;font-weight:500;">✅ ' + file.name + ' — ' + count + ' FK détectées</div>';
+    } else {
+      statusEl.innerHTML =
+        '<div style="color:var(--red);font-size:11px;">❌ Format non reconnu dans ce fichier</div>';
+    }
+  } catch(e) {
+    statusEl.innerHTML = '<div style="color:var(--red);font-size:11px;">❌ ' + e.message + '</div>';
+  }
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// MODALE IMPORT FK — Configuration par type de source
+// ══════════════════════════════════════════════════════════════
+
+var FK_MODAL_CONFIG = {
+
+  // ── SQL Server / SAGE 100 ─────────────────────────────────
+  mssql: {
+    title:    '📥 Import FK — SQL Server',
+    icon:     '🪟',
+    mode:     'paste_csv',   // textarea + upload CSV
+    desc:     'Exécute cette requête dans SSMS, puis colle le résultat ou uploade le CSV :',
+    query:    'SELECT fk.name AS fk_name,\n    tp.name AS source_table, cp.name AS source_column,\n    tr.name AS target_table, cr.name AS target_column\nFROM sys.foreign_keys fk\nJOIN sys.foreign_key_columns fkc ON fk.object_id = fkc.constraint_object_id\nJOIN sys.tables tp  ON fkc.parent_object_id  = tp.object_id\nJOIN sys.columns cp ON fkc.parent_object_id  = cp.object_id AND fkc.parent_column_id  = cp.column_id\nJOIN sys.tables tr  ON fkc.referenced_object_id  = tr.object_id\nJOIN sys.columns cr ON fkc.referenced_object_id  = cr.object_id AND fkc.referenced_column_id = cr.column_id\nORDER BY tp.name, cp.name;',
+    tip:      '💡 Clic droit dans SSMS → <b>Enregistrer en tant que CSV</b> → onglet Upload CSV',
+    placeholder: 'Colle ici le résultat SSMS (avec ou sans en-têtes, CSV ou tabulé)…',
+    btn_label: '📥 Importer FK',
+  },
+  sage_100: {
+    title:    '📥 Import FK — SAGE 100 (SQL Server)',
+    icon:     '🟢',
+    mode:     'paste_csv',
+    desc:     'Exécute cette requête sur ta base SAGE 100 (SQL Server) :',
+    query:    'SELECT fk.name AS fk_name,\n    tp.name AS source_table, cp.name AS source_column,\n    tr.name AS target_table, cr.name AS target_column\nFROM sys.foreign_keys fk\nJOIN sys.foreign_key_columns fkc ON fk.object_id = fkc.constraint_object_id\nJOIN sys.tables tp  ON fkc.parent_object_id  = tp.object_id\nJOIN sys.columns cp ON fkc.parent_object_id  = cp.object_id AND fkc.parent_column_id  = cp.column_id\nJOIN sys.tables tr  ON fkc.referenced_object_id  = tr.object_id\nJOIN sys.columns cr ON fkc.referenced_object_id  = cr.object_id AND fkc.referenced_column_id = cr.column_id\nORDER BY tp.name, cp.name;',
+    tip:      '💡 Tables SAGE 100 : F_COMPTET, F_PIECE, F_ECRITUREC, P_DOSSIER...',
+    placeholder: 'Colle le résultat ou uploade le CSV…',
+    btn_label: '📥 Importer FK',
+  },
+
+  // ── PostgreSQL ───────────────────────────────────────────
+  postgresql: {
+    title:    '📥 Import FK — PostgreSQL',
+    icon:     '🐘',
+    mode:     'paste_csv',
+    desc:     'Exécute cette requête dans psql ou pgAdmin :',
+    query:    "SELECT\n    tc.table_name AS source_table,\n    kcu.column_name AS source_column,\n    ccu.table_name AS target_table,\n    ccu.column_name AS target_column\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name\nJOIN information_schema.constraint_column_usage ccu ON ccu.constraint_name = tc.constraint_name\nWHERE tc.constraint_type = 'FOREIGN KEY'\nORDER BY source_table, source_column;",
+    tip:      '💡 Compatible psql, pgAdmin, DBeaver — exporte en CSV puis uploade',
+    placeholder: 'Colle le résultat (CSV ou tabulé)…',
+    btn_label: '📥 Importer FK',
+  },
+
+  // ── MySQL ────────────────────────────────────────────────
+  mysql: {
+    title:    '📥 Import FK — MySQL / MariaDB',
+    icon:     '🐬',
+    mode:     'paste_csv',
+    desc:     'Exécute cette requête dans MySQL Workbench ou phpMyAdmin :',
+    query:    "SELECT\n    TABLE_NAME AS source_table,\n    COLUMN_NAME AS source_column,\n    REFERENCED_TABLE_NAME AS target_table,\n    REFERENCED_COLUMN_NAME AS target_column,\n    CONSTRAINT_NAME AS fk_name\nFROM information_schema.KEY_COLUMN_USAGE\nWHERE REFERENCED_TABLE_SCHEMA = DATABASE()\n  AND REFERENCED_TABLE_NAME IS NOT NULL\nORDER BY TABLE_NAME, COLUMN_NAME;",
+    tip:      '💡 Compatible MySQL Workbench, phpMyAdmin, DBeaver',
+    placeholder: 'Colle le résultat CSV ou tabulé…',
+    btn_label: '📥 Importer FK',
+  },
+
+  // ── SQLite ───────────────────────────────────────────────
+  sqlite: {
+    title:    '📥 Import FK — SQLite',
+    icon:     '📁',
+    mode:     'paste_csv',
+    desc:     'Exécute cette requête dans DB Browser for SQLite ou la CLI :',
+    query:    "-- Pour chaque table, exécuter :\n-- PRAGMA foreign_key_list(nom_table);\n-- Ou utiliser cette requête universelle :\nSELECT\n    m.name AS source_table,\n    p.'from' AS source_column,\n    p.'table' AS target_table,\n    p.'to' AS target_column\nFROM sqlite_master m,\n    pragma_foreign_key_list(m.name) p\nWHERE m.type = 'table'\nORDER BY m.name;",
+    tip:      '💡 Compatible DB Browser for SQLite, SQLiteStudio',
+    placeholder: 'Colle le résultat PRAGMA…',
+    btn_label: '📥 Importer FK',
+  },
+
+  // ── OData ────────────────────────────────────────────────
+  odata: {
+    title:    '🌐 Relations OData — NavigationProperties',
+    icon:     '⚡',
+    mode:     'odata_url',   // champ URL + bouton fetch auto
+    desc:     'Les relations OData sont extraites automatiquement depuis le $metadata.',
+    query:    null,
+    tip:      '💡 OnePilot lit les NavigationProperties depuis l&#39;URL $metadata configurée.',
+    placeholder: null,
+    btn_label: '🌐 Importer depuis $metadata',
+    info: 'Les relations NavigationProperties OData sont détectées automatiquement lors de la synchronisation. Clique sur "Relancer" pour forcer une nouvelle découverte.',
+  },
+  sap_odata: {
+    title:    '🔶 Relations SAP OData',
+    icon:     '🔶',
+    mode:     'odata_url',
+    desc:     'Les associations SAP OData sont extraites du $metadata S/4HANA.',
+    query:    null,
+    tip:      '💡 NavigationProperties + AssociationSets SAP OData v2/v4',
+    placeholder: null,
+    btn_label: '🔶 Importer depuis SAP $metadata',
+    info: 'Les relations SAP OData sont détectées via les NavigationProperties lors de la sync. Clique sur "Relancer" pour forcer la découverte.',
+  },
+
+  // ── SAP RFC ──────────────────────────────────────────────
+  sap_rfc: {
+    title:    '🔷 Relations SAP ABAP (DDIC)',
+    icon:     '🔷',
+    mode:     'paste_only',  // textarea seulement, pas de requête SQL
+    desc:     'Colle les relations ABAP (table source, champ, table cible, champ) depuis SE11 :',
+    query:    '-- Relations ABAP — Exporte depuis SE11 / SE80 :\n-- Format CSV attendu :\n-- source_table,source_field,target_table,target_field\n-- Exemple :\n-- VBAP,VBELN,VBAK,VBELN\n-- VBAP,MATNR,MARA,MATNR',
+    tip:      '💡 Dans SE11 : ouvrir la table → onglet "Éléments de données" → voir les FK (PRGTYPLEN)',
+    placeholder: 'source_table,source_field,target_table,target_fieldVBAP,VBELN,VBAK,VBELNVBAP,MATNR,MARA,MATNR...',
+    btn_label: '🔷 Importer relations ABAP',
+  },
+
+  // ── Dynamics 365 ─────────────────────────────────────────
+  dynamics365: {
+    title:    '🟦 Relations Dynamics 365',
+    icon:     '🟦',
+    mode:     'paste_only',
+    desc:     'Colle les Lookup fields Dynamics 365 (une relation par ligne) :',
+    query:    '-- Relations Dynamics 365 — depuis Power Apps ou /EntityDefinitions :\n-- Format CSV attendu :\n-- source_entity,source_field,target_entity,target_field\n-- Exemple :\n-- opportunity,customerid,account,accountid\n-- contact,parentcustomerid,account,accountid',
+    tip:      '💡 Dans Power Apps : Données → Entités → sélectionner → onglet Relations',
+    placeholder: 'source_entity,source_field,target_entity,target_fieldopportunity,customerid,account,accountidcontact,parentcustomerid,account,accountid...',
+    btn_label: '🟦 Importer Lookup fields',
+  },
+
+  // ── SAGE X3 ──────────────────────────────────────────────
+  sage_x3: {
+    title:    '🟩 Relations SAGE X3',
+    icon:     '🟩',
+    mode:     'paste_csv',
+    desc:     'Colle les relations entre objets SAGE X3 :',
+    query:    '-- Relations SAGE X3 — depuis Syracuse / Console d&#39;admin :\n-- Format CSV attendu :\n-- source_table,source_field,target_table,target_field',
+    tip:      '💡 Administration SAGE X3 → Développement → Dictionnaire → Liens entre tables',
+    placeholder: 'SORDER,BPCORD,BPCUSTOMER,BPCNUMSINVOICE,SALFCY,FACILITY,FCY...',
+    btn_label: '🟩 Importer relations X3',
+  },
+
+  // ── REST / GraphQL ───────────────────────────────────────
+  rest: {
+    title:    '🔗 Relations REST API',
+    icon:     '🔗',
+    mode:     'paste_only',
+    desc:     'Définis manuellement les relations entre endpoints REST :',
+    query:    null,
+    tip:      '💡 Format : source_entity,source_field,target_entity,target_field',
+    placeholder: 'orders,customer_id,customers,idorder_items,product_id,products,id...',
+    btn_label: '🔗 Importer relations',
+    info: 'Les APIs REST ne déclarent pas de FK. Définissez manuellement les jointures entre ressources.',
+  },
+  graphql: {
+    title:    '◈ Relations GraphQL',
+    icon:     '◈',
+    mode:     'paste_only',
+    desc:     'Les relations GraphQL sont extraites du schema SDL automatiquement.',
+    query:    null,
+    tip:      '💡 Les types imbriqués dans le SDL GraphQL sont détectés comme relations',
+    placeholder: 'source_type,source_field,target_type,target_fieldOrder,customer,Customer,idProduct,category,Category,id...',
+    btn_label: '◈ Importer relations',
+  },
+
+  // ── Fichiers ─────────────────────────────────────────────
+  file_csv:     { title: '📄 Relations CSV',     icon: '📄', mode: 'paste_only', query: null, tip: '💡 Définissez les relations entre colonnes de votre fichier CSV', placeholder: 'source_table,source_field,target_table,target_field', btn_label: '📄 Importer', info: 'Les fichiers CSV n&#39;ont pas de FK déclarées. Définissez manuellement les colonnes de jointure.' },
+  file_excel:   { title: '📊 Relations Excel',   icon: '📊', mode: 'paste_only', query: null, tip: '💡 Relations entre feuilles Excel', placeholder: 'feuille_source,colonne,feuille_cible,colonne', btn_label: '📊 Importer' },
+  file_xlsx:    { title: '📗 Relations Excel',   icon: '📗', mode: 'paste_only', query: null, tip: '💡 Relations entre feuilles', placeholder: 'feuille_source,colonne,feuille_cible,colonne', btn_label: '📗 Importer' },
+  file_json:    { title: '📋 Relations JSON',    icon: '📋', mode: 'paste_only', query: null, tip: '💡 Relations entre objets JSON imbriqués', placeholder: 'source_entity,source_field,target_entity,target_field', btn_label: '📋 Importer' },
+  file_parquet: { title: '🗃 Relations Parquet', icon: '🗃', mode: 'paste_only', query: null, tip: '💡 Relations entre colonnes Parquet', placeholder: 'source_table,source_field,target_table,target_field', btn_label: '🗃 Importer' },
+  file_avro:    { title: '🗄 Relations Avro',    icon: '🗄', mode: 'paste_only', query: null, tip: '💡 Relations entre champs Avro', placeholder: 'source_schema,source_field,target_schema,target_field', btn_label: '🗄 Importer' },
+};
+
+// Défaut si type inconnu
+var FK_MODAL_DEFAULT = {
+  title:    '📥 Import de relations',
+  icon:     '🔗',
+  mode:     'paste_csv',
+  desc:     'Colle ou uploade tes données de relations (source_table, source_field, target_table, target_field) :',
+  query:    null,
+  tip:      '💡 Format CSV : source_table, source_column, target_table, target_column',
+  placeholder: 'source_table,source_column,target_table,target_column',
+  btn_label: '📥 Importer',
+};
+
+// ── Rendu du corps de la modale selon le type ─────────────────
+function renderFkModal(sourceType) {
+  var cfg = FK_MODAL_CONFIG[sourceType] || FK_MODAL_DEFAULT;
+
+  // Titre
+  document.getElementById('ssmsModalTitle').textContent = cfg.title;
+
+  // Bouton importer
+  var btn = document.getElementById('ssmsImportBtn');
+  btn.textContent = cfg.btn_label || '📥 Importer';
+  btn.disabled = true;
+
+  var body = '';
+
+  // ── Mode OData URL : pas de formulaire, juste un message + bouton sync ──
+  if (cfg.mode === 'odata_url') {
+    body =
+      '<div style="padding:16px;background:rgba(0,212,255,0.05);border:1px solid rgba(0,212,255,0.15);border-radius:8px;margin-bottom:12px;">' +
+        '<div style="font-size:13px;font-weight:600;color:var(--text-0);margin-bottom:8px;">' + cfg.icon + ' ' + cfg.title + '</div>' +
+        '<div style="font-size:12px;color:var(--text-2);line-height:1.7;">' + cfg.desc + '</div>' +
+        '<div style="margin-top:10px;padding:10px;background:var(--bg-0);border-radius:6px;font-size:11px;color:var(--text-3);">' +
+          cfg.tip +
+        '</div>' +
+        (cfg.info ? '<div style="margin-top:10px;padding:10px 12px;background:rgba(255,200,0,0.06);border-radius:6px;font-size:11px;color:var(--text-2);">ℹ️ ' + cfg.info + '</div>' : '') +
+      '</div>' +
+      '<div style="display:flex;gap:8px;margin-top:8px;">' +
+        '<button class="btn btn-primary" style="flex:1;" onclick="closeSsms();runDiscover(ssmsSourceId);">' + cfg.btn_label + '</button>' +
+      '</div>';
+    document.getElementById('ssmsImportBtn').style.display = 'none';
+    document.getElementById('ssmsModalBody').innerHTML = body;
+    return;
+  }
+
+  document.getElementById('ssmsImportBtn').style.display = '';
+
+  // ── Onglets Coller / Upload CSV (mode paste_csv) ─────────────
+  var tabsHtml = '';
+  if (cfg.mode === 'paste_csv') {
+    tabsHtml =
+      '<div style="display:flex;gap:4px;margin-bottom:12px;">' +
+        '<button class="btn btn-primary btn-sm" id="fkTabPasteBtn" onclick="switchFkTab(\'paste\')" style="flex:1;">📋 Coller</button>' +
+        '<button class="btn btn-secondary btn-sm" id="fkTabCsvBtn" onclick="switchFkTab(\'csv\')" style="flex:1;">📄 Uploader CSV</button>' +
+      '</div>';
+  }
+
+  // ── Description + requête SQL ────────────────────────────────
+  var descHtml = '<div style="font-size:12px;color:var(--text-2);line-height:1.6;margin-bottom:8px;">' + cfg.desc + '</div>';
+
+  var queryHtml = '';
+  if (cfg.query) {
+    queryHtml =
+      '<div style="background:var(--bg-0);border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-family:var(--font-mono);font-size:10px;color:var(--accent);white-space:pre-wrap;user-select:all;cursor:text;margin-bottom:8px;max-height:160px;overflow-y:auto;">' +
+        cfg.query.replace(/</g, '&lt;').replace(/>/g, '&gt;') +
+      '</div>';
+  }
+
+  var tipHtml = cfg.tip
+    ? '<div style="font-size:11px;color:var(--text-3);margin-bottom:8px;">' + cfg.tip + '</div>'
+    : '';
+
+  // ── Textarea principal ───────────────────────────────────────
+  var pasteHtml =
+    '<div id="fkTabPaste">' +
+      descHtml + queryHtml + tipHtml +
+      '<textarea class="ssms-textarea" id="ssmsInput" placeholder="' + (cfg.placeholder || 'source_table,source_column,target_table,target_column') + '" oninput="previewSsms()"></textarea>' +
+    '</div>';
+
+  // ── Onglet Upload CSV ────────────────────────────────────────
+  var csvHtml = cfg.mode === 'paste_csv'
+    ? '<div id="fkTabCsv" style="display:none;">' +
+        '<div style="font-size:12px;color:var(--text-2);margin-bottom:10px;">' +
+          'Uploade directement le fichier CSV exporté.<br>' +
+          '<span style="color:var(--text-3);font-size:11px;">Format : source_table, source_column, target_table, target_column</span>' +
+        '</div>' +
+        '<div class="upload-zone" style="padding:16px;" onclick="document.getElementById(\'fkCsvFile\').click()">' +
+          '<input type="file" id="fkCsvFile" accept=".csv,.tsv,.txt" style="display:none;" onchange="handleFkCsvUpload(this)">' +
+          '<div style="font-size:22px;margin-bottom:6px;">📄</div>' +
+          '<div style="font-size:12px;color:var(--text-2);">Cliquez pour sélectionner</div>' +
+          '<div style="font-size:10px;color:var(--text-3);margin-top:3px;">CSV, TSV, TXT</div>' +
+        '</div>' +
+        '<div id="fkCsvStatus" style="margin-top:8px;"></div>' +
+      '</div>'
+    : '';
+
+  // ── Aperçu ───────────────────────────────────────────────────
+  var previewHtml =
+    '<div style="font-size:11px;color:var(--text-2);margin-top:10px;">Aperçu :</div>' +
+    '<div class="ssms-preview" id="ssmsPreview" style="color:var(--text-3);font-style:italic;">Colle tes données ci-dessus pour voir l&#39;aperçu…</div>';
+
+  // ── Assemblage ───────────────────────────────────────────────
+  if (cfg.info) {
+    body = '<div style="padding:10px 12px;background:rgba(255,200,0,0.06);border-radius:6px;font-size:11px;color:var(--text-2);margin-bottom:10px;">ℹ️ ' + cfg.info + '</div>';
+  }
+  body += tabsHtml + pasteHtml + csvHtml + previewHtml;
+
+  document.getElementById('ssmsModalBody').innerHTML = body;
+}
+
 function openSsms(sourceId) {
   ssmsSourceId = sourceId;
-  ssmsParsed = [];
-  document.getElementById('ssmsInput').value = '';
-  document.getElementById('ssmsPreview').innerHTML = '<span style="color:var(--text-3);font-style:italic;">Colle tes données ci-dessus…</span>';
+  ssmsParsed   = [];
+
+  // Trouver le type de la source courante
+  var srcObj   = allSources.find(function(s){ return s.id === sourceId; });
+  var srcType  = srcObj ? (srcObj.connector_type || '').toLowerCase() : '';
+
+  // Rendre le corps de la modale selon le type
+  renderFkModal(srcType);
+
+  // Reset le compteur et aperçu
   document.getElementById('ssmsCount').textContent = '';
   document.getElementById('ssmsImportBtn').disabled = true;
+
   document.getElementById('ssmsOverlay').classList.add('open');
 }
 
@@ -3455,8 +4636,13 @@ function renderTableProfile(data) {
   var errCount  = allIssues.filter(function(i){ return i.severity==='error'; }).length;
   var warnCount = allIssues.filter(function(i){ return i.severity==='warning'; }).length;
 
+  var isEmpty = (data.total_rows || 0) === 0;
+  var qualityLabel = isEmpty
+    ? '<div style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--text-3);padding:4px 12px;border-radius:8px;border:1px solid var(--border);">📭 Vide</div>'
+    : (avgQ != null ? '<div style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:' + qCol + ';padding:4px 12px;border-radius:8px;border:1px solid ' + qCol + ';">Qualité ' + avgQ + '%</div>' : '');
+
   panel.innerHTML =
-    '<div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;flex-wrap:wrap;">' +
+    '<div style="display:flex;align-items:center;gap:16px;margin-bottom:' + (isEmpty?'8':'20') + 'px;flex-wrap:wrap;">' +
       '<div><div style="font-size:18px;font-weight:700;color:var(--text-0);">' + data.table + '</div>' +
       '<div style="font-size:11px;color:var(--text-3);font-family:var(--font-mono);">' +
         (data.total_rows||0).toLocaleString() + ' lignes · ' + cols.length + ' colonnes' +
@@ -3464,24 +4650,38 @@ function renderTableProfile(data) {
       '<div style="margin-left:auto;display:flex;gap:10px;align-items:center;">' +
         (errCount  ? '<span style="color:var(--red);font-size:11px;">⛔ ' + errCount + ' erreur(s)</span>' : '') +
         (warnCount ? '<span style="color:var(--yellow);font-size:11px;">⚠️ ' + warnCount + ' avert.</span>' : '') +
-        (avgQ != null ? '<div style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:' + qCol + ';padding:4px 12px;border-radius:8px;border:1px solid ' + qCol + ';">Qualité ' + avgQ + '%</div>' : '') +
+        qualityLabel +
         '<button class="btn btn-ghost btn-sm" onclick="loadTableProfile(\'' + data.table.replace(/'/g,"\\'") + '\',true)">↻ Refresh</button>' +
       '</div></div>' +
+    (isEmpty
+      ? '<div style="padding:20px 16px;background:rgba(255,200,0,0.06);border:1px solid rgba(255,200,0,0.2);border-radius:8px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">' +
+          '<span style="font-size:28px;">📭</span>' +
+          '<div>' +
+            '<div style="font-weight:600;color:var(--text-1);font-size:13px;">Table vide — aucune donnée</div>' +
+            '<div style="color:var(--text-3);font-size:11px;margin-top:3px;">Cette table contient 0 ligne. Les statistiques (nulls, unicité, min/max...) ne sont pas calculables. Le schéma est affiché ci-dessous.</div>' +
+          '</div>' +
+        '</div>'
+      : '') +
     (data.error ? '<div style="padding:12px;background:rgba(255,80,80,0.1);border:1px solid var(--red);border-radius:6px;color:var(--red);font-size:12px;margin-bottom:16px;">⚠️ ' + data.error + '</div>' : '') +
     '<div style="display:grid;gap:10px;">' +
-    cols.map(function(c){ return renderColumnCard(c); }).join('') +
+    cols.map(function(c){ return renderColumnCard(c, isEmpty); }).join('') +
     '</div>';
 }
 
-function renderColumnCard(c) {
+function renderColumnCard(c, isEmpty) {
   var qCol   = c.quality_score >= 80 ? 'var(--green)' : c.quality_score >= 60 ? 'var(--yellow)' : 'var(--red)';
   var ns     = c.numeric_stats || {};
   var ts     = c.text_stats    || {};
   var hasNum = Object.keys(ns).length > 0;
   var nullPct = Math.round((c.null_rate||0)*100);
   var uniqPct = Math.round((c.unique_rate||0)*100);
-  var nullBar = '<div style="display:flex;align-items:center;gap:6px;"><div style="flex:1;height:4px;background:var(--bg-1);border-radius:2px;"><div style="width:' + nullPct + '%;height:100%;background:' + (nullPct>30?'var(--red)':nullPct>10?'var(--yellow)':'var(--green)') + ';border-radius:2px;"></div></div><span style="font-family:var(--font-mono);font-size:9px;color:var(--text-3);">' + nullPct + '%</span></div>';
-  var uniqBar = '<div style="display:flex;align-items:center;gap:6px;"><div style="flex:1;height:4px;background:var(--bg-1);border-radius:2px;"><div style="width:' + uniqPct + '%;height:100%;background:var(--accent);border-radius:2px;"></div></div><span style="font-family:var(--font-mono);font-size:9px;color:var(--text-3);">' + uniqPct + '%</span></div>';
+  var naSpan  = '<span style="font-family:var(--font-mono);font-size:9px;color:var(--text-3);">—</span>';
+  var nullBar = isEmpty
+    ? naSpan
+    : '<div style="display:flex;align-items:center;gap:6px;"><div style="flex:1;height:4px;background:var(--bg-1);border-radius:2px;"><div style="width:' + nullPct + '%;height:100%;background:' + (nullPct>30?'var(--red)':nullPct>10?'var(--yellow)':'var(--green)') + ';border-radius:2px;"></div></div><span style="font-family:var(--font-mono);font-size:9px;color:var(--text-3);">' + nullPct + '%</span></div>';
+  var uniqBar = isEmpty
+    ? naSpan
+    : '<div style="display:flex;align-items:center;gap:6px;"><div style="flex:1;height:4px;background:var(--bg-1);border-radius:2px;"><div style="width:' + uniqPct + '%;height:100%;background:var(--accent);border-radius:2px;"></div></div><span style="font-family:var(--font-mono);font-size:9px;color:var(--text-3);">' + uniqPct + '%</span></div>';
   var histHtml = '';
   if (ns.histogram) {
     var bkts = ns.histogram.buckets;
@@ -3507,7 +4707,7 @@ function renderColumnCard(c) {
       '<span style="font-size:9px;padding:1px 6px;border-radius:8px;border:1px solid '+(c.sem_color||'var(--border)')+';color:'+(c.sem_color||'var(--text-3)')+';">'+(c.sem_label||'')+'</span>' +
       (c.pattern && c.pattern!=='text' && c.pattern!=='unknown' && c.pattern!=='numeric'
         ? '<span style="font-size:9px;padding:1px 6px;border-radius:8px;background:rgba(0,212,255,0.1);color:var(--accent);">' + c.pattern + ' ' + Math.round((c.pattern_conf||0)*100) + '%</span>' : '') +
-      '<span style="margin-left:auto;font-family:var(--font-mono);font-size:10px;font-weight:700;color:'+qCol+';">' + c.quality_score + '%</span>' +
+      (isEmpty ? '' : '<span style="margin-left:auto;font-family:var(--font-mono);font-size:10px;font-weight:700;color:'+qCol+';">' + c.quality_score + '%</span>') +
     '</div>' +
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 20px;font-size:10px;">' +
       '<div><div style="color:var(--text-3);margin-bottom:2px;font-size:9px;text-transform:uppercase;">Nulls</div>' + nullBar + '</div>' +
@@ -3594,7 +4794,7 @@ function previewViewPaste() {
       var name = parts[0].trim().replace(/^["']|["']$/g,'');
       var def  = parts.slice(1).join('\t').trim().replace(/^["']|["']$/g,'');
       if (name && def && name.toLowerCase() !== 'view_name') {
-        parsed.push({name: name, definition: def});
+        parsed.push({view_name: name, sql_definition: def});
       }
     }
   });
@@ -3607,7 +4807,7 @@ function previewViewPaste() {
   document.getElementById('viewPastePreview').innerHTML =
     '<div style="font-size:10px;font-family:var(--font-mono);">' +
     parsed.slice(0,5).map(function(v){
-      return '<div>📋 <b>' + v.name + '</b> — ' + v.definition.slice(0,60) + '…</div>';
+      return '<div>📋 <b>' + v.view_name + '</b> — ' + v.sql_definition.slice(0,60) + '…</div>';
     }).join('') +
     (parsed.length > 5 ? '<div style="color:var(--text-3);">+ ' + (parsed.length-5) + ' autres…</div>' : '') +
     '</div>';
@@ -3678,12 +4878,41 @@ function renderViewResult(r, containerId) {
   if (el) el.innerHTML = renderViewResultHtml(r);
 }
 
+// ── FIX5: Retour depuis relations / profiling avec chargement du détail ──
+async function goBackToRelDetail() {
+  if (relSourceId) {
+    var el = document.getElementById('detailContent');
+    if (!el || !el.innerHTML || el.innerHTML.length < 200) {
+      await showSourceDetailRaw(relSourceId);
+    } else {
+      showViewRaw('detail');
+    }
+    setRoute('#source/' + relSourceId);
+  } else {
+    showView('overview');
+  }
+}
+
+async function goBackToProfDetail() {
+  if (profSourceId) {
+    var el = document.getElementById('detailContent');
+    if (!el || !el.innerHTML || el.innerHTML.length < 200) {
+      await showSourceDetailRaw(profSourceId);
+    } else {
+      showViewRaw('detail');
+    }
+    setRoute('#source/' + profSourceId);
+  } else {
+    showView('overview');
+  }
+}
+
 async function init() {
   applyStoredTheme();
   await checkApiHealth();
   await loadConnectorTypes();
   await loadSources();
-  setInterval(checkApiHealth, 30000);
+  setInterval(checkApiHealth, 5000); // vérifie toutes les 5s
   await restoreRoute();
 }
 
