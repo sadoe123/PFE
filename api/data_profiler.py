@@ -532,6 +532,20 @@ async def profile_entity(source_id: UUID, entity_name: str,
     elif any(x in ct for x in ["csv", "excel", "file", "json"]):
         result = await asyncio.to_thread(
             _sync_profile_file, source_dict, entity_name, fields, sample_size)
+        # PATCH P9 — enrichissement métadonnées Excel
+        if result and not result.get("error"):
+            file_path = (source_dict.get("options") or {}).get("file_path") or                         source_dict.get("base_url", "")
+            if file_path and file_path.lower().endswith((".xlsx", ".xlsm", ".xls")):
+                try:
+                    excel_meta = extract_excel_metadata(file_path)
+                    result["excel_metadata"]  = excel_meta
+                    result["formula_count"]   = sum(
+                        len(v) for v in excel_meta.get("formulas", {}).values()
+                    )
+                    if excel_meta.get("metadata", {}).get("creator"):
+                        result["file_author"] = excel_meta["metadata"]["creator"]
+                except Exception as _em:
+                    logger.debug(f"[excel_meta] {_em}")
     else:
         result = _empty_profile(entity_name, fields,
                                 f"Connecteur '{ct}' non supporte pour le profiling")
@@ -560,9 +574,12 @@ async def profile_source_all(
     pool = await get_pg_pool()
 
     async with pool.acquire() as conn:
-        # Toutes les entités de la source
+        # Toutes les entités de la source — EXCLURE les vues SQL
         all_entities = await conn.fetch(
-            "SELECT name FROM source_entities WHERE source_id=$1 ORDER BY name",
+            """SELECT name FROM source_entities
+               WHERE source_id=$1
+               AND (entity_type IS NULL OR entity_type != 'view')
+               ORDER BY name""",
             source_id)
 
         # Entités déjà profilées avec succès → on les skippe
@@ -703,3 +720,362 @@ async def get_cached_profile(
     except Exception as e:
         logger.warning(f"[get_cached_profile] {entity_name}: {e}")
     return None
+
+# ══════════════════════════════════════════════════════════════════════
+# PATCH P7 — Histogrammes et statistiques avancées DB
+# ══════════════════════════════════════════════════════════════════════
+
+async def get_column_histogram(
+    source_id: UUID,
+    entity_name: str,
+    column_name: str,
+) -> Dict:
+    """
+    Retourne l'histogramme d'une colonne depuis les stats moteur DB.
+    PostgreSQL : pg_stats (nécessite ANALYZE sur la table)
+    MSSQL      : sys.dm_db_stats_histogram (nécessite UPDATE STATISTICS)
+    """
+    from .database import get_pg_pool
+    pool = await get_pg_pool()
+
+    async with pool.acquire() as conn:
+        src_row = await conn.fetchrow(
+            "SELECT connector_type, host, port, database_name, username, options "
+            "FROM data_sources WHERE id=$1", source_id)
+    if not src_row:
+        return {"error": "Source introuvable"}
+
+    ct = (src_row["connector_type"] or "").lower()
+
+    # ── PostgreSQL : pg_stats ─────────────────────────────────────────
+    if "postgres" in ct or ct == "pg":
+        try:
+            async with pool.acquire() as conn:
+                row = await conn.fetchrow("""
+                    SELECT null_frac, n_distinct,
+                           most_common_vals::text, most_common_freqs,
+                           histogram_bounds::text, correlation, avg_width
+                    FROM pg_stats
+                    WHERE tablename=$1 AND attname=$2
+                    LIMIT 1
+                """, entity_name, column_name)
+            if not row:
+                return {"column": column_name,
+                        "error": f"Pas de stats — lancez ANALYZE {entity_name}"}
+            mcv = []
+            if row["most_common_vals"] and row["most_common_freqs"]:
+                try:
+                    vals  = row["most_common_vals"].strip("{}").split(",")
+                    freqs = row["most_common_freqs"]
+                    mcv   = [{"value": v.strip('"'), "frequency": round(f, 4)}
+                              for v, f in zip(vals, freqs)]
+                except Exception:
+                    pass
+            histogram = []
+            if row["histogram_bounds"]:
+                try:
+                    bounds = row["histogram_bounds"].strip("{}").split(",")
+                    n = len(bounds) - 1
+                    histogram = [{"bin_start": bounds[i], "bin_end": bounds[i+1],
+                                  "frequency": round(1.0/n, 4)} for i in range(n)]
+                except Exception:
+                    pass
+            return {
+                "column":             column_name,
+                "null_frac":          round(float(row["null_frac"] or 0), 4),
+                "n_distinct":         float(row["n_distinct"] or 0),
+                "correlation":        float(row["correlation"]) if row["correlation"] else None,
+                "avg_width":          int(row["avg_width"] or 0),
+                "most_common_values": mcv,
+                "histogram":          histogram,
+                "source":             "pg_stats",
+            }
+        except Exception as e:
+            logger.warning(f"[histogram/pg] {entity_name}.{column_name}: {e}")
+            return {"column": column_name, "error": str(e)}
+
+    # ── MSSQL : sys.dm_db_stats_histogram ────────────────────────────
+    elif any(x in ct for x in ["mssql", "sql_server", "sqlserver"]):
+        try:
+            import pyodbc  # type: ignore
+            opts = src_row["options"] or {}
+            if isinstance(opts, str):
+                import json as _j; opts = _j.loads(opts)
+            driver = _detect_odbc_driver()
+            host   = src_row["host"]          or opts.get("host", "localhost")
+            port   = src_row["port"]          or opts.get("port", 1433)
+            db     = src_row["database_name"] or opts.get("database_name", "")
+            user   = src_row["username"]      or opts.get("username", "")
+            pwd    = opts.get("password", "")
+            dsn = (f"DRIVER={{{driver}}};SERVER={host},{port};DATABASE={db};"
+                   f"UID={user};PWD={pwd};TrustServerCertificate=yes;")
+            query = f"""
+                SELECT sh.range_hi_key, sh.range_rows, sh.eq_rows,
+                       sh.distinct_range_rows, sh.avg_range_rows
+                FROM sys.stats s
+                INNER JOIN sys.stats_columns sc
+                    ON s.object_id=sc.object_id AND s.stats_id=sc.stats_id
+                INNER JOIN sys.columns c
+                    ON sc.object_id=c.object_id AND sc.column_id=c.column_id
+                CROSS APPLY sys.dm_db_stats_histogram(s.object_id, s.stats_id) sh
+                WHERE OBJECT_NAME(s.object_id)='{entity_name}' AND c.name='{column_name}'
+                ORDER BY sh.step_number
+            """
+            def _sync():
+                with pyodbc.connect(dsn, timeout=15) as mc:
+                    with mc.cursor() as cur:
+                        cur.execute(query)
+                        return cur.fetchall()
+            rows = await asyncio.to_thread(_sync)
+            return {
+                "column": column_name,
+                "histogram": [
+                    {"bin_end": str(r[0]), "range_rows": float(r[1] or 0),
+                     "eq_rows": float(r[2] or 0), "distinct_range_rows": int(r[3] or 0)}
+                    for r in rows
+                ],
+                "source": "sys.dm_db_stats_histogram",
+                "note":   "Lancez UPDATE STATISTICS pour des stats fraîches.",
+            }
+        except Exception as e:
+            logger.warning(f"[histogram/mssql] {entity_name}.{column_name}: {e}")
+            return {"column": column_name, "error": str(e)}
+
+    return {"column": column_name, "error": f"Histogramme non supporté pour '{ct}'"}
+
+
+# ══════════════════════════════════════════════════════════════════════
+# PATCH P8 — Dépendances entre objets DB (views→tables, procédures, triggers)
+# ══════════════════════════════════════════════════════════════════════
+
+async def get_object_dependencies(source_id: UUID) -> Dict:
+    """
+    Retourne le graphe de dépendances entre objets DB.
+    PostgreSQL : pg_depend + pg_rewrite
+    MSSQL      : sys.sql_expression_dependencies
+    """
+    from .database import get_pg_pool
+    pool = await get_pg_pool()
+
+    async with pool.acquire() as conn:
+        src_row = await conn.fetchrow(
+            "SELECT connector_type, host, port, database_name, username, options "
+            "FROM data_sources WHERE id=$1", source_id)
+    if not src_row:
+        return {"error": "Source introuvable", "dependencies": []}
+
+    ct   = (src_row["connector_type"] or "").lower()
+    deps = []
+
+    # ── PostgreSQL ────────────────────────────────────────────────────
+    if "postgres" in ct or ct == "pg":
+        try:
+            async with pool.acquire() as conn:
+                rows = await conn.fetch("""
+                    SELECT DISTINCT
+                        dep_obj.relname AS object_name,
+                        CASE dep_obj.relkind
+                            WHEN 'v' THEN 'view'
+                            WHEN 'm' THEN 'materialized_view'
+                            WHEN 'r' THEN 'table'
+                        END AS object_type,
+                        ref_obj.relname AS depends_on,
+                        CASE ref_obj.relkind
+                            WHEN 'v' THEN 'view'
+                            WHEN 'm' THEN 'materialized_view'
+                            WHEN 'r' THEN 'table'
+                        END AS depends_on_type
+                    FROM pg_depend d
+                    JOIN pg_rewrite r    ON d.objid    = r.oid
+                    JOIN pg_class dep_obj ON r.ev_class = dep_obj.oid
+                    JOIN pg_class ref_obj ON d.refobjid  = ref_obj.oid
+                    JOIN pg_namespace ns  ON dep_obj.relnamespace = ns.oid
+                    WHERE ns.nspname = 'public'
+                      AND dep_obj.relkind IN ('v','m')
+                      AND ref_obj.relkind IN ('r','v','m')
+                      AND dep_obj.relname != ref_obj.relname
+                    ORDER BY dep_obj.relname, ref_obj.relname
+                """)
+            deps = [
+                {"object_name": r["object_name"], "object_type": r["object_type"] or "view",
+                 "depends_on": r["depends_on"], "depends_on_type": r["depends_on_type"] or "table",
+                 "dependency_type": "normal"}
+                for r in rows
+            ]
+        except Exception as e:
+            logger.warning(f"[dependencies/pg] {e}")
+
+    # ── MSSQL ─────────────────────────────────────────────────────────
+    elif any(x in ct for x in ["mssql", "sql_server", "sqlserver"]):
+        try:
+            import pyodbc  # type: ignore
+            opts = src_row["options"] or {}
+            if isinstance(opts, str):
+                import json as _j2; opts = _j2.loads(opts)
+            driver = _detect_odbc_driver()
+            host   = src_row["host"]          or opts.get("host", "localhost")
+            port   = src_row["port"]          or opts.get("port", 1433)
+            db     = src_row["database_name"] or opts.get("database_name", "")
+            user   = src_row["username"]      or opts.get("username", "")
+            pwd    = opts.get("password", "")
+            dsn    = (f"DRIVER={{{driver}}};SERVER={host},{port};DATABASE={db};"
+                      f"UID={user};PWD={pwd};TrustServerCertificate=yes;")
+            TYPE_MAP = {
+                "VIEW": "view", "SQL_STORED_PROCEDURE": "procedure",
+                "SQL_TRIGGER": "trigger", "SQL_SCALAR_FUNCTION": "function",
+                "USER_TABLE": "table",
+            }
+            def _sync2():
+                with pyodbc.connect(dsn, timeout=15) as mc:
+                    with mc.cursor() as cur:
+                        cur.execute("""
+                            SELECT DISTINCT OBJECT_NAME(sed.referencing_id),
+                                   o.type_desc, sed.referenced_entity_name, r.type_desc
+                            FROM sys.sql_expression_dependencies sed
+                            JOIN sys.objects o ON o.object_id=sed.referencing_id
+                            LEFT JOIN sys.objects r ON r.name=sed.referenced_entity_name
+                            WHERE sed.referenced_entity_name IS NOT NULL
+                              AND o.type IN ('V','P','TR','FN','IF','TF')
+                            ORDER BY 1,3
+                        """)
+                        return cur.fetchall()
+            rows2 = await asyncio.to_thread(_sync2)
+            deps  = [
+                {"object_name":     r[0],
+                 "object_type":     TYPE_MAP.get(r[1], r[1].lower() if r[1] else "unknown"),
+                 "depends_on":      r[2],
+                 "depends_on_type": TYPE_MAP.get(r[3], "table") if r[3] else "table",
+                 "dependency_type": "references"}
+                for r in rows2 if r[0] and r[2]
+            ]
+        except Exception as e:
+            logger.warning(f"[dependencies/mssql] {e}")
+
+    # Cache en PostgreSQL
+    if deps:
+        try:
+            async with pool.acquire() as conn:
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS object_dependencies (
+                        id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        source_id       UUID NOT NULL,
+                        object_name     VARCHAR(255),
+                        object_type     VARCHAR(50),
+                        depends_on      VARCHAR(255),
+                        depends_on_type VARCHAR(50),
+                        dependency_type VARCHAR(50),
+                        computed_at     TIMESTAMP DEFAULT NOW(),
+                        UNIQUE(source_id, object_name, depends_on)
+                    )
+                """)
+                await conn.execute("DELETE FROM object_dependencies WHERE source_id=$1", source_id)
+                for dep in deps:
+                    await conn.execute("""
+                        INSERT INTO object_dependencies
+                            (source_id,object_name,object_type,depends_on,depends_on_type,dependency_type)
+                        VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING
+                    """, source_id, dep["object_name"], dep["object_type"],
+                        dep["depends_on"], dep["depends_on_type"], dep["dependency_type"])
+        except Exception as e:
+            logger.warning(f"[dependencies] cache: {e}")
+
+    logger.info(f"[dependencies] {len(deps)} dépendances pour {source_id}")
+    return {"source_id": str(source_id), "total": len(deps), "dependencies": deps}
+
+
+# ══════════════════════════════════════════════════════════════════════
+# PATCH P9 — Métadonnées Excel avancées (formules, auteur, headers/footers)
+# ══════════════════════════════════════════════════════════════════════
+
+def extract_excel_metadata(file_path: str) -> Dict:
+    """
+    Extrait les métadonnées avancées d'un fichier Excel via openpyxl :
+    - Formules (cellule + expression)
+    - Auteur, dernière modification, titre
+    - Headers et footers par feuille
+    - Plages nommées
+    """
+    result: Dict = {
+        "formulas":        {},
+        "named_ranges":    [],
+        "headers_footers": {},
+        "merged_cells":    {},
+        "metadata":        {},
+    }
+    try:
+        import openpyxl  # type: ignore
+        wb    = openpyxl.load_workbook(file_path, data_only=False)
+        props = wb.properties
+        result["metadata"] = {
+            "creator":          getattr(props, "creator",         None),
+            "last_modified_by": getattr(props, "lastModifiedBy",  None),
+            "created":          str(props.created)  if props.created  else None,
+            "modified":         str(props.modified) if props.modified else None,
+            "title":            getattr(props, "title",           None),
+            "subject":          getattr(props, "subject",         None),
+            "description":      getattr(props, "description",     None),
+            "keywords":         getattr(props, "keywords",        None),
+            "category":         getattr(props, "category",        None),
+        }
+        # Plages nommées
+        try:
+            for dn in wb.defined_names.definedName:
+                result["named_ranges"].append({
+                    "name":      dn.name,
+                    "refers_to": str(dn.value),
+                    "scope":     dn.localSheetId,
+                })
+        except Exception:
+            pass
+        # Par feuille
+        for ws in wb.worksheets:
+            sname = ws.title
+            formulas = []
+            for row in ws.iter_rows():
+                for cell in row:
+                    if cell.data_type == "f" and cell.value:
+                        formulas.append({
+                            "cell":    cell.coordinate,
+                            "formula": str(cell.value),
+                            "row":     cell.row,
+                            "col":     cell.column,
+                        })
+            if formulas:
+                result["formulas"][sname] = formulas
+            hf: dict = {}
+            try:
+                def _hf_text(obj):
+                    return str(obj.text) if obj and obj.text else None
+                if ws.oddHeader:
+                    hf["odd_header"] = {
+                        "left":   _hf_text(ws.oddHeader.left),
+                        "center": _hf_text(ws.oddHeader.center),
+                        "right":  _hf_text(ws.oddHeader.right),
+                    }
+                if ws.oddFooter:
+                    hf["odd_footer"] = {
+                        "left":   _hf_text(ws.oddFooter.left),
+                        "center": _hf_text(ws.oddFooter.center),
+                        "right":  _hf_text(ws.oddFooter.right),
+                    }
+            except Exception:
+                pass
+            if hf:
+                result["headers_footers"][sname] = hf
+        # Cellules fusionnées par feuille
+        merged: dict = {}
+        for ws in wb.worksheets:
+            if ws.merged_cells.ranges:
+                merged[ws.title] = [
+                    str(r) for r in ws.merged_cells.ranges
+                ]
+        if merged:
+            result["merged_cells"] = merged
+
+        wb.close()
+    except ImportError:
+        result["error"] = "openpyxl non installé. pip install openpyxl"
+    except Exception as e:
+        result["error"] = str(e)
+        logger.warning(f"[excel_metadata] {file_path}: {e}")
+    return result

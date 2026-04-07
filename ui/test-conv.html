@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>OnePilot - Test Conversations</title>
+  <style>
+    body { font-family: monospace; background: #222; color: #ccc; padding: 20px; }
+    .container { max-width: 800px; margin: 0 auto; }
+    h1 { color: #00c8f5; }
+    .section { background: #1a1a1a; padding: 15px; margin: 10px 0; border-radius: 5px; border-left: 3px solid #00c8f5; }
+    textarea { width: 100%; height: 100px; background: #0a0a0a; color: #0f0; border: 1px solid #00c8f5; padding: 10px; font-family: monospace; }
+    button { background: #00c8f5; color: #000; padding: 8px 15px; border: none; border-radius: 3px; cursor: pointer; margin: 5px 0; }
+    button:hover { background: #00d9a0; }
+    .output { background: #0a0a0a; padding: 10px; margin: 5px 0; border-left: 2px solid #00d9a0; max-height: 300px; overflow-y: auto; }
+    .error { border-left-color: #ff3663; }
+    .success { border-left-color: #00d9a0; }
+    p { margin: 5px 0; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>🧪 Test Conversations OnePilot</h1>
+
+  <div class="section">
+    <h2>1️⃣ Charger toutes les conversations</h2>
+    <button onclick="testGetAll()">GET /api/conversations</button>
+    <div class="output" id="out1"></div>
+  </div>
+
+  <div class="section">
+    <h2>2️⃣ Charger une conversation spécifique</h2>
+    <p>Conv ID: <input type="text" id="convId" style="width: 400px; padding: 5px;" placeholder="Ex: conv-1712345678901"></p>
+    <button onclick="testGetOne()">GET /api/conversations/{id}</button>
+    <div class="output" id="out2"></div>
+  </div>
+
+  <div class="section">
+    <h2>3️⃣ Debug - Lister toutes les conversations en DB</h2>
+    <button onclick="testDebug()">GET /api/debug/conversations</button>
+    <div class="output" id="out3"></div>
+  </div>
+
+  <div class="section">
+    <h2>4️⃣ Lister les sources disponibles</h2>
+    <button onclick="testSources()">GET /sources</button>
+    <div class="output" id="out4"></div>
+  </div>
+
+</div>
+
+<script>
+const BASE = 'http://localhost:8000';
+
+async function log(id, msg, isError = false) {
+  const el = document.getElementById(id);
+  const time = new Date().toLocaleTimeString();
+  const line = `[${time}] ${msg}`;
+  el.innerHTML += (el.innerHTML ? '\n' : '') + line;
+  el.parentElement.classList.toggle('error', isError);
+  el.parentElement.classList.toggle('success', !isError);
+  el.scrollTop = el.scrollHeight;
+  console.log(line);
+}
+
+async function testGetAll() {
+  log('out1', '⏳ Chargement...', false);
+  try {
+    const res = await fetch(`${BASE}/api/conversations`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const convs = data.conversations || [];
+    log('out1', `✅ ${convs.length} conversations trouvées`, false);
+    convs.forEach((c, i) => {
+      log('out1', `  ${i+1}. ${c.id} - "${c.title}" (${c.source_id})`, false);
+    });
+  } catch(e) {
+    log('out1', `❌ Erreur: ${e.message}`, true);
+  }
+}
+
+async function testGetOne() {
+  const id = document.getElementById('convId').value.trim();
+  if (!id) { log('out2', '❌ Veuillez entrer un ID de conversation', true); return; }
+  
+  log('out2', `⏳ Chargement ${id}...`, false);
+  try {
+    const res = await fetch(`${BASE}/api/conversations/${id}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    const data = await res.json();
+    log('out2', `✅ Conversation chargée: ${data.id}`, false);
+    log('out2', `   Source: ${data.source_id}`, false);
+    log('out2', `   Titre: ${data.title}`, false);
+    log('out2', `   Messages: ${data.messages.length}`, false);
+    data.messages.slice(0, 3).forEach((m, i) => {
+      const text = m.content || m.text || '(vide)';
+      const preview = text.substring(0, 50).replace(/\n/g, ' ');
+      log('out2', `     ${i+1}. [${m.role}] ${preview}...`, false);
+    });
+  } catch(e) {
+    log('out2', `❌ Erreur: ${e.message}`, true);
+  }
+}
+
+async function testDebug() {
+  log('out3', '⏳ Debug DB...', false);
+  try {
+    const res = await fetch(`${BASE}/api/debug/conversations`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const convs = await res.json();
+    log('out3', `✅ ${convs.length} conversations en DB:`, false);
+    convs.forEach((c, i) => {
+      log('out3', `  ${i+1}. ${c.id}`, false);
+      log('out3', `     → source: ${c.source_id}`, false);
+      log('out3', `     → Messages: ${c.message_count}`, false);
+      log('out3', `     → Créée: ${c.created_at}`, false);
+    });
+  } catch(e) {
+    log('out3', `❌ Erreur: ${e.message}`, true);
+  }
+}
+
+async function testSources() {
+  log('out4', '⏳ Chargement sources...', false);
+  try {
+    const res = await fetch(`${BASE}/sources`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const sources = data.sources || [];
+    log('out4', `✅ ${sources.length} sources trouvées:`, false);
+    sources.forEach((s, i) => {
+      log('out4', `  ${i+1}. ${s.id} - "${s.name}"`, false);
+    });
+  } catch(e) {
+    log('out4', `❌ Erreur: ${e.message}`, true);
+  }
+}
+
+// Au chargement
+testGetAll();
+testDebug();
+testSources();
+</script>
+
+</body>
+</html>

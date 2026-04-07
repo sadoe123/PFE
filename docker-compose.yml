@@ -20,8 +20,8 @@ services:
       - ./connectors:/app/connectors
       - ./api:/app/api
       - ./db:/app/db
+      - ./ui:/app/ui
       - uploads_data:/app/uploads
-      - C:/Users:/mnt/host/Users
     # FIX 1: --reload supprimé — WatchFiles tuait le sync en plein milieu
     # FIX 2: --timeout-keep-alive 300 pour les syncs longs (1264 entités ~60-120s)
     command: >
