@@ -206,11 +206,20 @@ async def detect_cross_source_mappings(
 
     for col_a in profiles_a:
         for col_b in profiles_b:
-            # Vérification rapide de compatibilité de type avant overlap coûteux
+            # ── Filtre 1 : compatibilité de type ─────────────────────────
             if not _types_compatible(col_a["data_type"], col_b["data_type"]):
                 continue
-            # Skip les colonnes avec trop de nulls
+
+            # ── Filtre 2 : skip colonnes trop nulles ──────────────────────
             if col_a["null_rate"] > 0.9 or col_b["null_rate"] > 0.9:
+                continue
+
+            # ── Filtre 3 : skip booléens (unique_count <= 2) ─────────────
+            if col_a["unique_count"] <= 2 or col_b["unique_count"] <= 2:
+                continue
+
+            # ── Filtre 4 : skip colonnes peu discriminantes ───────────────
+            if col_a["unique_count"] < 3 or col_b["unique_count"] < 3:
                 continue
 
             overlap = compute_cross_source_overlap(
@@ -219,15 +228,52 @@ async def detect_cross_source_mappings(
                 sample_size,
             )
 
+            # ── Filtre 5 : minimum de valeurs communes ────────────────────
+            if overlap["common_count"] < 3:
+                continue
+
+            # ── Filtre 6 : rejeter les IDs séquentiels [1,2,3,4,5...] ────
+            # Ces petits entiers consécutifs se retrouvent dans toutes les
+            # tables de référence → faux positifs systématiques
+            def _is_sequential_ints(values) -> bool:
+                try:
+                    nums = sorted([int(float(v)) for v in values if str(v).strip()])
+                    if len(nums) < 3:
+                        return False
+                    # Séquentiels si max-min == len-1 et tous consécutifs
+                    return (nums[-1] - nums[0] == len(nums) - 1
+                            and nums[-1] <= 50)  # petits entiers consécutifs
+                except (ValueError, TypeError):
+                    return False
+
+            common_vals = set(normalize_values(col_a["top_values"])) & \
+                          set(normalize_values(col_b["top_values"]))
+            if _is_sequential_ints(list(common_vals)):
+                continue
+
             if overlap["coverage_a"] < min_overlap:
                 continue
+
+            # ── Filtre 6 : pénaliser les noms de colonnes trop génériques ─
+            # Ex: ID, CODE, NUM seuls sont trop ambigus
+            generic_names = {"id", "code", "num", "number", "value",
+                             "flag", "type", "status", "active", "enabled"}
+            col_a_lower = col_a["column"].lower().strip("_")
+            col_b_lower = col_b["column"].lower().strip("_")
+            name_penalty = 0.3 if (col_a_lower in generic_names or
+                                    col_b_lower in generic_names) else 0.0
 
             # Score de confiance composite
             score = (
                 0.5 * overlap["coverage_a"] +
                 0.3 * overlap["overlap_ratio"] +
                 0.2 * (1.0 if overlap["pattern_match"] else 0.0)
+                - name_penalty
             )
+
+            # ── Filtre 7 : score minimum après pénalité ───────────────────
+            if score < 0.40:
+                continue
 
             candidates.append({
                 "source_id_a":    str(source_id_a),

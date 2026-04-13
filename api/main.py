@@ -42,6 +42,9 @@ from .repository import (
     list_sources,
     update_source,
 )
+from .cdc_engine       import CDCEngine
+from .schema_versioner import SchemaVersioner
+
 from .schemas import (
     ConnectorType,
     ConnectionTestResult,
@@ -89,6 +92,18 @@ async def lifespan(app: FastAPI):
         await get_pg_pool()
         await init_schema()
         logger.info("✅ PostgreSQL connecté et schema initialisé")
+
+        # ── Migration : ajout colonne dimension_hierarchy si absente ─────────
+        try:
+            pool = await get_pg_pool()
+            async with pool.acquire() as conn:
+                await conn.execute("""
+                    ALTER TABLE entity_fields
+                    ADD COLUMN IF NOT EXISTS dimension_hierarchy JSONB DEFAULT NULL
+                """)
+            logger.info("✅ Migration dimension_hierarchy OK")
+        except Exception as e:
+            logger.warning(f"Migration dimension_hierarchy (non-bloquant): {e}")
     except Exception as e:
         logger.error(f"❌ PostgreSQL erreur: {e}")
     try:
@@ -324,12 +339,33 @@ async def _run_sync_background(source_id: UUID):
         entity_count = result.get("entity_count", 0)
         logger.info(f"[Sync BG] sync_metadata terminé — {entity_count} entités, success={result.get('success')}")
         if result.get("success") and entity_count > 0:
+            # ── Étape 2 : Découverte des relations ───────────────────────────
             try:
                 discovery = await discover_relationships(source_id)
                 logger.info(f"[Sync BG] Relations découvertes: {discovery.get('relations_found', 0)}")
             except Exception as e:
                 logger.warning(f"[Sync BG] Relationship discovery failed (non-bloquant): {e}")
-        logger.info(f"[Sync BG] ✅ Terminé — source {source_id}: {entity_count} entités")
+
+            # ── Étape 3 : Enrichissement sémantique BERT ─────────────────────
+            try:
+                from .semantic_enricher import enrich_source as _enrich_source
+                source = await get_source(source_id)
+                if source:
+                    enrich_result = await _enrich_source(
+                        source_id,
+                        source.name,
+                        source.connector_type.value,
+                    )
+                    logger.info(
+                        f"[Sync BG] Enrichissement sémantique: "
+                        f"{enrich_result.get('enriched', 0)} entités | "
+                        f"MeiliSearch: {enrich_result.get('meili_indexed', 0)} | "
+                        f"Domaines: {enrich_result.get('domain_stats', {})}"
+                    )
+            except Exception as e:
+                logger.warning(f"[Sync BG] Enrichissement sémantique failed (non-bloquant): {e}")
+
+        logger.info(f"[Sync BG] ✅ Pipeline complet — source {source_id}: {entity_count} entités")
     except Exception as e:
         logger.error(f"[Sync BG] ❌ Erreur — source {source_id}: {e}", exc_info=True)
 
@@ -371,6 +407,93 @@ async def get_source_entities(
         "source_id":  source_id,
         "entities":   source.entities,
         "pagination": pagination,
+    }
+
+
+@app.get("/sources/{source_id}/db-objects", tags=["Metadata"])
+async def get_db_objects(
+    source_id: UUID,
+    object_type: Optional[str] = Query(None, description="filter: stored_procedure, function, trigger, sequence, index"),
+):
+    """
+    Retourne les objets DB avancés d'une source :
+    procédures stockées, fonctions, triggers, séquences, et index.
+    Disponible pour MSSQL et PostgreSQL après sync.
+    """
+    source = await get_source(source_id)
+    if not source:
+        raise HTTPException(404, f"Source {source_id} introuvable")
+
+    pool = await get_pg_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT id, name, entity_type, description, metadata
+            FROM source_entities
+            WHERE source_id = $1
+              AND entity_type IN (
+                  'stored_procedure','function','trigger','sequence',
+                  'aggregate','window'
+              )
+            ORDER BY entity_type, name
+        """, source_id)
+
+        # Index : stockés dans metadata de chaque table
+        idx_rows = await conn.fetch("""
+            SELECT name, indexes
+            FROM source_entities
+            WHERE source_id = $1
+              AND entity_type IN ('table','view','materialized_view')
+              AND indexes IS NOT NULL
+              AND indexes != '[]'
+        """, source_id)
+
+    objects = []
+    for r in rows:
+        etype = r["entity_type"]
+        if object_type and etype != object_type:
+            continue
+        meta = {}
+        try:
+            meta = json_module.loads(r["metadata"] or "{}")
+        except Exception:
+            pass
+        objects.append({
+            "id":          r["id"],
+            "name":        r["name"],
+            "type":        etype,
+            "description": r["description"],
+            "metadata":    meta,
+        })
+
+    indexes = []
+    if not object_type or object_type == "index":
+        for r in idx_rows:
+            try:
+                idx_list = json_module.loads(r["indexes"] or "[]")
+                for idx in idx_list:
+                    indexes.append({
+                        "table":   r["name"],
+                        "name":    idx.get("name"),
+                        "type":    idx.get("type"),
+                        "unique":  idx.get("unique", False),
+                        "pk":      idx.get("pk", False),
+                        "columns": idx.get("columns", ""),
+                    })
+            except Exception:
+                pass
+
+    counts = {}
+    for o in objects:
+        counts[o["type"]] = counts.get(o["type"], 0) + 1
+    if indexes:
+        counts["index"] = len(indexes)
+
+    return {
+        "source_id":  str(source_id),
+        "counts":     counts,
+        "objects":    objects,
+        "indexes":    indexes,
+        "total":      len(objects) + len(indexes),
     }
 
 
@@ -944,7 +1067,11 @@ async def get_source_profile(source_id: UUID):
 
 @app.get("/sources/{source_id}/profile/{table_name}", tags=["Profiling"])
 async def get_table_profile(source_id: UUID, table_name: str, refresh: bool = False):
-    """Profile une table spécifique (avec cache). Passe refresh=true pour forcer le recalcul."""
+    """
+    Profile une table spécifique (avec cache TTL intelligent).
+    TTL : référentiel=24h | transactionnel=1h | inconnu=6h
+    Passe refresh=true pour forcer le recalcul immédiat.
+    """
     try:
         from .data_profiler import get_cached_profile, profile_entity
         if not refresh:
@@ -955,6 +1082,50 @@ async def get_table_profile(source_id: UUID, table_name: str, refresh: bool = Fa
     except Exception as e:
         logger.error(f"[Profile] {source_id}/{table_name}: {e}", exc_info=True)
         raise HTTPException(500, str(e))
+
+
+@app.get("/sources/{source_id}/profile/cache/stats", tags=["Profiling"])
+async def get_profile_cache_stats(source_id: UUID):
+    """
+    Retourne les statistiques du cache de profiling pour une source.
+    Indique quelles tables sont fraîches, expirées ou jamais profilées.
+    """
+    from .database import get_pg_pool
+    pool = await get_pg_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT entity_name,
+                   profiled_at,
+                   profile_data->>'table_class' AS table_class,
+                   EXTRACT(EPOCH FROM (NOW() - profiled_at))/3600 AS age_hours
+            FROM entity_profiles
+            WHERE source_id = $1
+            ORDER BY profiled_at DESC
+        """, source_id)
+
+    TTL = {"reference": 24, "transactional": 1}
+    stats = {"fresh": 0, "stale": 0, "total": len(rows), "tables": []}
+
+    for row in rows:
+        tc      = row["table_class"] or "unknown"
+        ttl     = TTL.get(tc, 6)
+        age     = round(float(row["age_hours"]), 1)
+        is_fresh = age <= ttl
+        if is_fresh:
+            stats["fresh"] += 1
+        else:
+            stats["stale"] += 1
+        stats["tables"].append({
+            "entity":      row["entity_name"],
+            "table_class": tc,
+            "age_hours":   age,
+            "ttl_hours":   ttl,
+            "fresh":       is_fresh,
+            "profiled_at": row["profiled_at"].isoformat(),
+        })
+
+    stats["fresh_pct"] = round(stats["fresh"] / stats["total"] * 100, 1) if stats["total"] else 0
+    return stats
 
 
 @app.post("/sources/{source_id}/profile/batch", tags=["Profiling"])
@@ -1302,11 +1473,11 @@ async def detect_cross_source(body: dict):
     Body: { source_id_a: UUID, source_id_b: UUID, min_overlap: float = 0.30 }
     """
     try:
-        from .api.cross_source_mapper import (  # type: ignore
+        from .cross_source_mapper import (
             detect_cross_source_mappings, save_cross_source_mappings
         )
     except ImportError:
-        raise HTTPException(503, "cross_source_mapper.py non disponible dans /api/")
+        raise HTTPException(503, "cross_source_mapper.py non disponible")
 
     sid_a = UUID(body.get("source_id_a", ""))
     sid_b = UUID(body.get("source_id_b", ""))
@@ -1342,9 +1513,9 @@ async def find_cross_source_path(body: dict):
     }
     """
     try:
-        from .api.cross_source_mapper import build_multi_source_graph  # type: ignore
+        from .cross_source_mapper import build_multi_source_graph
     except ImportError:
-        raise HTTPException(503, "cross_source_mapper.py non disponible dans /api/")
+        raise HTTPException(503, "cross_source_mapper.py non disponible")
 
     source_ids = [UUID(s) for s in body.get("source_ids", [])]
     from_info  = body.get("from", {})
@@ -1377,10 +1548,40 @@ async def list_cross_source_mappings(
 ):
     """Phase 3 — Liste les mappings cross-sources existants."""
     try:
-        from .api.cross_source_mapper import get_cross_source_mappings  # type: ignore
+        from .cross_source_mapper import get_cross_source_mappings
     except ImportError:
-        raise HTTPException(503, "cross_source_mapper.py non disponible dans /api/")
+        raise HTTPException(503, "cross_source_mapper.py non disponible")
     return await get_cross_source_mappings(source_id_a, source_id_b, min_confidence)
+
+
+@app.put("/cross-source/mappings/{mapping_id}/validate", tags=["Cross-Source"])
+async def validate_cross_source_mapping(mapping_id: UUID, body: dict):
+    """
+    Valide ou rejette un mapping cross-source.
+    Body: { validated: bool, validated_by: str }
+    """
+    validated    = bool(body.get("validated", True))
+    validated_by = body.get("validated_by", "user")
+
+    pool = await get_pg_pool()
+    async with pool.acquire() as conn:
+        result = await conn.execute("""
+            UPDATE cross_source_mappings
+            SET is_validated = $1,
+                validated_by = $2
+            WHERE id = $3
+        """, validated, validated_by, mapping_id)
+
+    if result == "UPDATE 0":
+        raise HTTPException(404, f"Mapping {mapping_id} introuvable")
+
+    return {
+        "success":      True,
+        "mapping_id":   str(mapping_id),
+        "validated":    validated,
+        "validated_by": validated_by,
+        "message":      f"Mapping {'validé' if validated else 'rejeté'} par {validated_by}",
+    }
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1710,6 +1911,792 @@ async def speech_to_text(file: UploadFile = File(...)):
     except Exception as e:
         logger.error(f"STT error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ══════════════════════════════════════════════════════════════
+# SEMANTIC ENRICHMENT — §2.2.3
+# ══════════════════════════════════════════════════════════════
+
+try:
+    from .semantic_enricher import enrich_source, semantic_search as _semantic_search
+    _SEMANTIC_AVAILABLE = True
+except ImportError:
+    _SEMANTIC_AVAILABLE = False
+    logger.warning("semantic_enricher non disponible")
+
+
+@app.post("/sources/{source_id}/enrich", tags=["Semantic"])
+async def enrich_source_endpoint(
+    source_id: UUID,
+    background_tasks: BackgroundTasks,
+):
+    """
+    Lance l'enrichissement sémantique d'une source :
+    - Classification domaine métier (Finance, RH, Ventes...)
+    - Extraction concept métier (Customer, Order, Invoice...)
+    - Détection dimensions analytiques (temps, géo, produit)
+    - Indexation MeiliSearch (full-text search)
+    - Calcul embeddings TF-IDF + pgvector (recherche sémantique)
+    """
+    if not _SEMANTIC_AVAILABLE:
+        raise HTTPException(503, "Module semantic_enricher non disponible")
+
+    source = await get_source(source_id)
+    if not source:
+        raise HTTPException(404, f"Source {source_id} introuvable")
+
+    async def _run_enrich():
+        try:
+            result = await enrich_source(
+                source_id=source_id,
+                source_name=source.name,
+                source_type=source.connector_type.value,
+            )
+            logger.info(f"[Enrich] ✅ {source.name}: {result.get('enriched', 0)} entités enrichies")
+        except Exception as e:
+            logger.error(f"[Enrich] ❌ {source.name}: {e}", exc_info=True)
+
+    background_tasks.add_task(_run_enrich)
+    return {
+        "source_id": str(source_id),
+        "source_name": source.name,
+        "message": "Enrichissement sémantique lancé en arrière-plan",
+        "status": "running",
+    }
+
+
+@app.get("/sources/{source_id}/enrich/status", tags=["Semantic"])
+async def get_enrich_status(source_id: UUID):
+    """Retourne le statut de l'enrichissement sémantique d'une source."""
+    source = await get_source(source_id)
+    if not source:
+        raise HTTPException(404, f"Source {source_id} introuvable")
+
+    pool = await get_pg_pool()
+    async with pool.acquire() as conn:
+        stats = await conn.fetchrow("""
+            SELECT
+                COUNT(*)                                            AS total,
+                COUNT(*) FILTER (WHERE business_domain IS NOT NULL) AS enriched,
+                COUNT(DISTINCT business_domain)                     AS domains_count,
+                COUNT(DISTINCT business_concept)                    AS concepts_count,
+                COUNT(*) FILTER (WHERE embedding IS NOT NULL)       AS with_embedding
+            FROM source_entities
+            WHERE source_id = $1
+              AND entity_type IN ('table','view','materialized_view',
+                                  'odata_entity','rest_resource','excel_sheet')
+        """, source_id)
+
+        domain_stats = await conn.fetch("""
+            SELECT business_domain, COUNT(*) AS cnt
+            FROM source_entities
+            WHERE source_id = $1
+              AND business_domain IS NOT NULL
+            GROUP BY business_domain
+            ORDER BY cnt DESC
+        """, source_id)
+
+        concept_stats = await conn.fetch("""
+            SELECT business_concept, COUNT(*) AS cnt
+            FROM source_entities
+            WHERE source_id = $1
+              AND business_concept IS NOT NULL
+            GROUP BY business_concept
+            ORDER BY cnt DESC
+        """, source_id)
+
+    enriched = stats["enriched"] or 0
+    total    = stats["total"] or 1
+    return {
+        "source_id":       str(source_id),
+        "source_name":     source.name,
+        "total_entities":  stats["total"],
+        "enriched":        enriched,
+        "progress_pct":    round(enriched / total * 100, 1),
+        "with_embedding":  stats["with_embedding"],
+        "domains_count":   stats["domains_count"],
+        "concepts_count":  stats["concepts_count"],
+        "domain_stats":    {r["business_domain"]: r["cnt"] for r in domain_stats},
+        "concept_stats":   {r["business_concept"]: r["cnt"] for r in concept_stats},
+    }
+
+
+@app.get("/search", tags=["Semantic"])
+async def search_entities(
+    q:          str   = Query(..., description="Requête en langage naturel"),
+    source_ids: str   = Query(None, description="IDs sources séparés par virgule"),
+    limit:      int   = Query(10, ge=1, le=50),
+    use_vector: bool  = Query(True, description="Activer la recherche vectorielle"),
+):
+    """
+    Recherche sémantique hybride sur toutes les entités indexées.
+
+    Exemples :
+    - /search?q=chiffre affaires client
+    - /search?q=customer invoice total amount
+    - /search?q=commande fournisseur&source_ids=uuid1,uuid2
+    """
+    if not _SEMANTIC_AVAILABLE:
+        raise HTTPException(503, "Module semantic_enricher non disponible")
+
+    sids = [s.strip() for s in source_ids.split(",")] if source_ids else None
+
+    try:
+        results = await _semantic_search(
+            query=q,
+            source_ids=sids,
+            limit=limit,
+            use_vector=use_vector,
+        )
+        return {
+            "query":   q,
+            "total":   len(results),
+            "results": results,
+        }
+    except Exception as e:
+        logger.error(f"[Search] {q}: {e}", exc_info=True)
+        raise HTTPException(500, f"Erreur recherche: {str(e)}")
+
+
+@app.get("/sources/{source_id}/entities/by-domain/{domain}", tags=["Semantic"])
+async def get_entities_by_domain(source_id: UUID, domain: str):
+    """Retourne les entités d'un domaine métier spécifique."""
+    pool = await get_pg_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT name, entity_type, business_concept, entity_class,
+                   semantic_tags, row_count, description
+            FROM source_entities
+            WHERE source_id = $1
+              AND LOWER(business_domain) = LOWER($2)
+            ORDER BY entity_class, name
+        """, source_id, domain)
+
+    return {
+        "source_id": str(source_id),
+        "domain":    domain,
+        "total":     len(rows),
+        "entities":  [
+            {
+                "name":        r["name"],
+                "type":        r["entity_type"],
+                "concept":     r["business_concept"],
+                "class":       r["entity_class"],
+                "tags":        json_module.loads(r["semantic_tags"] or "[]"),
+                "row_count":   r["row_count"],
+                "description": r["description"],
+            }
+            for r in rows
+        ],
+    }
+
+
+@app.get("/sources/{source_id}/dimensions", tags=["Semantic"])
+async def get_source_dimensions(source_id: UUID):
+    """
+    Retourne toutes les dimensions analytiques détectées pour une source,
+    avec les hiérarchies SQL (Year→Quarter→Month→Week→Day, etc.)
+    Utile pour construire des dashboards et des analyses OLAP.
+    """
+    pool = await get_pg_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT se.name AS entity_name, ef.name AS field_name,
+                   ef.dimension_type, ef.data_type,
+                   ef.dimension_hierarchy
+            FROM entity_fields ef
+            JOIN source_entities se ON se.id = ef.entity_id
+            WHERE se.source_id = $1
+              AND ef.dimension_type IS NOT NULL
+            ORDER BY ef.dimension_type, se.name, ef.name
+        """, source_id)
+
+    # Grouper par type de dimension
+    dimensions: dict = {}
+    for r in rows:
+        dim = r["dimension_type"]
+        if dim not in dimensions:
+            dimensions[dim] = []
+
+        # Parser la hiérarchie JSON
+        hierarchy = None
+        if r["dimension_hierarchy"]:
+            try:
+                import json as json_module
+                raw = r["dimension_hierarchy"]
+                hierarchy = json_module.loads(raw) if isinstance(raw, str) else dict(raw)
+            except Exception:
+                hierarchy = None
+
+        dimensions[dim].append({
+            "entity":    r["entity_name"],
+            "field":     r["field_name"],
+            "type":      r["data_type"],
+            "hierarchy": hierarchy,
+        })
+
+    return {
+        "source_id":  str(source_id),
+        "dimensions": dimensions,
+        "summary":    {dim: len(cols) for dim, cols in dimensions.items()},
+    }
+
+
+# ══════════════════════════════════════════════════════════════
+# SYNONYMES CLIENT — §2.2.3.A
+# ══════════════════════════════════════════════════════════════
+
+@app.post("/sources/{source_id}/synonyms", tags=["Semantic"])
+async def add_source_synonym(source_id: UUID, body: dict):
+    """
+    Ajoute ou met à jour un synonyme métier spécifique à une source.
+    Ex: {"term": "BALI", "synonyms": ["balance", "solde"], "description": "Balance SXA"}
+    """
+    term        = body.get("term", "").strip().upper()
+    synonyms    = body.get("synonyms", [])
+    description = body.get("description", "")
+    created_by  = body.get("created_by", "user")
+
+    if not term or not synonyms:
+        raise HTTPException(400, "term et synonyms sont requis")
+
+    pool = await get_pg_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("""
+            INSERT INTO source_synonyms (source_id, term, synonyms, description, created_by)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (source_id, term)
+            DO UPDATE SET synonyms=$3, description=$4, updated_at=NOW()
+            RETURNING *
+        """, source_id, term, synonyms, description, created_by)
+
+    # Synchroniser dans MeiliSearch
+    try:
+        from .semantic_enricher import _get_meili_client, MEILI_INDEX
+        meili = _get_meili_client()
+        if meili:
+            # Charger tous les synonymes de la source pour MeiliSearch
+            async with pool.acquire() as conn:
+                all_rows = await conn.fetch(
+                    "SELECT term, synonyms FROM source_synonyms WHERE source_id=$1",
+                    source_id
+                )
+            meili_synonyms = {}
+            for r in all_rows:
+                t = r["term"].lower()
+                syns = [s.lower() for s in r["synonyms"]]
+                meili_synonyms[t] = syns
+                for s in syns:
+                    meili_synonyms[s] = meili_synonyms.get(s, []) + [t]
+
+            meili.index(MEILI_INDEX).update_synonyms(meili_synonyms)
+            logger.info(f"[Synonyms] MeiliSearch mis à jour: {len(meili_synonyms)} synonymes")
+    except Exception as e:
+        logger.warning(f"[Synonyms] MeiliSearch sync failed: {e}")
+
+    return {
+        "success":     True,
+        "term":        term,
+        "synonyms":    synonyms,
+        "description": description,
+        "message":     f"Synonyme '{term}' ajouté et synchronisé dans MeiliSearch",
+    }
+
+
+@app.get("/sources/{source_id}/synonyms", tags=["Semantic"])
+async def list_source_synonyms(source_id: UUID):
+    """Liste tous les synonymes métier d'une source."""
+    pool = await get_pg_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT term, synonyms, description, created_by, created_at, updated_at
+            FROM source_synonyms
+            WHERE source_id = $1
+            ORDER BY term
+        """, source_id)
+
+    return {
+        "source_id": str(source_id),
+        "count":     len(rows),
+        "synonyms":  [
+            {
+                "term":        r["term"],
+                "synonyms":    list(r["synonyms"]),
+                "description": r["description"],
+                "created_by":  r["created_by"],
+                "updated_at":  r["updated_at"].isoformat() if r["updated_at"] else None,
+            }
+            for r in rows
+        ],
+    }
+
+
+@app.delete("/sources/{source_id}/synonyms/{term}", tags=["Semantic"])
+async def delete_source_synonym(source_id: UUID, term: str):
+    """Supprime un synonyme métier et met à jour MeiliSearch."""
+    pool = await get_pg_pool()
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            "DELETE FROM source_synonyms WHERE source_id=$1 AND term=$2",
+            source_id, term.upper()
+        )
+
+    if result == "DELETE 0":
+        raise HTTPException(404, f"Synonyme '{term}' introuvable")
+
+    # Re-synchroniser MeiliSearch sans ce synonyme
+    try:
+        from .semantic_enricher import _get_meili_client, MEILI_INDEX
+        meili = _get_meili_client()
+        if meili:
+            async with pool.acquire() as conn:
+                all_rows = await conn.fetch(
+                    "SELECT term, synonyms FROM source_synonyms WHERE source_id=$1",
+                    source_id
+                )
+            meili_synonyms = {}
+            for r in all_rows:
+                t = r["term"].lower()
+                syns = [s.lower() for s in r["synonyms"]]
+                meili_synonyms[t] = syns
+            meili.index(MEILI_INDEX).update_synonyms(meili_synonyms)
+    except Exception as e:
+        logger.warning(f"[Synonyms] MeiliSearch sync failed: {e}")
+
+    return {"success": True, "message": f"Synonyme '{term}' supprimé"}
+
+
+# ══════════════════════════════════════════════════════════════
+# CALENDRIERS FISCAUX — §2.2.3.B
+# ══════════════════════════════════════════════════════════════
+
+@app.post("/sources/{source_id}/fiscal-calendar", tags=["Semantic"])
+async def set_fiscal_calendar(source_id: UUID, body: dict):
+    """
+    Configure l'année fiscale d'une source.
+    Ex: {"fiscal_year_start": 7, "description": "Exercice juillet-juin"}
+    fiscal_year_start : 1=Janvier (défaut), 4=Avril, 7=Juillet, 10=Octobre
+    """
+    fiscal_year_start = int(body.get("fiscal_year_start", 1))
+    description       = body.get("description", "")
+    fiscal_year_label = body.get("fiscal_year_label", "FY")
+
+    if not 1 <= fiscal_year_start <= 12:
+        raise HTTPException(400, "fiscal_year_start doit être entre 1 et 12")
+
+    pool = await get_pg_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            INSERT INTO source_fiscal_calendars
+                (source_id, fiscal_year_start, fiscal_year_label, description)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (source_id)
+            DO UPDATE SET fiscal_year_start=$2, fiscal_year_label=$3,
+                          description=$4, updated_at=NOW()
+        """, source_id, fiscal_year_start, fiscal_year_label, description)
+
+    month_names = {1:"Janvier",2:"Février",3:"Mars",4:"Avril",5:"Mai",6:"Juin",
+                   7:"Juillet",8:"Août",9:"Septembre",10:"Octobre",11:"Novembre",12:"Décembre"}
+
+    return {
+        "success":           True,
+        "fiscal_year_start": fiscal_year_start,
+        "fiscal_year_label": fiscal_year_label,
+        "description":       description,
+        "message":           f"Année fiscale configurée: début en {month_names.get(fiscal_year_start, str(fiscal_year_start))}. Lancez un sync pour recalculer les hiérarchies.",
+    }
+
+
+@app.get("/sources/{source_id}/fiscal-calendar", tags=["Semantic"])
+async def get_fiscal_calendar(source_id: UUID):
+    """Retourne la configuration du calendrier fiscal d'une source."""
+    pool = await get_pg_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT * FROM source_fiscal_calendars WHERE source_id=$1",
+            source_id
+        )
+
+    if not row:
+        return {
+            "source_id":         str(source_id),
+            "fiscal_year_start": 1,
+            "fiscal_year_label": "FY",
+            "description":       "Calendrier standard (janvier)",
+            "configured":        False,
+        }
+
+    return {
+        "source_id":         str(source_id),
+        "fiscal_year_start": row["fiscal_year_start"],
+        "fiscal_year_label": row["fiscal_year_label"],
+        "description":       row["description"],
+        "configured":        True,
+        "updated_at":        row["updated_at"].isoformat() if row["updated_at"] else None,
+    }
+
+
+# ══════════════════════════════════════════════════════════════
+# TAXONOMIE PERSONNALISABLE — §2.2.3.A
+# ══════════════════════════════════════════════════════════════
+
+@app.post("/sources/{source_id}/domains", tags=["Semantic"])
+async def add_custom_domain(source_id: UUID, body: dict):
+    """
+    Ajoute un domaine métier personnalisé pour une source.
+    Ex: {"domain_name": "Trésorerie", "patterns": ["tresor","cash","bnk"], "color": "#f59e0b"}
+    """
+    domain_name = body.get("domain_name", "").strip()
+    patterns    = body.get("patterns", [])
+    color       = body.get("color", "#6366f1")
+    icon        = body.get("icon", "database")
+    description = body.get("description", "")
+    priority    = int(body.get("priority", 10))
+
+    if not domain_name or not patterns:
+        raise HTTPException(400, "domain_name et patterns sont requis")
+
+    pool = await get_pg_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            INSERT INTO source_domains
+                (source_id, domain_name, patterns, color, icon, description, priority)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (source_id, domain_name)
+            DO UPDATE SET patterns=$3, color=$4, icon=$5,
+                          description=$6, priority=$7, updated_at=NOW()
+        """, source_id, domain_name, patterns, color, icon, description, priority)
+
+    return {
+        "success":     True,
+        "domain_name": domain_name,
+        "patterns":    patterns,
+        "message":     f"Domaine '{domain_name}' ajouté. Lancez un sync pour reclassifier les entités.",
+    }
+
+
+@app.get("/sources/{source_id}/domains", tags=["Semantic"])
+async def list_custom_domains(source_id: UUID):
+    """Liste tous les domaines personnalisés d'une source."""
+    pool = await get_pg_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT domain_name, patterns, color, icon, description, priority, updated_at
+            FROM source_domains
+            WHERE source_id = $1
+            ORDER BY priority DESC, domain_name
+        """, source_id)
+
+    return {
+        "source_id": str(source_id),
+        "count":     len(rows),
+        "domains":   [
+            {
+                "domain_name": r["domain_name"],
+                "patterns":    list(r["patterns"]),
+                "color":       r["color"],
+                "icon":        r["icon"],
+                "description": r["description"],
+                "priority":    r["priority"],
+                "updated_at":  r["updated_at"].isoformat() if r["updated_at"] else None,
+            }
+            for r in rows
+        ],
+    }
+
+
+@app.delete("/sources/{source_id}/domains/{domain_name}", tags=["Semantic"])
+async def delete_custom_domain(source_id: UUID, domain_name: str):
+    """Supprime un domaine personnalisé."""
+    pool = await get_pg_pool()
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            "DELETE FROM source_domains WHERE source_id=$1 AND domain_name=$2",
+            source_id, domain_name
+        )
+    if result == "DELETE 0":
+        raise HTTPException(404, f"Domaine '{domain_name}' introuvable")
+    return {"success": True, "message": f"Domaine '{domain_name}' supprimé. Relancez un sync."}
+
+
+# ══════════════════════════════════════════════════════════════
+# HISTORIQUE RECHERCHES — §2.2.3.C
+# ══════════════════════════════════════════════════════════════
+
+@app.post("/sources/{source_id}/search/click", tags=["Semantic"])
+async def record_search_click(source_id: UUID, body: dict):
+    """
+    Enregistre le clic d'un utilisateur sur un résultat de recherche.
+    Ex: {"query": "facture client", "entity_id": "uuid", "entity_name": "GS_GLACC"}
+    Utilisé pour boosting des résultats futurs.
+    """
+    query       = body.get("query", "").strip()
+    entity_id   = body.get("entity_id")
+    entity_name = body.get("entity_name", "")
+    user_id     = body.get("user_id")
+
+    if not query or not entity_id:
+        raise HTTPException(400, "query et entity_id sont requis")
+
+    pool = await get_pg_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            UPDATE search_history
+            SET clicked_id=$1, clicked_name=$2
+            WHERE source_id=$3
+              AND query_norm=$4
+              AND clicked_id IS NULL
+              AND search_at = (
+                SELECT MAX(search_at) FROM search_history
+                WHERE source_id=$3 AND query_norm=$4
+              )
+        """, UUID(entity_id), entity_name, source_id, query.lower().strip())
+
+    return {"success": True, "message": f"Clic enregistré pour '{entity_name}'"}
+
+
+@app.get("/sources/{source_id}/search/history", tags=["Semantic"])
+async def get_search_history(source_id: UUID, limit: int = 20):
+    """Retourne les statistiques des recherches passées pour une source."""
+    pool = await get_pg_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT query_norm, search_count, click_count,
+                   click_rate_pct, last_searched_at, most_clicked
+            FROM search_history_stats
+            WHERE source_id = $1
+            LIMIT $2
+        """, source_id, limit)
+
+    return {
+        "source_id": str(source_id),
+        "count":     len(rows),
+        "history":   [
+            {
+                "query":           r["query_norm"],
+                "search_count":    r["search_count"],
+                "click_count":     r["click_count"],
+                "click_rate_pct":  float(r["click_rate_pct"] or 0),
+                "last_searched":   r["last_searched_at"].isoformat() if r["last_searched_at"] else None,
+                "most_clicked":    r["most_clicked"],
+            }
+            for r in rows
+        ],
+    }
+
+
+# ══════════════════════════════════════════════════════════════
+# CDC / VERSIONING — §2.2.5
+# ══════════════════════════════════════════════════════════════
+
+def _get_cdc() -> CDCEngine:
+    """Fabrique un CDCEngine (pool + redis déjà initialisés au lifespan)."""
+    from .database import _pg_pool, _redis  # singletons module-level
+    return CDCEngine(_pg_pool, _redis)
+
+
+def _get_versioner() -> SchemaVersioner:
+    from .database import _pg_pool, _redis
+    return SchemaVersioner(_pg_pool, _redis)
+
+
+# ── 1. Détecter les changements (CDC) ────────────────────────
+
+@app.post("/sources/{source_id}/cdc/detect", tags=["CDC"])
+async def cdc_detect(source_id: UUID):
+    """
+    Compare le schéma courant avec la dernière version enregistrée.
+    - Crée une nouvelle version si des changements sont détectés.
+    - Publie les breaking changes dans Redis.
+    - Invalide le cache de la source.
+    """
+    cdc = _get_cdc()
+    try:
+        result = await cdc.detect_and_record(source_id)
+        return result
+    except Exception as e:
+        logger.error(f"[CDC] detect error source {source_id}: {e}", exc_info=True)
+        raise HTTPException(500, str(e))
+
+
+# ── 2. Historique des versions (git log) ─────────────────────
+
+@app.get("/sources/{source_id}/versions", tags=["CDC"])
+async def schema_log(
+    source_id: UUID,
+    limit: int = Query(50, ge=1, le=200),
+):
+    """
+    Retourne l'historique des versions de schéma pour une source.
+    Enrichi avec les tags et le résumé des changements.
+    """
+    versioner = _get_versioner()
+    return {
+        "source_id": str(source_id),
+        "versions":  await versioner.get_log(source_id, limit),
+    }
+
+
+# ── 3. Détail d'une version (git show) ───────────────────────
+
+@app.get("/sources/{source_id}/versions/{version}", tags=["CDC"])
+async def schema_version_detail(source_id: UUID, version: int):
+    """
+    Retourne le détail complet d'une version :
+    snapshot complet du schéma + liste des deltas + tags.
+    """
+    versioner = _get_versioner()
+    v = await versioner.get_version(source_id, version)
+    if not v:
+        raise HTTPException(404, f"Version {version} introuvable pour source {source_id}")
+    return v
+
+
+# ── 4. Diff entre deux versions (git diff) ───────────────────
+
+@app.get("/sources/{source_id}/versions/diff", tags=["CDC"])
+async def schema_diff(
+    source_id: UUID,
+    v1: int = Query(..., description="Version de base"),
+    v2: int = Query(..., description="Version cible"),
+):
+    """
+    Diff entre deux versions arbitraires.
+    Retourne la liste complète des changements avec flag breaking.
+    """
+    versioner = _get_versioner()
+    try:
+        return await versioner.diff_versions(source_id, v1, v2)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+# ── 5. Rollback vers une version passée ──────────────────────
+
+@app.post("/sources/{source_id}/versions/{version}/rollback", tags=["CDC"])
+async def schema_rollback(source_id: UUID, version: int):
+    """
+    Rollback logique : crée une nouvelle version HEAD
+    qui restaure le snapshot d'une version passée.
+    Ne modifie PAS la source de données réelle —
+    sert à tracer le retour arrière dans l'historique OnePilot.
+    """
+    cdc = _get_cdc()
+    try:
+        return await cdc.rollback_to_version(source_id, version)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    except Exception as e:
+        logger.error(f"[CDC] rollback error: {e}", exc_info=True)
+        raise HTTPException(500, str(e))
+
+
+# ── 6. Tagger une version (git tag) ──────────────────────────
+
+@app.post("/sources/{source_id}/versions/{version}/tag", tags=["CDC"])
+async def schema_tag(source_id: UUID, version: int, body: dict):
+    """
+    Pose un tag nommé sur une version.
+    Body: { "tag": "v1.2-stable", "note": "Avant migration SAGE" }
+    """
+    tag  = body.get("tag", "").strip()
+    note = body.get("note", "")
+    if not tag:
+        raise HTTPException(400, "Le champ 'tag' est requis")
+
+    versioner = _get_versioner()
+    try:
+        return await versioner.tag_version(source_id, version, tag, note)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+@app.delete("/sources/{source_id}/tags/{tag}", tags=["CDC"])
+async def schema_delete_tag(source_id: UUID, tag: str):
+    """Supprime un tag."""
+    versioner = _get_versioner()
+    try:
+        return await versioner.delete_tag(source_id, tag)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+@app.get("/sources/{source_id}/tags", tags=["CDC"])
+async def schema_list_tags(source_id: UUID):
+    """Liste tous les tags d'une source."""
+    versioner = _get_versioner()
+    tags = await versioner.list_tags(source_id)
+    return {"source_id": str(source_id), "tags": tags}
+
+
+# ── 7. Notifications breaking changes ────────────────────────
+
+@app.get("/sources/{source_id}/cdc/notifications", tags=["CDC"])
+async def cdc_notifications(
+    source_id: UUID,
+    limit: int = Query(50, ge=1, le=100),
+):
+    """
+    Retourne les dernières notifications de breaking changes.
+    Lecture depuis Redis (TTL 7j), fallback PostgreSQL.
+    """
+    versioner = _get_versioner()
+    notifs = await versioner.get_notifications(source_id, limit)
+    return {
+        "source_id": str(source_id),
+        "count":     len(notifs),
+        "notifications": notifs,
+    }
+
+
+# ── 8. Impact analysis ────────────────────────────────────────
+
+@app.get("/sources/{source_id}/versions/{version}/impact", tags=["CDC"])
+async def schema_impact(source_id: UUID, version: int):
+    """
+    Analyse l'impact des breaking changes d'une version :
+    - Tables et colonnes affectées
+    - Jointures / relations potentiellement cassées
+    """
+    versioner = _get_versioner()
+    try:
+        return await versioner.impact_analysis(source_id, version)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+# ── 9. CDC intégré au pipeline de sync ───────────────────────
+# Le sync background (_run_sync_background) appelle detect_and_record
+# automatiquement après chaque sync complet.
+# Ce endpoint permet un CDC on-demand sans sync complet.
+
+@app.post("/sources/{source_id}/cdc/watch", tags=["CDC"])
+async def cdc_watch(
+    source_id: UUID,
+    background_tasks: BackgroundTasks,
+    interval_seconds: int = Query(300, ge=30, le=3600),
+):
+    """
+    Lance une détection CDC différée (une seule fois, non-récurrente).
+    Pour un polling continu, utilise un cron externe ou Celery Beat.
+    """
+    async def _delayed_detect():
+        import asyncio
+        await asyncio.sleep(interval_seconds)
+        cdc = _get_cdc()
+        try:
+            result = await cdc.detect_and_record(source_id)
+            logger.info(f"[CDC Watch] source {source_id}: {result.get('status')}")
+        except Exception as e:
+            logger.error(f"[CDC Watch] error: {e}")
+
+    background_tasks.add_task(_delayed_detect)
+    return {
+        "status":           "scheduled",
+        "source_id":        str(source_id),
+        "detect_in_seconds": interval_seconds,
+        "message":          f"Détection CDC programmée dans {interval_seconds}s",
+    }
+
 
 # ══════════════════════════════════════════════════════════════
 # SERVEUR FICHIERS STATIQUES UI

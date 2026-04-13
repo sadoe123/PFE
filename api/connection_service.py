@@ -601,6 +601,45 @@ async def sync_metadata(source_id: UUID) -> Dict[str, Any]:
         }
 
 
+def _parse_proc_params(definition: str) -> List[Dict]:
+    """
+    Extrait les paramètres d'une procédure/fonction depuis sa définition SQL.
+    Heuristique simple — couvre MSSQL (@param TYPE) et PostgreSQL (param TYPE).
+    """
+    import re
+    params = []
+    # MSSQL style : @ParamName DataType
+    for m in re.finditer(r'@(\w+)\s+([\w]+(?:\(\d+(?:,\d+)?\))?)', definition):
+        pname, ptype = m.group(1), m.group(2).upper().split("(")[0]
+        params.append({
+            "name":        pname,
+            "type":        TYPE_MAP_SQL.get(ptype, "string"),
+            "native_type": m.group(2),
+            "nullable":    True,
+            "primary_key": False,
+            "foreign_key": False,
+            "description": "paramètre",
+        })
+    # PostgreSQL style dans FUNCTION header : param_name type
+    if not params:
+        header_match = re.search(r'\(([^)]{0,500})\)', definition)
+        if header_match:
+            for m in re.finditer(r'\b(\w+)\s+([\w]+(?:\(\d+\))?)\b', header_match.group(1)):
+                pname, ptype = m.group(1), m.group(2).upper().split("(")[0]
+                if ptype in TYPE_MAP_SQL or ptype in ("IN", "OUT", "INOUT"):
+                    continue
+                params.append({
+                    "name":        pname,
+                    "type":        TYPE_MAP_SQL.get(ptype, "string"),
+                    "native_type": m.group(2),
+                    "nullable":    True,
+                    "primary_key": False,
+                    "foreign_key": False,
+                    "description": "paramètre",
+                })
+    return params[:50]  # cap sécurité
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # FETCH DB METADATA
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -646,7 +685,8 @@ async def _fetch_db_metadata(source, secrets: Dict) -> List[Dict]:
                     col_rows = conn.execute(text("""
                         SELECT t.TABLE_NAME, t.TABLE_TYPE,
                                c.COLUMN_NAME, c.DATA_TYPE,
-                               c.IS_NULLABLE, c.ORDINAL_POSITION
+                               c.IS_NULLABLE, c.ORDINAL_POSITION,
+                               c.COLUMN_DEFAULT
                         FROM INFORMATION_SCHEMA.TABLES  t
                         JOIN INFORMATION_SCHEMA.COLUMNS c
                           ON c.TABLE_SCHEMA = t.TABLE_SCHEMA
@@ -716,6 +756,112 @@ async def _fetch_db_metadata(source, secrets: Dict) -> List[Dict]:
                           AND tc.TABLE_SCHEMA    = :s
                     """), {"s": schema_filter}).fetchall()
 
+                    # ── Index DB (MSSQL) ──────────────────────────────────────
+                    try:
+                        idx_rows = conn.execute(text("""
+                            SELECT
+                                t.name                         AS table_name,
+                                i.name                         AS index_name,
+                                i.type_desc                    AS index_type,
+                                i.is_unique                    AS is_unique,
+                                i.is_primary_key               AS is_pk,
+                                STRING_AGG(c.name, ', ')
+                                    WITHIN GROUP (ORDER BY ic.key_ordinal) AS columns
+                            FROM sys.indexes i
+                            JOIN sys.tables  t  ON t.object_id  = i.object_id
+                            JOIN sys.index_columns ic ON ic.object_id = i.object_id
+                                                     AND ic.index_id  = i.index_id
+                            JOIN sys.columns c  ON c.object_id  = i.object_id
+                                               AND c.column_id  = ic.column_id
+                            WHERE SCHEMA_NAME(t.schema_id) = :s
+                              AND i.type > 0
+                              AND ic.is_included_column = 0
+                            GROUP BY t.name, i.name, i.type_desc, i.is_unique, i.is_primary_key
+                            ORDER BY t.name, i.name
+                        """), {"s": schema_filter}).fetchall()
+                    except Exception:
+                        idx_rows = []
+
+                    # ── Procédures stockées (MSSQL) ───────────────────────────
+                    try:
+                        proc_rows = conn.execute(text("""
+                            SELECT
+                                o.name          AS obj_name,
+                                o.type_desc     AS obj_type,
+                                m.definition    AS obj_definition,
+                                o.create_date,
+                                o.modify_date
+                            FROM sys.objects o
+                            JOIN sys.sql_modules m ON m.object_id = o.object_id
+                            WHERE SCHEMA_NAME(o.schema_id) = :s
+                              AND o.type IN ('P', 'FN', 'IF', 'TF', 'TR')
+                            ORDER BY o.type, o.name
+                        """), {"s": schema_filter}).fetchall()
+                    except Exception:
+                        proc_rows = []
+
+                    # ── Statistiques cardinalité (MSSQL) ──────────────────────
+                    try:
+                        stats_rows = conn.execute(text("""
+                            SELECT
+                                t.name                          AS table_name,
+                                SUM(p.rows)                     AS row_count,
+                                SUM(a.total_pages) * 8          AS size_kb
+                            FROM sys.tables t
+                            JOIN sys.indexes i
+                              ON i.object_id = t.object_id AND i.index_id IN (0,1)
+                            JOIN sys.partitions p
+                              ON p.object_id = t.object_id AND p.index_id = i.index_id
+                            JOIN sys.allocation_units a
+                              ON a.container_id = p.partition_id
+                            WHERE SCHEMA_NAME(t.schema_id) = :s
+                            GROUP BY t.name
+                        """), {"s": schema_filter}).fetchall()
+                    except Exception:
+                        stats_rows = []
+
+                    # ── Dépendances entre objets (MSSQL) ─────────────────────
+                    try:
+                        dep_rows = conn.execute(text("""
+                            SELECT DISTINCT
+                                OBJECT_NAME(d.referencing_id)   AS src_obj,
+                                d.referenced_entity_name        AS ref_obj,
+                                o.type_desc                     AS src_type
+                            FROM sys.sql_expression_dependencies d
+                            JOIN sys.objects o
+                              ON o.object_id = d.referencing_id
+                            WHERE OBJECT_SCHEMA_NAME(d.referencing_id) = :s
+                              AND d.referenced_schema_name = :s
+                              AND d.referenced_entity_name IS NOT NULL
+                            ORDER BY src_obj
+                        """), {"s": schema_filter}).fetchall()
+                    except Exception:
+                        dep_rows = []
+
+                    # ── Partitions (MSSQL) ────────────────────────────────────
+                    try:
+                        part_rows = conn.execute(text("""
+                            SELECT
+                                t.name              AS table_name,
+                                COUNT(p.partition_number) AS partition_count,
+                                ps.name             AS partition_scheme,
+                                pf.name             AS partition_function
+                            FROM sys.tables t
+                            JOIN sys.indexes i
+                              ON i.object_id = t.object_id AND i.index_id IN (0,1)
+                            JOIN sys.partitions p
+                              ON p.object_id = t.object_id AND p.index_id = i.index_id
+                            LEFT JOIN sys.partition_schemes ps
+                              ON ps.data_space_id = i.data_space_id
+                            LEFT JOIN sys.partition_functions pf
+                              ON pf.function_id = ps.function_id
+                            WHERE SCHEMA_NAME(t.schema_id) = :s
+                            GROUP BY t.name, ps.name, pf.name
+                            HAVING COUNT(p.partition_number) > 1
+                        """), {"s": schema_filter}).fetchall()
+                    except Exception:
+                        part_rows = []
+
                 pk_map: Dict[str, set] = {}
                 for r in pk_rows:
                     pk_map.setdefault(r[0], set()).add(r[1])
@@ -744,10 +890,68 @@ async def _fetch_db_metadata(source, secrets: Dict) -> List[Dict]:
                         "fields": []
                     })
 
+                # Index par table (stockés dans metadata de l'entité)
+                index_map: Dict[str, List[Dict]] = {}
+                for r in idx_rows:
+                    tbl, iname, itype, is_uniq, is_pk, cols = r
+                    index_map.setdefault(tbl, []).append({
+                        "name":      iname,
+                        "type":      itype,
+                        "unique":    bool(is_uniq),
+                        "pk":        bool(is_pk),
+                        "columns":   cols or "",
+                    })
+
+                # Statistiques cardinalité par table
+                stats_map: Dict[str, Dict] = {}
+                for r in stats_rows:
+                    stats_map[r[0]] = {"row_count": int(r[1] or 0), "size_kb": int(r[2] or 0)}
+
+                # Dépendances : obj → liste des objets référencés
+                dep_map: Dict[str, List[str]] = {}
+                for r in dep_rows:
+                    dep_map.setdefault(r[0], []).append(r[1])
+
+                # Partitions par table
+                part_map: Dict[str, Dict] = {}
+                for r in part_rows:
+                    part_map[r[0]] = {
+                        "partition_count":    int(r[1]),
+                        "partition_scheme":   r[2],
+                        "partition_function": r[3],
+                    }
+
+                # Procédures / fonctions / triggers comme entités spéciales
+                _PROC_TYPE_MAP = {
+                    "SQL_STORED_PROCEDURE":    "stored_procedure",
+                    "SQL_SCALAR_FUNCTION":     "function",
+                    "SQL_INLINE_TABLE_VALUED_FUNCTION": "function",
+                    "SQL_TABLE_VALUED_FUNCTION": "function",
+                    "SQL_TRIGGER":             "trigger",
+                }
+                proc_entities = []
+                for r in proc_rows:
+                    obj_name, obj_type, definition, created, modified = r
+                    etype = _PROC_TYPE_MAP.get(obj_type, "stored_procedure")
+                    # Extraire les paramètres depuis la définition (heuristique simple)
+                    param_fields = _parse_proc_params(definition or "")
+                    proc_entities.append({
+                        "name":        f"{etype.upper()}_{obj_name}",
+                        "entity_type": etype,
+                        "description": (
+                            f"{obj_type} — créé {str(created)[:10]} · "
+                            f"modifié {str(modified)[:10]}"
+                        ),
+                        "fields": param_fields,
+                        "metadata": {
+                            "definition_preview": (definition or "")[:500],
+                        },
+                    })
+
                 entities_dict: Dict[str, List[Dict]] = {}
                 table_type_map: Dict[str, str] = {}
 
-                for tname, ttype, cname, dtype, nullable, _ in col_rows:
+                for tname, ttype, cname, dtype, nullable, _, col_default in col_rows:
                     if tname not in entities_dict:
                         # Vues matérialisées (indexed views)
                         if ttype == "VIEW" and tname in matview_set:
@@ -759,13 +963,14 @@ async def _fetch_db_metadata(source, secrets: Dict) -> List[Dict]:
                         table_type_map[tname] = etype
                         entities_dict[tname] = []
                     entities_dict[tname].append({
-                        "name":        cname,
-                        "type":        TYPE_MAP_SQL.get(dtype.upper(), "string"),
-                        "native_type": dtype,
-                        "nullable":    nullable == "YES",
-                        "primary_key": cname in pk_map.get(tname, set()),
-                        "foreign_key": cname in fk_map.get(tname, set()),
-                        "description": comment_map_col.get(tname, {}).get(cname),
+                        "name":          cname,
+                        "type":          TYPE_MAP_SQL.get(dtype.upper(), "string"),
+                        "native_type":   dtype,
+                        "nullable":      nullable == "YES",
+                        "primary_key":   cname in pk_map.get(tname, set()),
+                        "foreign_key":   cname in fk_map.get(tname, set()),
+                        "description":   comment_map_col.get(tname, {}).get(cname),
+                        "default_value": col_default,
                     })
 
                 entities = [
@@ -774,9 +979,16 @@ async def _fetch_db_metadata(source, secrets: Dict) -> List[Dict]:
                         "entity_type": table_type_map[tname],
                         "description": comment_map_tbl.get(tname),
                         "fields":      fields,
+                        "indexes":     index_map.get(tname, []),
+                        "row_count":   stats_map.get(tname, {}).get("row_count"),
+                        "metadata": {
+                            **({"size_kb": stats_map[tname]["size_kb"]} if tname in stats_map else {}),
+                            **({"dependencies": dep_map[tname]} if tname in dep_map else {}),
+                            **({"partitions": part_map[tname]} if tname in part_map else {}),
+                        },
                     }
                     for tname, fields in entities_dict.items()
-                ] + seq_entities
+                ] + seq_entities + proc_entities
                 n_t = sum(1 for v in table_type_map.values() if v == "table")
                 n_v = sum(1 for v in table_type_map.values() if v == "view")
                 logger.info(f"[Sync MSSQL bulk] {n_t} tables + {n_v} vues = {len(entities)} entités")
@@ -805,6 +1017,12 @@ async def _fetch_db_metadata(source, secrets: Dict) -> List[Dict]:
             pg_comment_map: Dict[str, str] = {}
             pg_col_comment_map: Dict[str, Dict[str, str]] = {}
             pg_sequences = []
+            pg_idx_rows: list = []
+            pg_proc_rows: list = []
+            pg_trig_rows: list = []
+            pg_stats_rows: list = []
+            pg_dep_rows: list = []
+            pg_part_rows: list = []
             if "postgres" in dialect or dialect in ("pg", "postgresql"):
                 try:
                     with engine.connect() as conn2:
@@ -854,8 +1072,163 @@ async def _fetch_db_metadata(source, secrets: Dict) -> List[Dict]:
                             }
                             for r in seq_rows_pg
                         ]
+
+                        # ── Index DB (PostgreSQL) ─────────────────────────────
+                        try:
+                            pg_idx_rows = conn2.execute(text("""
+                                SELECT
+                                    t.relname                          AS table_name,
+                                    i.relname                          AS index_name,
+                                    am.amname                          AS index_type,
+                                    ix.indisunique                     AS is_unique,
+                                    ix.indisprimary                    AS is_pk,
+                                    array_to_string(
+                                        ARRAY(
+                                            SELECT a.attname
+                                            FROM unnest(ix.indkey) WITH ORDINALITY AS u(attnum, ord)
+                                            JOIN pg_attribute a
+                                              ON a.attrelid = t.oid AND a.attnum = u.attnum
+                                            ORDER BY u.ord
+                                        ), ', '
+                                    )                                   AS columns
+                                FROM pg_index ix
+                                JOIN pg_class t  ON t.oid = ix.indrelid
+                                JOIN pg_class i  ON i.oid = ix.indexrelid
+                                JOIN pg_am    am ON am.oid = i.relam
+                                JOIN pg_namespace n ON n.oid = t.relnamespace
+                                WHERE n.nspname = :s
+                                  AND t.relkind = 'r'
+                                ORDER BY t.relname, i.relname
+                            """), {"s": sch}).fetchall()
+                        except Exception:
+                            pg_idx_rows = []
+
+                        # ── Procédures / Fonctions PostgreSQL ─────────────────
+                        try:
+                            pg_proc_rows = conn2.execute(text("""
+                                SELECT
+                                    p.proname                    AS obj_name,
+                                    CASE p.prokind
+                                        WHEN 'f' THEN 'function'
+                                        WHEN 'p' THEN 'stored_procedure'
+                                        WHEN 'a' THEN 'aggregate'
+                                        WHEN 'w' THEN 'window'
+                                        ELSE 'function'
+                                    END                          AS obj_type,
+                                    pg_get_functiondef(p.oid)    AS definition,
+                                    t.typname                    AS return_type,
+                                    obj_description(p.oid, 'pg_proc') AS description
+                                FROM pg_proc p
+                                JOIN pg_namespace n ON n.oid = p.pronamespace
+                                JOIN pg_type t      ON t.oid = p.prorettype
+                                WHERE n.nspname = :s
+                                  AND p.prokind IN ('f', 'p')
+                                  AND NOT EXISTS (
+                                      SELECT 1 FROM pg_depend d
+                                      JOIN pg_extension e ON e.oid = d.refobjid
+                                      WHERE d.objid = p.oid AND d.deptype = 'e'
+                                  )
+                                ORDER BY p.proname
+                            """), {"s": sch}).fetchall()
+                        except Exception:
+                            pg_proc_rows = []
+
+                        # ── Triggers PostgreSQL ───────────────────────────────
+                        try:
+                            pg_trig_rows = conn2.execute(text("""
+                                SELECT
+                                    trigger_name,
+                                    event_object_table  AS table_name,
+                                    event_manipulation  AS event,
+                                    action_timing       AS timing,
+                                    action_statement    AS definition
+                                FROM information_schema.triggers
+                                WHERE trigger_schema = :s
+                                ORDER BY trigger_name
+                            """), {"s": sch}).fetchall()
+                        except Exception:
+                            pg_trig_rows = []
+
+                        # ── Statistiques cardinalité (PostgreSQL) ─────────────
+                        try:
+                            pg_stats_rows = conn2.execute(text("""
+                                SELECT
+                                    c.relname               AS table_name,
+                                    c.reltuples::BIGINT     AS row_count,
+                                    pg_total_relation_size(c.oid) / 1024 AS size_kb
+                                FROM pg_class c
+                                JOIN pg_namespace n ON n.oid = c.relnamespace
+                                WHERE n.nspname = :s
+                                  AND c.relkind = 'r'
+                                ORDER BY c.relname
+                            """), {"s": sch}).fetchall()
+                        except Exception:
+                            pg_stats_rows = []
+
+                        # ── Dépendances vues → tables (PostgreSQL) ────────────
+                        try:
+                            pg_dep_rows = conn2.execute(text("""
+                                SELECT DISTINCT
+                                    v.table_name    AS view_name,
+                                    v.view_definition,
+                                    t.table_name    AS depends_on
+                                FROM information_schema.views v
+                                JOIN information_schema.view_table_usage t
+                                  ON t.view_name   = v.table_name
+                                 AND t.view_schema = v.table_schema
+                                WHERE v.table_schema = :s
+                                ORDER BY v.table_name
+                            """), {"s": sch}).fetchall()
+                        except Exception:
+                            pg_dep_rows = []
+
+                        # ── Partitions (PostgreSQL) ───────────────────────────
+                        try:
+                            pg_part_rows = conn2.execute(text("""
+                                SELECT
+                                    parent.relname          AS parent_table,
+                                    COUNT(child.relname)    AS partition_count,
+                                    pt.partstrat            AS strategy
+                                FROM pg_inherits i
+                                JOIN pg_class parent ON parent.oid = i.inhparent
+                                JOIN pg_class child  ON child.oid  = i.inhrelid
+                                JOIN pg_namespace n  ON n.oid = parent.relnamespace
+                                LEFT JOIN pg_partitioned_table pt
+                                  ON pt.partrelid = parent.oid
+                                WHERE n.nspname = :s
+                                GROUP BY parent.relname, pt.partstrat
+                                HAVING COUNT(child.relname) > 0
+                            """), {"s": sch}).fetchall()
+                        except Exception:
+                            pg_part_rows = []
+
                 except Exception as e:
                     logger.warning(f"[Sync PG comments/matviews/sequences] {e}")
+                    pg_idx_rows   = []
+                    pg_proc_rows  = []
+                    pg_trig_rows  = []
+                    pg_stats_rows = []
+                    pg_dep_rows   = []
+                    pg_part_rows  = []
+
+            # Statistiques cardinalité PG
+            pg_stats_map: Dict[str, Dict] = {}
+            for r in pg_stats_rows:
+                pg_stats_map[r[0]] = {"row_count": int(r[1] or 0), "size_kb": int(r[2] or 0)}
+
+            # Dépendances vues → tables PG
+            pg_dep_map: Dict[str, List[str]] = {}
+            for r in pg_dep_rows:
+                pg_dep_map.setdefault(r[0], []).append(r[2])
+
+            # Partitions PG
+            _PG_PART_STRATEGY = {"r": "RANGE", "l": "LIST", "h": "HASH"}
+            pg_part_map: Dict[str, Dict] = {}
+            for r in pg_part_rows:
+                pg_part_map[r[0]] = {
+                    "partition_count": int(r[1]),
+                    "strategy": _PG_PART_STRATEGY.get(r[2], r[2] or "unknown"),
+                }
 
             for table_name, entity_type in all_names:
                 try:
@@ -879,26 +1252,73 @@ async def _fetch_db_metadata(source, secrets: Dict) -> List[Dict]:
                 for col in columns:
                     native = str(col["type"]).upper().split("(")[0].strip()
                     fields.append({
-                        "name": col["name"],
-                        "type": TYPE_MAP_SQL.get(native, "string"),
-                        "native_type": str(col["type"]),
-                        "nullable": col.get("nullable", True),
-                        "primary_key": col["name"] in pk_cols,
-                        "foreign_key": col["name"] in fk_cols,
+                        "name":          col["name"],
+                        "type":          TYPE_MAP_SQL.get(native, "string"),
+                        "native_type":   str(col["type"]),
+                        "nullable":      col.get("nullable", True),
+                        "primary_key":   col["name"] in pk_cols,
+                        "foreign_key":   col["name"] in fk_cols,
+                        "default_value": col.get("default"),
                     })
                 
                 entities.append({
                     "name":        table_name,
                     "entity_type": entity_type,
                     "description": pg_comment_map.get(table_name),
+                    "row_count":   pg_stats_map.get(table_name, {}).get("row_count"),
                     "fields":      [
                         {**f, "description": pg_col_comment_map.get(table_name, {}).get(f["name"])}
                         for f in fields
                     ],
+                    "metadata": {
+                        **({"size_kb": pg_stats_map[table_name]["size_kb"]} if table_name in pg_stats_map else {}),
+                        **({"dependencies": pg_dep_map[table_name]} if table_name in pg_dep_map else {}),
+                        **({"partitions": pg_part_map[table_name]} if table_name in pg_part_map else {}),
+                    },
                 })
 
             # Ajouter les séquences PG
             entities += pg_sequences
+
+            # Index PG par table
+            pg_index_map: Dict[str, List[Dict]] = {}
+            for r in pg_idx_rows:
+                tbl, iname, itype, is_uniq, is_pk, cols = r
+                pg_index_map.setdefault(tbl, []).append({
+                    "name":    iname,
+                    "type":    itype.upper(),
+                    "unique":  bool(is_uniq),
+                    "pk":      bool(is_pk),
+                    "columns": cols or "",
+                })
+            # Injecter les indexes dans les entités existantes
+            for ent in entities:
+                if ent["entity_type"] in ("table", "view", "materialized_view"):
+                    ent.setdefault("indexes", pg_index_map.get(ent["name"], []))
+
+            # Procédures et fonctions PG
+            for r in pg_proc_rows:
+                obj_name, obj_type, definition, return_type, desc = r
+                param_fields = _parse_proc_params(definition or "")
+                entities.append({
+                    "name":        f"{obj_type.upper()}_{obj_name}",
+                    "entity_type": obj_type,
+                    "description": desc or f"Retourne {return_type}",
+                    "fields":      param_fields,
+                    "metadata":    {"definition_preview": (definition or "")[:500]},
+                })
+
+            # Triggers PG
+            for r in pg_trig_rows:
+                trig_name, tbl_name, event, timing, definition = r
+                entities.append({
+                    "name":        f"TRIGGER_{trig_name}",
+                    "entity_type": "trigger",
+                    "description": f"{timing} {event} ON {tbl_name}",
+                    "fields":      [],
+                    "metadata":    {"table": tbl_name, "event": event, "timing": timing},
+                })
+
             return entities
         
         finally:

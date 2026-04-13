@@ -15,6 +15,8 @@ services:
       - METADATA_DB_HOST=onepilot_postgres
       - METADATA_DB_PORT=5432
       - REDIS_HOST=onepilot_redis
+      - MEILI_HOST=http://onepilot_meilisearch:7700
+      - MEILI_MASTER_KEY=${MEILI_MASTER_KEY:-onepilot_meili_key}
     volumes:
       - ./core:/app/core
       - ./connectors:/app/connectors
@@ -35,6 +37,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      meilisearch:
         condition: service_healthy
     networks:
       - onepilot_net
@@ -65,7 +69,7 @@ services:
 
   # ── PostgreSQL (metadata store) ───────────────────────────
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: onepilot_postgres
     environment:
       POSTGRES_USER:     ${POSTGRES_USER:-onepilot}
@@ -137,10 +141,31 @@ services:
       - onepilot_net
     restart: unless-stopped
 
+  # ── MeiliSearch (moteur recherche sémantique) ────────────────
+  meilisearch:
+    image: getmeili/meilisearch:v1.6
+    container_name: onepilot_meilisearch
+    ports:
+      - "7700:7700"
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-onepilot_meili_key}
+      MEILI_ENV: development
+    volumes:
+      - meilisearch_data:/meili_data
+    networks:
+      - onepilot_net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7700/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgres_data:
   redis_data:
   uploads_data:
+  meilisearch_data:
 
 networks:
   onepilot_net:

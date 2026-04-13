@@ -331,15 +331,21 @@ async def save_metadata(source_id: UUID, entities_data: list) -> int:
         await conn.execute("DELETE FROM source_entities WHERE source_id=$1", source_id)
 
         for entity in entities_data:
+            indexes_json  = json.dumps(entity.get("indexes", []))
+            metadata_json = json.dumps(entity.get("metadata", {}))
             row = await conn.fetchrow(
                 """INSERT INTO source_entities
-                   (source_id, name, display_name, entity_type, description)
-                   VALUES ($1,$2,$3,$4,$5) RETURNING id""",
+                   (source_id, name, display_name, entity_type, description,
+                    indexes, metadata, row_count)
+                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id""",
                 source_id,
                 entity.get("name", ""),
                 entity.get("name", "").replace("_", " ").title(),
                 entity.get("entity_type", "table"),
                 entity.get("description"),
+                indexes_json,
+                metadata_json,
+                entity.get("row_count"),
             )
             entity_id = row["id"]
             entity_count += 1
@@ -348,11 +354,14 @@ async def save_metadata(source_id: UUID, entities_data: list) -> int:
                 await conn.execute(
                     """INSERT INTO entity_fields
                        (entity_id, name, display_name, data_type, native_type,
-                        is_nullable, is_primary_key, is_foreign_key, position)
-                       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+                        is_nullable, is_primary_key, is_foreign_key, position,
+                        description, default_value)
+                       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
                        ON CONFLICT (entity_id, name) DO UPDATE
                        SET data_type=$4, native_type=$5, is_nullable=$6,
-                           is_primary_key=$7, is_foreign_key=$8""",
+                           is_primary_key=$7, is_foreign_key=$8,
+                           description=COALESCE($10, entity_fields.description),
+                           default_value=COALESCE($11, entity_fields.default_value)""",
                     entity_id, field.get("name", ""),
                     field.get("name", "").replace("_", " ").title(),
                     field.get("type", "string"),
@@ -360,7 +369,9 @@ async def save_metadata(source_id: UUID, entities_data: list) -> int:
                     field.get("nullable", True),
                     field.get("primary_key", False),
                     field.get("foreign_key", False),
-                    pos
+                    pos,
+                    field.get("description"),
+                    field.get("default_value"),
                 )
 
         await conn.execute(

@@ -38,6 +38,11 @@ PATTERNS = {
     "json_str":    re.compile(r"^\s*[\{\[]"),
     "boolean_str": re.compile(r"^(true|false|yes|no|oui|non|1|0)$", re.I),
     "alpha_code":  re.compile(r"^[A-Z0-9\-_]{2,20}$"),
+    "ean13":       re.compile(r"^\d{13}$"),
+    "ean8":        re.compile(r"^\d{8}$"),
+    "iso_country": re.compile(r"^[A-Z]{2,3}$"),       # ISO-3166 alpha-2/3
+    "swift":       re.compile(r"^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$"),
+    "postal_code": re.compile(r"^\d{5}(-\d{4})?$|^[A-Z]\d[A-Z]\s?\d[A-Z]\d$"),
 }
 
 SEMANTIC_LABELS = {
@@ -62,7 +67,12 @@ SEMANTIC_LABELS = {
     "date_col":    {"icon": "\U0001f4c5",    "label": "Date",          "color": "#22d3ee"},
     "amount_col":  {"icon": "\U0001f4b0",    "label": "Montant",       "color": "#84cc16"},
     "flag_col":    {"icon": "\U0001f6a9",    "label": "Flag/Statut",   "color": "#fb923c"},
-    "unknown":     {"icon": "\u2753",        "label": "Inconnu",       "color": "#6b7280"},
+    "ean13":       {"icon": "▦",             "label": "EAN-13",        "color": "#0ea5e9"},
+    "ean8":        {"icon": "▦",             "label": "EAN-8",         "color": "#0ea5e9"},
+    "iso_country": {"icon": "◎",             "label": "Code pays ISO", "color": "#14b8a6"},
+    "swift":       {"icon": "◈",             "label": "SWIFT/BIC",     "color": "#6366f1"},
+    "postal_code": {"icon": "◉",             "label": "Code postal",   "color": "#ec4899"},
+    "unknown":     {"icon": "?",             "label": "Inconnu",       "color": "#6b7280"},
 }
 
 # ══════════════════════════════════════════════════════════════════════
@@ -205,8 +215,19 @@ def _sync_profile_sql(source_dict: Dict, table_name: str,
                        fields: List[Dict], sample_size: int) -> Dict:
     from sqlalchemy import create_engine, text
 
-    ct  = (source_dict.get("connector_type") or "").lower()
-    url = _build_url(source_dict)
+    ct     = (source_dict.get("connector_type") or "").lower()
+    url    = _build_url(source_dict)
+    schema = (source_dict.get("schema_name") or "").strip()
+
+    # Table qualifiée avec schéma
+    if any(x in ct for x in ["mssql", "sql_server", "sqlserver"]):
+        sc = schema or "dbo"
+        qtable = f"[{sc}].[{table_name}]"
+    elif "mysql" in ct:
+        qtable = f"`{table_name}`"
+    else:
+        sc = schema or "public"
+        qtable = f'"{sc}"."{table_name}"'
 
     try:
         engine = create_engine(url, pool_pre_ping=True,
@@ -219,22 +240,22 @@ def _sync_profile_sql(source_dict: Dict, table_name: str,
         with engine.connect() as conn:
             try:
                 if any(x in ct for x in ["mssql", "sql_server", "sqlserver"]):
-                    cnt = conn.execute(text(f"SELECT COUNT_BIG(*) FROM [{table_name}]")).scalar()
+                    cnt = conn.execute(text(f"SELECT COUNT_BIG(*) FROM {qtable}")).scalar()
                 elif "mysql" in ct:
-                    cnt = conn.execute(text(f"SELECT COUNT(*) FROM `{table_name}`")).scalar()
+                    cnt = conn.execute(text(f"SELECT COUNT(*) FROM {qtable}")).scalar()
                 else:
-                    cnt = conn.execute(text(f'SELECT COUNT(*) FROM "{table_name}"')).scalar()
+                    cnt = conn.execute(text(f"SELECT COUNT(*) FROM {qtable}")).scalar()
                 total_rows = int(cnt or 0)
             except Exception:
                 total_rows = 0
 
             try:
                 if any(x in ct for x in ["mssql", "sql_server", "sqlserver"]):
-                    sql = f"SELECT TOP {sample_size} * FROM [{table_name}]"
+                    sql = f"SELECT TOP {sample_size} * FROM {qtable}"
                 elif "mysql" in ct:
-                    sql = f"SELECT * FROM `{table_name}` LIMIT {sample_size}"
+                    sql = f"SELECT * FROM {qtable} LIMIT {sample_size}"
                 else:
-                    sql = f'SELECT * FROM "{table_name}" LIMIT {sample_size}'
+                    sql = f"SELECT * FROM {qtable} LIMIT {sample_size}"
 
                 result    = conn.execute(text(sql))
                 col_names = list(result.keys())
@@ -254,10 +275,21 @@ def _sync_profile_sql(source_dict: Dict, table_name: str,
             values = [r[idx] for r in rows]
             columns_profile.append(_compute_single_column(col, field, values, total_rows))
 
+        # Classification référentiel vs transactionnel au niveau table
+        if total_rows < 500:
+            table_class = "reference"
+        elif total_rows > 10000:
+            table_class = "transactional"
+        else:
+            date_cols = sum(1 for c in columns_profile
+                           if c.get("semantic") in ("date_col", "iso_date", "date_fr"))
+            table_class = "transactional" if date_cols >= 2 else "reference"
+
         return {
             "table":        table_name,
             "total_rows":   total_rows,
             "sampled_rows": len(rows),
+            "table_class":  table_class,
             "columns":      columns_profile,
             "profiled_at":  datetime.utcnow().isoformat(),
             "error":        None,
@@ -342,6 +374,41 @@ def _compute_single_column(col_name: str, field: Dict,
         hi  = num_stats["p75"] + 1.5 * iqr
         outliers_count = sum(1 for v in numeric_vals if v < lo or v > hi)
 
+    # ── Détection d'inconsistencies (normalisations différentes) ────────
+    inconsistencies = 0
+    if str_vals and col_type in ("string", "text", "varchar", "nvarchar"):
+        normalized = [v.strip().lower() for v in str_vals]
+        norm_counts = Counter(normalized)
+        for norm, norm_c in norm_counts.items():
+            # Cherche des variantes (casse/espaces différents) de la même valeur
+            raw_variants = set(v.strip() for v in str_vals if v.strip().lower() == norm)
+            if len(raw_variants) > 1:
+                inconsistencies += norm_c
+
+    # ── Détection de missing patterns (nulls groupés) ───────────────────
+    missing_pattern = "random"
+    if nulls > 0 and n > 10:
+        null_positions = [i for i, v in enumerate(values) if v is None]
+        if len(null_positions) > 1:
+            gaps = [null_positions[i+1] - null_positions[i] for i in range(len(null_positions)-1)]
+            avg_gap = sum(gaps) / len(gaps) if gaps else 0
+            if avg_gap < 3:
+                missing_pattern = "clustered"   # nulls groupés → import partiel
+            elif max(gaps) < 5 if gaps else False:
+                missing_pattern = "systematic"  # nulls réguliers → champ non rempli
+
+    # ── Classification référentiel vs transactionnel ─────────────────────
+    table_class = "unknown"
+    if n > 0:
+        if unique_rate > 0.95 and null_rate < 0.05:
+            table_class = "reference"       # peu de doublons, pas de nulls → référentiel
+        elif unique_rate < 0.3 and n > 1000:
+            table_class = "transactional"   # beaucoup de doublons, gros volume → transactionnel
+        elif n < 200 and unique_rate > 0.8:
+            table_class = "reference"
+        else:
+            table_class = "transactional"
+
     semantic = classify_column(col_name, col_type, is_pk, is_fk, pattern_name)
     sem_meta = SEMANTIC_LABELS.get(semantic, SEMANTIC_LABELS["unknown"])
 
@@ -362,30 +429,45 @@ def _compute_single_column(col_name: str, field: Dict,
     if is_pk and unique_rate < 1.0:
         issues.append({"type": "pk_not_unique",
                        "msg": "Cle primaire non unique !", "severity": "error"})
+    if inconsistencies > 0:
+        issues.append({"type": "inconsistencies",
+                       "msg": f"{inconsistencies} inconsistances (casse/espaces)",
+                       "severity": "warning"})
+    if missing_pattern == "clustered":
+        issues.append({"type": "missing_clustered",
+                       "msg": "Nulls groupes — possible import partiel",
+                       "severity": "warning"})
+    elif missing_pattern == "systematic":
+        issues.append({"type": "missing_systematic",
+                       "msg": "Nulls systematiques — champ non rempli",
+                       "severity": "info"})
 
     return {
-        "name":          col_name,
-        "type":          col_type,
-        "is_pk":         is_pk,
-        "is_fk":         is_fk,
-        "semantic":      semantic,
-        "sem_icon":      sem_meta["icon"],
-        "sem_label":     sem_meta["label"],
-        "sem_color":     sem_meta["color"],
-        "total":         n,
-        "null_count":    nulls,
-        "null_rate":     null_rate,
-        "unique_count":  unique_count,
-        "unique_rate":   unique_rate,
-        "dup_rate":      dup_rate,
-        "top_values":    top_values,
-        "numeric_stats": num_stats,
-        "text_stats":    text_stats,
-        "outliers":      outliers_count,
-        "quality_score": quality_score,
-        "issues":        issues,
-        "pattern":       text_stats.get("pattern", pattern_name),
-        "pattern_conf":  text_stats.get("pattern_conf", pattern_conf),
+        "name":             col_name,
+        "type":             col_type,
+        "is_pk":            is_pk,
+        "is_fk":            is_fk,
+        "semantic":         semantic,
+        "sem_icon":         sem_meta["icon"],
+        "sem_label":        sem_meta["label"],
+        "sem_color":        sem_meta["color"],
+        "total":            n,
+        "null_count":       nulls,
+        "null_rate":        null_rate,
+        "unique_count":     unique_count,
+        "unique_rate":      unique_rate,
+        "dup_rate":         dup_rate,
+        "top_values":       top_values,
+        "numeric_stats":    num_stats,
+        "text_stats":       text_stats,
+        "outliers":         outliers_count,
+        "inconsistencies":  inconsistencies,
+        "missing_pattern":  missing_pattern,
+        "column_class":     table_class,
+        "quality_score":    quality_score,
+        "issues":           issues,
+        "pattern":          text_stats.get("pattern", pattern_name),
+        "pattern_conf":     text_stats.get("pattern_conf", pattern_conf),
     }
 
 
@@ -397,7 +479,10 @@ def _sync_profile_odata(source_dict: Dict, entity_name: str,
                          fields: List[Dict], sample_size: int) -> Dict:
     import requests
     opts     = _parse_opts(source_dict)
-    base_url = opts.get("base_url") or source_dict.get("host") or ""
+    # base_url est un champ direct de data_sources, pas dans options
+    base_url = (source_dict.get("base_url") or
+                opts.get("base_url") or
+                source_dict.get("host") or "")
     if not base_url:
         return _empty_profile(entity_name, fields, "URL OData manquante")
     try:
@@ -414,7 +499,9 @@ def _sync_profile_rest(source_dict: Dict, entity_name: str,
                         fields: List[Dict], sample_size: int) -> Dict:
     import requests
     opts     = _parse_opts(source_dict)
-    base_url = opts.get("base_url") or source_dict.get("host") or ""
+    base_url = (source_dict.get("base_url") or
+                opts.get("base_url") or
+                source_dict.get("host") or "")
     try:
         data  = requests.get(f"{base_url.rstrip('/')}/{entity_name}", timeout=30).json()
         items = data if isinstance(data, list) else [data]
@@ -459,12 +546,27 @@ def _profile_records(entity_name: str, fields: List[Dict], records: List[Dict]) 
     if not records:
         return _empty_profile(entity_name, fields, "Aucun enregistrement")
     n = len(records)
+    columns = [_compute_single_column(f["name"], f, [r.get(f["name"]) for r in records], n)
+               for f in fields]
+
+    # ── Classification référentiel vs transactionnel au niveau table ─────
+    # Référentiel : peu de lignes, peu de changements (statique)
+    # Transactionnel : gros volume, insertions fréquentes
+    if n < 500:
+        table_class = "reference"
+    elif n > 10000:
+        table_class = "transactional"
+    else:
+        # Heuristique : si beaucoup de colonnes date → transactionnel
+        date_cols = sum(1 for c in columns if c.get("semantic") in ("date_col", "iso_date", "date_fr"))
+        table_class = "transactional" if date_cols >= 2 else "reference"
+
     return {
         "table":        entity_name,
         "total_rows":   n,
         "sampled_rows": n,
-        "columns":      [_compute_single_column(f["name"], f, [r.get(f["name"]) for r in records], n)
-                         for f in fields],
+        "table_class":  table_class,
+        "columns":      columns,
         "profiled_at":  datetime.utcnow().isoformat(),
         "error":        None,
     }
@@ -487,7 +589,7 @@ async def profile_entity(source_id: UUID, entity_name: str,
     async with pool.acquire() as conn:
         source_row = await conn.fetchrow(
             """SELECT connector_type, host, port, database_name,
-                      username, options
+                      username, options, base_url, schema_name
                FROM data_sources WHERE id=$1""", source_id)
         if not source_row:
             return _empty_profile(entity_name, [], "Source introuvable")
@@ -700,8 +802,10 @@ async def get_cached_profile(
 ) -> Optional[Dict]:
     """
     Retourne le profil mis en cache pour une entité.
-    db_conn est accepté pour compatibilité avec main.py mais non utilisé
-    (on ouvre toujours notre propre connexion pour éviter les conflits de transaction).
+    TTL différencié selon la classification :
+      - référentiel    → 24h  (faible volume, peu de changements)
+      - transactionnel →  1h  (gros volume, insertions fréquentes)
+      - inconnu        →  6h
     """
     from .database import get_pg_pool
     pool = await get_pg_pool()
@@ -715,7 +819,27 @@ async def get_cached_profile(
                 p = (json.loads(row["profile_data"])
                      if isinstance(row["profile_data"], str)
                      else dict(row["profile_data"]))
-                p["cached_at"] = row["profiled_at"].isoformat()
+
+                # ── TTL selon classification ──────────────────────────
+                table_class = p.get("table_class", "unknown")
+                ttl_hours = {
+                    "reference":     24,   # référentiel → 24h
+                    "transactional":  1,   # transactionnel → 1h
+                }.get(table_class, 6)     # inconnu → 6h
+
+                profiled_at = row["profiled_at"]
+                age_hours = (datetime.utcnow() - profiled_at.replace(tzinfo=None)).total_seconds() / 3600
+
+                if age_hours > ttl_hours:
+                    logger.info(
+                        f"[cache] {entity_name} expiré ({age_hours:.1f}h > {ttl_hours}h "
+                        f"TTL pour class={table_class}) → recalcul"
+                    )
+                    return None  # Cache expiré → recalcul
+
+                p["cached_at"]   = profiled_at.isoformat()
+                p["cache_ttl_h"] = ttl_hours
+                p["cache_age_h"] = round(age_hours, 1)
                 return p
     except Exception as e:
         logger.warning(f"[get_cached_profile] {entity_name}: {e}")
