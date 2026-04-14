@@ -9,13 +9,13 @@
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
-  --bg-0:#060a0e;--bg-1:#0a0f16;--bg-2:#0d1520;--bg-3:#111c29;--bg-4:#172435;
-  --border:#182336;--border-hi:#1f2f45;
-  --text-0:#d8e8f2;--text-1:#7ea4be;--text-2:#45657e;--text-3:#273d52;
-  --accent:#00c8f5;--accent-dim:#0088bb;--accent-glow:rgba(0,200,245,0.12);
-  --accent2:#2d72ff;--accent2-glow:rgba(45,114,255,0.1);
-  --green:#00dea0;--green-dim:#009e72;--green-glow:rgba(0,222,160,0.12);
-  --orange:#ff7d3b;--red:#ff3d6a;--yellow:#ffc94d;--purple:#9b7eff;
+  --bg-0:#0e1117;--bg-1:#141920;--bg-2:#181f28;--bg-3:#1c2530;--bg-4:#212c3a;
+  --border:#1e2d3d;--border-hi:#263748;
+  --text-0:#c8d8e4;--text-1:#6e94ae;--text-2:#3d5a70;--text-3:#243548;
+  --accent:#38b2cc;--accent-dim:#2a8fa8;--accent-glow:rgba(56,178,204,0.10);
+  --accent2:#4a7fd4;--accent2-glow:rgba(74,127,212,0.09);
+  --green:#2eb88a;--green-dim:#1f8a65;--green-glow:rgba(46,184,138,0.10);
+  --orange:#d4723a;--red:#d94f6b;--yellow:#c9a23e;--purple:#8870d4;
   --font-mono:"JetBrains Mono",monospace;
   --font-sans:"Inter",-apple-system,BlinkMacSystemFont,sans-serif;
   --radius:8px;--radius-lg:12px;--radius-sm:5px;
@@ -126,25 +126,41 @@ html,body{height:100%;background:var(--bg-0);color:var(--text-0);font-family:var
 .stat-value.red{color:var(--red);}
 .stat-label{font-size:11px;color:var(--text-2);margin-top:5px;font-weight:500;text-transform:uppercase;letter-spacing:0.06em;}
 
-/* ── BUTTONS ── */
-.btn{display:inline-flex;align-items:center;gap:7px;padding:8px 16px;border-radius:var(--radius);font-family:var(--font-sans);font-size:13px;font-weight:600;cursor:pointer;border:none;transition:var(--transition);white-space:nowrap;letter-spacing:0.01em;}
+
+/* ── BUTTONS PROFESSIONNELS v2 ── */
+.btn{display:inline-flex;align-items:center;gap:8px;padding:9px 18px;border-radius:var(--radius);font-family:var(--font-sans);font-size:13px;font-weight:600;cursor:pointer;border:none;transition:var(--transition);white-space:nowrap;letter-spacing:0.01em;}
 .btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#050e18;}
 .btn-primary:hover{filter:brightness(1.12);transform:translateY(-1px);box-shadow:0 6px 20px rgba(0,200,245,0.35);}
 .btn-secondary{background:var(--bg-3);color:var(--text-0);border:1px solid var(--border-hi);}
 .btn-secondary:hover{background:var(--bg-4);border-color:var(--text-3);color:var(--text-0);}
 .btn-ghost{background:transparent;color:var(--text-1);border:1px solid var(--border);}
 .btn-ghost:hover{background:var(--bg-3);color:var(--text-0);border-color:var(--border-hi);}
-.btn-back{background:var(--bg-2);color:var(--text-1);border:1px solid var(--border);gap:5px;}
+.btn-back{background:var(--bg-2);color:var(--text-1);border:1px solid var(--border);gap:6px;}
 .btn-back:hover{background:var(--bg-3);color:var(--accent);border-color:rgba(0,200,245,0.3);}
 .btn-refresh{background:var(--bg-2);color:var(--text-1);border:1px solid var(--border);}
 .btn-refresh:hover{background:var(--bg-3);color:var(--green);border-color:rgba(0,222,160,0.3);}
 .btn-danger{background:rgba(255,61,106,0.08);color:var(--red);border:1px solid rgba(255,61,106,0.25);}
 .btn-danger:hover{background:rgba(255,61,106,0.18);}
-.btn-sm{padding:6px 12px;font-size:12px;}
+.btn-cdc{background:rgba(155,126,255,0.1);color:var(--purple);border:1px solid rgba(155,126,255,0.3);}
+.btn-cdc:hover{background:rgba(155,126,255,0.2);border-color:var(--purple);transform:translateY(-1px);}
+.btn-relations{background:rgba(0,200,245,0.08);color:var(--accent);border:1px solid rgba(0,200,245,0.25);}
+.btn-relations:hover{background:rgba(0,200,245,0.15);border-color:var(--accent);transform:translateY(-1px);}
+.btn-profiling{background:rgba(0,222,160,0.08);color:var(--green);border:1px solid rgba(0,222,160,0.25);}
+.btn-profiling:hover{background:rgba(0,222,160,0.15);border-color:var(--green);transform:translateY(-1px);}
+.btn-sm{padding:10px 18px;font-size:13px;font-weight:600;}
 .btn-xs{padding:4px 8px;font-size:11px;border-radius:var(--radius-sm);}
 .btn-icon{padding:7px;aspect-ratio:1;}
 .btn:disabled{opacity:0.35;cursor:not-allowed;transform:none!important;box-shadow:none!important;filter:none!important;}
 .btn:active:not(:disabled){transform:translateY(0)!important;}
+.btn svg{flex-shrink:0;}
+
+/* Detail header amélioré */
+.detail-header{display:flex;align-items:center;padding:20px 28px;gap:16px;border-bottom:1px solid var(--border);background:var(--bg-1);margin-bottom:24px;min-height:80px;}
+.detail-icon{width:52px;height:52px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px;background:var(--bg-3);border:1px solid var(--border);flex-shrink:0;}
+.detail-name{font-size:20px;font-weight:700;color:var(--text-0);}
+.detail-type{font-family:var(--font-mono);font-size:12px;color:var(--text-2);margin-top:3px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.detail-actions{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex-shrink:0;}
+
 
 /* ── SOURCE TABLE ── */
 .source-table-wrap{padding:0 28px 28px;}
@@ -316,17 +332,31 @@ html,body{height:100%;background:var(--bg-0);color:var(--text-0);font-family:var
 }
 #view-relations.active { display: flex; }
 
-/* Top bar */
+/* Top bar — 2 lignes propres */
 .rel-topbar {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
+  flex-direction: column;
   background: var(--bg-1);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+}
+.rel-topbar-row1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: nowrap;
+  min-height: 48px;
+}
+.rel-topbar-row2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
   flex-wrap: wrap;
-  min-height: 52px;
+  min-height: 40px;
+  background: var(--bg-2);
 }
 .rel-topbar-title {
   font-family: var(--font-mono);
@@ -1078,6 +1108,96 @@ html.light .gni-title       { color:#0052cc; }
 
 .btn-sm { padding: 4px 10px !important; font-size: 12px !important; }
 td .btn-sm { padding: 3px 8px !important; font-size: 11px !important; }
+
+/* ═══════════════════════════════════════════════════════
+   CDC / VERSIONING PANEL — §2.2.5
+═══════════════════════════════════════════════════════ */
+.cdc-panel { padding: 0 28px 28px; }
+.cdc-tabs { display:flex; gap:0; border-bottom:1px solid var(--border); margin-bottom:20px; }
+.cdc-tab { padding:10px 18px; font-family:var(--font-mono); font-size:10.5px; font-weight:600;
+  color:var(--text-2); cursor:pointer; border-bottom:2px solid transparent;
+  transition:all 0.15s; text-transform:uppercase; letter-spacing:0.06em; user-select:none; }
+.cdc-tab:hover { color:var(--text-0); background:var(--bg-2); }
+.cdc-tab.active { color:var(--accent); border-bottom-color:var(--accent); background:var(--accent-glow); }
+.cdc-tab-content { display:none; }
+.cdc-tab-content.active { display:block; }
+
+/* Timeline versions */
+.cdc-timeline { display:flex; flex-direction:column; gap:6px; }
+.cdc-version-card { background:var(--bg-1); border:1px solid var(--border); border-radius:var(--radius);
+  padding:12px 16px; cursor:pointer; transition:all 0.15s; display:flex; align-items:center; gap:12px; }
+.cdc-version-card:hover { border-color:var(--border-hi); background:var(--bg-2); }
+.cdc-version-card.breaking { border-left:3px solid var(--red); }
+.cdc-version-card.rollback { border-left:3px solid var(--yellow); }
+.cdc-version-card.current  { border-color:rgba(0,200,245,0.35); background:var(--accent-glow); }
+.cdc-ver-num { font-family:var(--font-mono); font-size:13px; font-weight:700;
+  color:var(--accent); min-width:36px; }
+.cdc-ver-fp  { font-family:var(--font-mono); font-size:10px; color:var(--text-3); }
+.cdc-ver-info { flex:1; min-width:0; }
+.cdc-ver-date { font-size:11px; color:var(--text-2); margin-top:2px; }
+.cdc-ver-summary { font-size:11px; color:var(--text-1); }
+.cdc-badge-breaking { background:rgba(255,61,106,0.12); color:var(--red);
+  border:1px solid rgba(255,61,106,0.3); padding:2px 8px; border-radius:10px;
+  font-size:10px; font-family:var(--font-mono); font-weight:600; white-space:nowrap; }
+.cdc-badge-rollback { background:rgba(255,201,77,0.12); color:var(--yellow);
+  border:1px solid rgba(255,201,77,0.3); padding:2px 8px; border-radius:10px;
+  font-size:10px; font-family:var(--font-mono); font-weight:600; }
+.cdc-badge-ok { background:var(--green-glow); color:var(--green);
+  border:1px solid rgba(0,222,160,0.25); padding:2px 8px; border-radius:10px;
+  font-size:10px; font-family:var(--font-mono); }
+.cdc-ver-actions { display:flex; gap:6px; align-items:center; }
+
+/* Diff viewer */
+.cdc-diff-wrap { background:var(--bg-1); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+.cdc-diff-header { display:flex; align-items:center; gap:10px; padding:12px 16px;
+  background:var(--bg-2); border-bottom:1px solid var(--border); }
+.cdc-diff-change { display:flex; align-items:center; gap:10px; padding:10px 16px;
+  border-bottom:1px solid var(--border); font-size:12px; }
+.cdc-diff-change:last-child { border-bottom:none; }
+.cdc-diff-type { font-family:var(--font-mono); font-size:10px; font-weight:600;
+  padding:2px 8px; border-radius:4px; white-space:nowrap; min-width:130px; text-align:center; }
+.dt-create { background:rgba(0,222,160,0.12); color:var(--green); border:1px solid rgba(0,222,160,0.25); }
+.dt-drop   { background:rgba(255,61,106,0.12); color:var(--red);   border:1px solid rgba(255,61,106,0.25); }
+.dt-alter  { background:rgba(255,201,77,0.10); color:var(--yellow);border:1px solid rgba(255,201,77,0.25); }
+.dt-index  { background:rgba(0,200,245,0.10); color:var(--accent); border:1px solid rgba(0,200,245,0.2); }
+.cdc-diff-table { font-family:var(--font-mono); font-size:11px; color:var(--accent); font-weight:600; }
+.cdc-diff-col   { font-family:var(--font-mono); font-size:11px; color:var(--text-0); }
+.cdc-diff-detail{ font-size:11px; color:var(--text-2); }
+
+/* File CDC */
+.cdc-file-card { background:var(--bg-1); border:1px solid var(--border); border-radius:var(--radius);
+  padding:14px 16px; margin-bottom:8px; }
+.cdc-file-hash { font-family:var(--font-mono); font-size:11px; color:var(--text-2); }
+.cdc-file-change { display:inline-flex; align-items:center; gap:4px; padding:2px 8px;
+  border-radius:10px; font-family:var(--font-mono); font-size:10px; font-weight:600; }
+.fc-created  { background:var(--green-glow);  color:var(--green); border:1px solid rgba(0,222,160,0.25); }
+.fc-modified { background:rgba(255,201,77,0.1); color:var(--yellow); border:1px solid rgba(255,201,77,0.25); }
+
+/* Relations review */
+.review-card { background:var(--bg-1); border:1px solid var(--border); border-radius:var(--radius);
+  padding:14px 16px; margin-bottom:8px; display:flex; align-items:center; gap:12px; }
+.review-card:hover { border-color:var(--border-hi); background:var(--bg-2); }
+.review-rel { font-family:var(--font-mono); font-size:12px; color:var(--text-0); flex:1; min-width:0; }
+.review-reason { font-size:11px; color:var(--orange); margin-top:4px; }
+.review-conf { font-family:var(--font-mono); font-size:11px; color:var(--text-2); white-space:nowrap; }
+.review-actions { display:flex; gap:6px; flex-shrink:0; }
+
+/* Stats row CDC */
+.cdc-stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:1px;
+  background:var(--border); border:1px solid var(--border); border-radius:var(--radius);
+  overflow:hidden; margin-bottom:20px; }
+.cdc-stat { background:var(--bg-1); padding:14px 16px; }
+.cdc-stat-val { font-family:var(--font-mono); font-size:22px; font-weight:700; color:var(--text-0); }
+.cdc-stat-val.red { color:var(--red); }
+.cdc-stat-val.green { color:var(--green); }
+.cdc-stat-val.accent { color:var(--accent); }
+.cdc-stat-lbl { font-size:10px; color:var(--text-3); text-transform:uppercase;
+  letter-spacing:0.08em; margin-top:4px; }
+
+/* Spinner CDC */
+.cdc-loading { display:flex; align-items:center; justify-content:center; padding:32px;
+  color:var(--text-2); font-size:13px; gap:10px; }
+
 </style>
 </head>
 <body>
@@ -1152,7 +1272,7 @@ td .btn-sm { padding: 3px 8px !important; font-size: 11px !important; }
       <div class="empty-state" style="padding:20px 12px;font-size:12px;">Aucune source</div>
     </div>
     <div class="sidebar-add-btn">
-      <button class="btn btn-primary" style="width:100%;justify-content:center;font-size:13px;" onclick="openAddModal()">Nouvelle source</button>
+      <button class="btn btn-primary" style="width:100%;justify-content:center;font-size:13px;" onclick="openAddModal()"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="7" y1="2" x2="7" y2="12"/><line x1="2" y1="7" x2="12" y2="7"/></svg>Nouvelle source</button>
     </div>
   </aside>
 
@@ -1231,35 +1351,45 @@ td .btn-sm { padding: 3px 8px !important; font-size: 11px !important; }
     <!-- ═══════════════════════════════════════════════════
          VUE RELATIONS FULL-SCREEN
     ════════════════════════════════════════════════════ -->
+
+    <!-- ═══════════════════════════════════════════════════
+         VUE CDC / VERSIONING — §2.2.5
+    ════════════════════════════════════════════════════ -->
+    <div class="view" id="view-cdc">
+      <div id="cdcContent"></div>
+    </div>
     <div class="view" id="view-relations">
 
-      <!-- Top bar avec filtres -->
+      <!-- Top bar avec filtres — 2 lignes propres -->
       <div class="rel-topbar">
-        <div class="rel-topbar-title">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" style="vertical-align:middle;margin-right:5px;"><path d="M5 9a3 3 0 0 0 4.24.01l2-2A3 3 0 007 2.76L6 3.76"/><path d="M9 5a3 3 0 0 0 -4.24-.01l-2 2A3 3 0 007 11.24L8 10.24"/></svg>Relations
-          <span class="rel-topbar-source" id="relTopSourceName"></span>
-          <span id="relTopCount" style="font-family:var(--font-mono);font-size:10px;color:var(--text-3);background:var(--bg-3);padding:2px 8px;border-radius:10px;border:1px solid var(--border);"></span>
+
+        <!-- Ligne 1 : Titre + Actions principales -->
+        <div class="rel-topbar-row1">
+          <div class="rel-topbar-title">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" style="vertical-align:middle;margin-right:5px;"><path d="M5 9a3 3 0 0 0 4.24.01l2-2A3 3 0 007 2.76L6 3.76"/><path d="M9 5a3 3 0 0 0 -4.24-.01l-2 2A3 3 0 007 11.24L8 10.24"/></svg>Relations
+            <span class="rel-topbar-source" id="relTopSourceName"></span>
+            <span id="relTopCount" style="font-family:var(--font-mono);font-size:10px;color:var(--text-3);background:var(--bg-3);padding:2px 8px;border-radius:10px;border:1px solid var(--border);"></span>
+          </div>
+          <input class="rel-search-input" id="relGlobalSearch" placeholder="Rechercher table..." oninput="applyRelFilters()" style="margin-left:12px;">
+          <div style="flex:1;"></div>
+          <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
+            <button class="btn btn-secondary btn-sm" onclick="openSsms(relSourceId)" title="Importer FK depuis SSMS"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M2 11h10M7 2v7M4 6l3 3 3-3"/></svg>Import FK</button>
+            <button class="btn btn-secondary btn-sm" id="mlTrainBtn" onclick="runMLTrain(relSourceId)" title="Entraîner le modèle ML"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="display:inline-block;vertical-align:middle;margin-right:4px;"><circle cx="5" cy="6" r="2.5"/><circle cx="9" cy="6" r="2.5"/><path d="M5 8.5v2.5M9 8.5v2.5M4.5 11h5"/><line x1="5" y1="3.5" x2="9" y2="3.5"/></svg>ML</button>
+            <button class="btn btn-secondary btn-sm" onclick="openCrossSourceDetect(relSourceId)" title="Détecter connexions cross-source" style="color:#22d3ee;border-color:rgba(34,211,238,0.3);"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M5.5 8.5a3.5 3.5 0 0 0 5 0l1.5-1.5a3.5 3.5 0 0 0-5-5L5.5 3.5"/><path d="M8.5 5.5a3.5 3.5 0 0 0-5 0L2 7a3.5 3.5 0 0 0 5 5l1.5-1.5"/></svg>Cross</button>
+            <button class="btn btn-secondary btn-sm" onclick="openCrossSourcePath(relSourceId)" title="Chemin cross-source" style="color:#a78bfa;border-color:rgba(167,139,250,0.3);"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:4px;"><rect x="1" y="5" width="4" height="4" rx="1"/><rect x="9" y="5" width="4" height="4" rx="1"/><line x1="5" y1="7" x2="9" y2="7"/></svg>Chemin</button>
+            <div style="width:1px;height:20px;background:var(--border);"></div>
+            <button class="btn btn-refresh btn-sm" onclick="runDiscover(relSourceId)" title="Relancer la détection de relations"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M1 4c1-2 3-3 6-3a6 6 0 0 1 6 6"/><path d="M13 10c-1 2-3 3-6 3a6 6 0 0 1-6-6"/><polyline points="1 1 1 4 4 4"/><polyline points="13 13 13 10 10 10"/></svg>Relancer</button>
+            <button class="btn btn-back btn-sm" onclick="goBackToRelDetail()"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:4px;"><polyline points="8 2 2 7 8 12"/><line x1="2" y1="7" x2="13" y2="7"/></svg>Retour</button>
+          </div>
         </div>
 
-        <div class="rel-filters">
-          <input class="rel-search-input" id="relGlobalSearch" placeholder="Rechercher table..." oninput="applyRelFilters()">
-
+        <!-- Ligne 2 : Chips filtres méthodes -->
+        <div class="rel-topbar-row2">
           <div class="method-chips" id="methodChips">
             <!-- Chips rendus dynamiquement par renderMethodChips(sourceType) -->
           </div>
-
-
         </div>
 
-        <div style="display:flex;gap:5px;flex-shrink:0;align-items:center;">
-          <button class="btn btn-secondary btn-sm" onclick="openSsms(relSourceId)" title="Importer FK depuis SSMS">Import FK</button>
-          <button class="btn btn-secondary btn-sm" id="mlTrainBtn" onclick="runMLTrain(relSourceId)" title="Entraîner le modèle ML et prédire de nouvelles relations">ML</button>
-          <button class="btn btn-secondary btn-sm" onclick="openCrossSourceDetect(relSourceId)" title="Détecter connexions cross-source" style="color:#22d3ee;border-color:rgba(34,211,238,0.3);">Cross</button>
-          <button class="btn btn-secondary btn-sm" onclick="openCrossSourcePath(relSourceId)" title="Chemin cross-source" style="color:#a78bfa;border-color:rgba(167,139,250,0.3);">Chemin</button>
-          <button class="btn btn-refresh btn-sm" onclick="runDiscover(relSourceId)" title="Relancer la détection de relations">Relancer</button>
-          <div style="width:1px;height:20px;background:var(--border);margin:0 2px;"></div>
-          <button class="btn btn-back btn-sm" onclick="goBackToRelDetail()">← Retour</button>
-        </div>
       </div>
 
       <!-- Body: sidebar tables + panneau onglets -->
@@ -1626,7 +1756,7 @@ td .btn-sm { padding: 3px 8px !important; font-size: 11px !important; }
   <div class="modal" style="width:500px;">
     <div class="modal-header">
       <span class="modal-title" id="crossModalTitle"></span>
-      <button class="btn btn-ghost btn-sm btn-icon" onclick="closeCrossModal()" style="margin-left:auto;">\u2715</button>
+      <button class="btn btn-ghost btn-sm btn-icon" onclick="closeCrossModal()" style="margin-left:auto;">×</button>
     </div>
     <div class="modal-body" id="crossModalBody"></div>
     <div class="modal-footer" id="crossModalFooter"></div>
@@ -2019,9 +2149,9 @@ function renderSourceTable(sources) {
       '<td id="domain-stat-' + s.id + '" style="font-size:11px;"></td>' +
       '<td>' + (s.test_latency_ms != null ? '<span style="font-family:var(--font-mono);font-size:12px;color:' + (s.test_latency_ms<100?'var(--green)':s.test_latency_ms<500?'var(--yellow)':'var(--red)') + '">' + s.test_latency_ms + 'ms</span>' : '<span style="color:var(--text-3)">—</span>') + '</td>' +
       '<td onclick="event.stopPropagation()"><div style="display:flex;gap:4px;">' +
-      '<button class="btn btn-secondary btn-sm" onclick="testSourceById(\'' + s.id + '\')">Test</button>' +
-      '<button class="btn btn-secondary btn-sm" onclick="syncSource(\'' + s.id + '\')">Sync</button>' +
-      '<button class="btn btn-secondary btn-sm" onclick="enrichSource(\'' + s.id + '\',\'' + encodeURIComponent(s.name) + '\')" title="Indexation sémantique">Index</button>' +
+      '<button class="btn btn-secondary btn-sm" onclick="testSourceById(\'' + s.id + '\')" title="Tester"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M5 2H3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V9"/><polyline points="9 1 13 1 13 5"/><line x1="13" y1="1" x2="6" y2="8"/></svg>Test</button>' +
+      '<button class="btn btn-secondary btn-sm" onclick="syncSource(\'' + s.id + '\')" title="Synchroniser"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M1 4c1-2 3-3 6-3a6 6 0 0 1 6 6"/><path d="M13 10c-1 2-3 3-6 3a6 6 0 0 1-6-6"/><polyline points="1 1 1 4 4 4"/><polyline points="13 13 13 10 10 10"/></svg>Sync</button>' +
+      '<button class="btn btn-secondary btn-sm" onclick="enrichSource(\'' + s.id + '\',\'' + encodeURIComponent(s.name) + '\')" title="Indexation sémantique"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:4px;"><polyline points="9 2 5 8 7.5 8 5 13"/><line x1="12" y1="5" x2="10" y2="5"/><line x1="12" y1="9" x2="10" y2="9"/></svg>Index</button>' +
       '<button class="btn btn-danger btn-sm" onclick="deleteSource(\'' + s.id + '\')"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:inline-block;vertical-align:middle;flex-shrink:0;"><line x1="2" y1="2" x2="10" y2="10"/><line x1="10" y1="2" x2="2" y2="10"/></svg></button>' +
       '</div></td></tr>';
     return rowHtml;
@@ -2128,15 +2258,21 @@ async function showSourceDetailRaw(id, page, search) {
     el.innerHTML =
       '<div class="detail-header">' +
       '<div class="detail-icon">' + getCategoryIcon(s.connector_type) + '</div>' +
-      '<div><div class="detail-name">' + s.name + '</div>' +
-      '<div class="detail-type">' + s.connector_type + ' · ' + getCategoryBadge(s.category) + '</div>' +
-      '<div style="margin-top:8px;">' + getStatusBadge(s.status) + '</div></div>' +
+      '<div style="display:flex;flex-direction:column;justify-content:center;gap:4px;">' +
+        '<div class="detail-name">' + s.name + '</div>' +
+        '<div class="detail-type">' +
+          '<span style="font-family:var(--font-mono);font-size:11px;color:var(--text-2);">' + s.connector_type + '</span>' +
+          getCategoryBadge(s.category) +
+          getStatusBadge(s.status) +
+        '</div>' +
+      '</div>' +
       '<div class="detail-actions">' +
-      '<button class="btn btn-secondary btn-sm" onclick="testSourceById(\'' + id + '\')">Tester</button>' +
-      '<button class="btn btn-primary btn-sm" onclick="syncSource(\'' + id + '\')">Sync</button>' +
-      '<button class="btn btn-secondary btn-sm" onclick="openRelationsView(\'' + id + '\')">Relations</button>' +
-      '<button class="btn btn-secondary btn-sm" onclick="openProfilingView(\'' + id + '\')">Profiling</button>' +
-      '<button class="btn btn-ghost btn-sm" onclick="showView(\'overview\')">← Retour</button>' +
+      '<button class="btn btn-secondary btn-sm" onclick="testSourceById(\'' + id + '\')"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2H3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V9"/><polyline points="9 1 13 1 13 5"/><line x1="13" y1="1" x2="6" y2="8"/></svg>Tester</button>' +
+      '<button class="btn btn-primary btn-sm" onclick="syncSource(\'' + id + '\')"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4c1-2 3-3 6-3a6 6 0 0 1 6 6"/><path d="M13 10c-1 2-3 3-6 3a6 6 0 0 1-6-6"/><polyline points="1 1 1 4 4 4"/><polyline points="13 13 13 10 10 10"/></svg>Synchroniser</button>' +
+      '<button class="btn btn-relations btn-sm" onclick="openRelationsView(\'' + id + '\')"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M5 9a3 3 0 0 0 4.24.01l2-2A3 3 0 007 2.76L6 3.76"/><path d="M9 5a3 3 0 0 0-4.24-.01l-2 2A3 3 0 007 11.24L8 10.24"/></svg>Relations</button>' +
+      '<button class="btn btn-profiling btn-sm" onclick="openProfilingView(\'' + id + '\')"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 2 5 8 7.5 8 5 13"/><line x1="12" y1="5" x2="10" y2="5"/><line x1="12" y1="9" x2="10" y2="9"/></svg>Profiling</button>' +
+      '<button class="btn btn-cdc btn-sm" onclick="openCDCView(\'' + id + '\')"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="5"/><polyline points="7 4 7 7 9 9"/><path d="M2 2l2 2M12 2l-2 2M2 12l2-2M12 12l-2-2"/></svg>CDC</button>' +
+      '<button class="btn btn-back btn-sm" onclick="showView(\'overview\')"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 2 2 7 8 12"/><line x1="2" y1="7" x2="13" y2="7"/></svg>Retour</button>' +
       '</div></div>' +
 
       '<div class="info-grid">' +
@@ -3204,14 +3340,14 @@ async function loadEntityDetails(sourceId, entityId, entityName) {
 }
 
 function openCrossModal(title, bodyHtml, actions) {
-  document.getElementById('crossModalTitle').textContent = title;
+  document.getElementById('crossModalTitle').innerHTML = title;
   document.getElementById('crossModalBody').innerHTML = bodyHtml;
   var footer = document.getElementById('crossModalFooter');
   footer.innerHTML = '';
   actions.forEach(function(a) {
     var btn = document.createElement('button');
     btn.className = 'btn ' + (a.cls||'btn-secondary') + ' btn-sm';
-    btn.textContent = a.label;
+    btn.innerHTML = a.label;
     btn.onclick = new Function(a.fn);
     footer.appendChild(btn);
   });
@@ -3324,14 +3460,14 @@ async function runCrossPath(sourceId) {
 
 // ══ CROSS-SOURCE MODAL ═══════════════════════════════════════
 function openCrossModal(title, bodyHtml, actions) {
-  document.getElementById('crossModalTitle').textContent = title;
+  document.getElementById('crossModalTitle').innerHTML = title;
   document.getElementById('crossModalBody').innerHTML = bodyHtml;
   var footer = document.getElementById('crossModalFooter');
   footer.innerHTML = '';
   actions.forEach(function(a) {
     var btn = document.createElement('button');
     btn.className = 'btn ' + (a.cls||'btn-secondary') + ' btn-sm';
-    btn.textContent = a.label;
+    btn.innerHTML = a.label;
     btn.onclick = new Function(a.fn);
     footer.appendChild(btn);
   });
@@ -6221,6 +6357,376 @@ async function init() {
 }
 
 init();
+
+
+// ══════════════════════════════════════════════════════════
+// CDC / VERSIONING UI — §2.2.5
+// ══════════════════════════════════════════════════════════
+
+var cdcSourceId = null;
+
+async function openCDCView(id) {
+  cdcSourceId = id;
+  showViewRaw('cdc');
+  setRoute('#cdc/' + id);
+  await renderCDCView(id);
+}
+
+async function renderCDCView(id) {
+  var el = document.getElementById('cdcContent');
+  el.innerHTML = '<div class="cdc-loading"><div class="spinner" style="width:20px;height:20px;border-width:2px;"></div> Chargement CDC...</div>';
+
+  // Charge les données en parallèle
+  var src = (allSources||[]).find(function(s){ return s.id===id; }) || {};
+  var isFile = (src.connector_type||'').startsWith('file_');
+
+  var [versions, reviewRels, reindexLog] = await Promise.all([
+    apiFetch('/sources/' + id + '/versions?limit=30').catch(function(){return {versions:[]};}),
+    apiFetch('/sources/' + id + '/cdc/relations/review').catch(function(){return {relations:[],count:0};}),
+    apiFetch('/sources/' + id + '/cdc/reindex/log?limit=10').catch(function(){return {log:[]};}),
+  ]);
+
+  var fileHistory = isFile
+    ? await apiFetch('/sources/' + id + '/cdc/file/history').catch(function(){return {history:[]};})
+    : {history:[]};
+
+  var vlist    = (versions.versions || []);
+  var rlist    = (reviewRels.relations || []);
+  var logList  = (reindexLog.log || []);
+  var fhist    = (fileHistory.history || []);
+
+  // Stats rapides
+  var totalV   = vlist.length;
+  var breaking = vlist.filter(function(v){ return v.has_breaking; }).length;
+  var needsRev = rlist.length;
+  var lastV    = vlist[0] || null;
+
+  el.innerHTML =
+    // Header
+    '<div class="detail-header">' +
+    '<div class="detail-icon"><svg width="22" height="22" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="5"/><polyline points="7 4 7 7 9 9"/></svg></div>' +
+    '<div><div class="detail-name">CDC / Versioning</div>' +
+    '<div class="detail-type">' + (src.name||id) + ' · Historique schéma</div></div>' +
+    '<div class="detail-actions">' +
+    '<button class="btn btn-secondary btn-sm" onclick="runCDCDetect(\'' + id + '\')"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="4"/><line x1="9.5" y1="9.5" x2="13" y2="13"/></svg>Détecter</button>' +
+    '<button class="btn btn-secondary btn-sm" onclick="runCDCReindex(\'' + id + '\')"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4c1-2 3-3 6-3a6 6 0 0 1 6 6"/><polyline points="1 1 1 4 4 4"/><rect x="4" y="7" width="6" height="5" rx="1"/><line x1="6" y1="9" x2="8" y2="9"/></svg>Reindex</button>' +
+    (isFile ? '<button class="btn btn-secondary btn-sm" onclick="runFileCDC(\'' + id + '\')"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1H3a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5L8 1z"/><polyline points="8 1 8 5 12 5"/></svg>Vérifier fichier</button>' : '') +
+    '<button class="btn btn-back btn-sm" onclick="showSourceDetail(\'' + id + '\')"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 2 2 7 8 12"/><line x1="2" y1="7" x2="13" y2="7"/></svg>Retour</button>' +
+    '</div></div>' +
+
+    // Stats
+    '<div class="cdc-panel">' +
+    '<div class="cdc-stats-row">' +
+    '<div class="cdc-stat"><div class="cdc-stat-val accent">' + totalV + '</div><div class="cdc-stat-lbl">Versions</div></div>' +
+    '<div class="cdc-stat"><div class="cdc-stat-val ' + (breaking>0?'red':'green') + '">' + breaking + '</div><div class="cdc-stat-lbl">Breaking Changes</div></div>' +
+    '<div class="cdc-stat"><div class="cdc-stat-val ' + (needsRev>0?'red':'green') + '">' + needsRev + '</div><div class="cdc-stat-lbl">Relations à réviser</div></div>' +
+    '<div class="cdc-stat"><div class="cdc-stat-val">' + (lastV ? 'v' + lastV.version : '—') + '</div><div class="cdc-stat-lbl">Version courante</div></div>' +
+    '</div>' +
+
+    // Onglets
+    '<div class="cdc-tabs">' +
+    '<div class="cdc-tab active" onclick="switchCDCTab(\'versions\', this)"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:5px;"><circle cx="7" cy="7" r="5"/><polyline points="7 4 7 7 9 9"/></svg>Historique</div>' +
+    (needsRev>0 ? '<div class="cdc-tab" onclick="switchCDCTab(\'review\', this)"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:5px;"><path d="M7 2L13 12H1L7 2z"/><line x1="7" y1="6" x2="7" y2="9"/><circle cx="7" cy="11" r="0.5" fill="currentColor"/></svg>Révision (' + needsRev + ')</div>' : '<div class="cdc-tab" onclick="switchCDCTab(\'review\', this)"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:5px;"><polyline points="2 7 5.5 10.5 12 4"/></svg>Relations</div>') +
+    (isFile ? '<div class="cdc-tab" onclick="switchCDCTab(\'file\', this)"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:5px;"><path d="M8 1H3a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5L8 1z"/><polyline points="8 1 8 5 12 5"/></svg>Fichier</div>' : '') +
+    '<div class="cdc-tab" onclick="switchCDCTab(\'reindex\', this)"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:5px;"><path d="M1 4c1-2 3-3 6-3a6 6 0 0 1 6 6"/><path d="M13 10c-1 2-3 3-6 3a6 6 0 0 1-6-6"/><polyline points="1 1 1 4 4 4"/><polyline points="13 13 13 10 10 10"/></svg>Réindexation</div>' +
+    '</div>' +
+
+    // Tab: Historique versions
+    '<div class="cdc-tab-content active" id="cdcTab-versions">' +
+    renderCDCVersions(vlist, id) +
+    '</div>' +
+
+    // Tab: Relations à réviser
+    '<div class="cdc-tab-content" id="cdcTab-review">' +
+    renderCDCReview(rlist, id) +
+    '</div>' +
+
+    // Tab: Fichier (si applicable)
+    (isFile ? '<div class="cdc-tab-content" id="cdcTab-file">' + renderCDCFileHistory(fhist) + '</div>' : '') +
+
+    // Tab: Log réindexation
+    '<div class="cdc-tab-content" id="cdcTab-reindex">' +
+    renderCDCReindexLog(logList) +
+    '</div>' +
+
+    '</div>';
+}
+
+function switchCDCTab(name, el) {
+  document.querySelectorAll('.cdc-tab').forEach(function(t){ t.classList.remove('active'); });
+  document.querySelectorAll('.cdc-tab-content').forEach(function(t){ t.classList.remove('active'); });
+  if (el) el.classList.add('active');
+  var tc = document.getElementById('cdcTab-' + name);
+  if (tc) tc.classList.add('active');
+}
+
+// ── Render : Timeline versions ────────────────────────────
+function renderCDCVersions(vlist, sourceId) {
+  if (!vlist.length) {
+    return '<div style="padding:32px;text-align:center;color:var(--text-2);font-size:13px;">' +
+      'Aucune version — Lancez une détection CDC pour créer le premier snapshot.</div>';
+  }
+
+  return '<div class="cdc-timeline">' +
+    vlist.map(function(v, i) {
+      var cls = v.has_breaking ? ' breaking' : v.is_rollback ? ' rollback' : (i===0 ? ' current' : '');
+      var badge = v.has_breaking
+        ? '<span class="cdc-badge-breaking"><svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:3px;"><path d="M7 2L13 12H1L7 2z"/><line x1="7" y1="6" x2="7" y2="9"/><circle cx="7" cy="11" r="0.5" fill="currentColor"/></svg>Breaking</span>'
+        : v.is_rollback
+        ? '<span class="cdc-badge-rollback"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;"><path d="M2 8a5 5 0 1 0 1-3"/><polyline points="2 4 2 8 6 8"/></svg>Rollback</span>'
+        : (i===0 ? '<span class="cdc-badge-ok">● Actuel</span>' : '');
+
+      var tags = (v.tags||[]).length
+        ? v.tags.map(function(t){ return '<span style="font-size:10px;padding:1px 7px;border-radius:10px;background:rgba(155,126,255,0.15);color:var(--purple);border:1px solid rgba(155,126,255,0.3);margin-left:4px;">' + t + '</span>'; }).join('')
+        : '';
+
+      var summary = v.summary || {};
+      var byType = summary.by_type || {};
+      var typeStr = Object.entries(byType).map(function(e){ return e[1] + ' ' + e[0].replace('ALTER_','').replace('_',' ').toLowerCase(); }).slice(0,3).join(', ');
+
+      return '<div class="cdc-version-card' + cls + '" onclick="expandCDCVersion(\'' + sourceId + '\',' + v.version + ', this)">' +
+        '<div class="cdc-ver-num">v' + v.version + '</div>' +
+        '<div class="cdc-ver-info">' +
+          '<div style="display:flex;align-items:center;gap:8px;">' +
+            '<span class="cdc-ver-fp">' + (v.fingerprint||'') + '</span>' + badge + tags +
+          '</div>' +
+          '<div class="cdc-ver-summary">' + (typeStr || (summary.total||0) + ' changements') + ' · ' + (summary.tables_affected||[]).length + ' tables</div>' +
+          '<div class="cdc-ver-date">' + formatCDCDate(v.created_at) + '</div>' +
+        '</div>' +
+        '<div class="cdc-ver-actions">' +
+          '<button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();cdcTagModal(\'' + sourceId + '\',' + v.version + ')" title="Tagger cette version"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;"><path d="M1 1h5l6 6a2 2 0 0 1 0 3l-3 3a2 2 0 0 1-3 0L1 7V1z"/><circle cx="4" cy="4" r="1" fill="currentColor" stroke="none"/></svg></button>' +
+          (v.version > 1 ? '<button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();cdcRollback(\'' + sourceId + '\',' + v.version + ')" title="Rollback vers cette version" style="color:var(--orange);"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;"><path d="M2 8a5 5 0 1 0 1-3"/><polyline points="2 4 2 8 6 8"/></svg></button>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div id="cdc-diff-' + v.version + '" style="display:none;margin-bottom:6px;"></div>';
+    }).join('') +
+    '</div>';
+}
+
+async function expandCDCVersion(sourceId, version, card) {
+  var diffEl = document.getElementById('cdc-diff-' + version);
+  if (!diffEl) return;
+  if (diffEl.style.display !== 'none') { diffEl.style.display = 'none'; return; }
+
+  diffEl.innerHTML = '<div class="cdc-loading" style="padding:16px;"><div class="spinner" style="width:14px;height:14px;border-width:2px;"></div> Chargement...</div>';
+  diffEl.style.display = 'block';
+
+  try {
+    var v = await apiFetch('/sources/' + sourceId + '/versions/' + version);
+    var changes = v.changes_delta || [];
+    if (!changes.length) {
+      diffEl.innerHTML = '<div style="padding:12px 16px;font-size:12px;color:var(--text-2);">Aucun delta (snapshot initial)</div>';
+      return;
+    }
+    diffEl.innerHTML = renderCDCDiff(changes);
+  } catch(e) {
+    diffEl.innerHTML = '<div style="padding:12px;color:var(--red);font-size:12px;">' + e.message + '</div>';
+  }
+}
+
+function renderCDCDiff(changes) {
+  var html = '<div class="cdc-diff-wrap">' +
+    '<div class="cdc-diff-header" style="font-family:var(--font-mono);font-size:10px;font-weight:600;color:var(--text-2);">' +
+    changes.length + ' changements · ' + changes.filter(function(c){return c.breaking;}).length + ' breaking</div>';
+
+  changes.slice(0, 50).forEach(function(c) {
+    var typeClass = c.type.includes('DROP') ? 'dt-drop' : c.type.includes('CREATE') ? 'dt-create' : c.type.includes('INDEX') ? 'dt-index' : 'dt-alter';
+    var typeLabel = c.type.replace('ALTER_','').replace('_',' ').toLowerCase();
+    var detail = '';
+    if (c.detail) {
+      if (c.detail.old_type) detail = c.detail.old_type + ' → ' + c.detail.new_type;
+      else if (c.detail.old_nullable !== undefined) detail = (c.detail.old_nullable==='YES'?'nullable':'not null') + ' → ' + (c.detail.new_nullable==='YES'?'nullable':'not null');
+      else if (c.detail.index) detail = c.detail.index;
+      else if (c.detail.constraint) detail = c.detail.constraint;
+    }
+    html += '<div class="cdc-diff-change">' +
+      '<span class="cdc-diff-type ' + typeClass + '">' + typeLabel + '</span>' +
+      '<span class="cdc-diff-table">' + c.table + '</span>' +
+      (c.column ? '<span class="cdc-diff-col">.' + c.column + '</span>' : '') +
+      (detail ? '<span class="cdc-diff-detail">— ' + detail + '</span>' : '') +
+      (c.breaking ? '<span style="color:var(--red);font-size:10px;margin-left:auto;"><svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:3px;"><path d="M7 2L13 12H1L7 2z"/><line x1="7" y1="6" x2="7" y2="9"/><circle cx="7" cy="11" r="0.5" fill="currentColor"/></svg>breaking</span>' : '') +
+      '</div>';
+  });
+
+  if (changes.length > 50) {
+    html += '<div style="padding:10px 16px;font-size:11px;color:var(--text-3);">… et ' + (changes.length-50) + ' autres changements</div>';
+  }
+
+  return html + '</div>';
+}
+
+// ── Render : Relations à réviser ─────────────────────────
+function renderCDCReview(rlist, sourceId) {
+  if (!rlist.length) {
+    return '<div style="padding:32px;text-align:center;color:var(--green);font-size:13px;">' +
+      '<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:5px;"><polyline points="2 7 5.5 10.5 12 4"/></svg>Toutes les relations validées sont à jour — aucune révision nécessaire.</div>';
+  }
+
+  return '<div style="margin-bottom:12px;padding:10px 14px;background:rgba(255,125,59,0.08);border:1px solid rgba(255,125,59,0.25);border-radius:var(--radius);font-size:12px;color:var(--orange);">' +
+    '<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:5px;"><path d="M7 2L13 12H1L7 2z"/><line x1="7" y1="6" x2="7" y2="9"/><circle cx="7" cy="11" r="0.5" fill="currentColor"/></svg>' + rlist.length + ' relation(s) validée(s) nécessitent une révision suite à un breaking change CDC.' +
+    '</div>' +
+    rlist.map(function(r) {
+      return '<div class="review-card" id="review-' + r.id + '">' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div class="review-rel">' + r.from + ' → ' + r.to + '</div>' +
+          '<div class="review-reason">' + (r.reason||'Breaking change détecté') + '</div>' +
+        '</div>' +
+        '<span class="review-conf">' + Math.round((r.confidence||0)*100) + '%</span>' +
+        '<div class="review-actions">' +
+          '<button class="btn btn-xs" style="background:var(--green-glow);color:var(--green);border:1px solid rgba(0,222,160,0.3);" ' +
+            'onclick="markRelReviewed(\'' + sourceId + '\',\'' + r.id + '\')">✓ Valide</button>' +
+          '<button class="btn btn-xs btn-danger" ' +
+            'onclick="rejectReviewedRel(\'' + sourceId + '\',\'' + r.id + '\')">✗ Rejeter</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+}
+
+// ── Render : Historique fichier ──────────────────────────
+function renderCDCFileHistory(fhist) {
+  if (!fhist.length) {
+    return '<div style="padding:32px;text-align:center;color:var(--text-2);font-size:13px;">' +
+      'Aucun historique — Lancez une vérification fichier.</div>';
+  }
+
+  return fhist.map(function(h) {
+    var cls = h.change_type === 'CREATED' ? 'fc-created' : 'fc-modified';
+    var delta = h.size_delta != null ? (h.size_delta > 0 ? '+' : '') + formatBytes(h.size_delta) : '';
+    return '<div class="cdc-file-card">' +
+      '<div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">' +
+        '<span class="cdc-file-change ' + cls + '">' + h.change_type + '</span>' +
+        (delta ? '<span style="font-family:var(--font-mono);font-size:11px;color:' + (h.size_delta>0?'var(--orange)':'var(--green)') + ';">' + delta + '</span>' : '') +
+        '<span style="font-size:11px;color:var(--text-2);margin-left:auto;">' + formatCDCDate(h.detected_at) + '</span>' +
+      '</div>' +
+      '<div class="cdc-file-hash">MD5: ' + (h.checksum||'') + '</div>' +
+      '<div style="font-size:11px;color:var(--text-2);margin-top:4px;">' + formatBytes(h.size_bytes||0) + '</div>' +
+    '</div>';
+  }).join('');
+}
+
+// ── Render : Log réindexation ────────────────────────────
+function renderCDCReindexLog(logList) {
+  if (!logList.length) {
+    return '<div style="padding:32px;text-align:center;color:var(--text-2);font-size:13px;">' +
+      'Aucune réindexation automatique — se déclenche lors des breaking changes.</div>';
+  }
+
+  return '<div class="cdc-diff-wrap">' +
+    '<div class="cdc-diff-header" style="font-family:var(--font-mono);font-size:10px;font-weight:600;color:var(--text-2);">Historique réindexations MeiliSearch</div>' +
+    logList.map(function(l) {
+      return '<div class="cdc-diff-change">' +
+        (l.schema_version ? '<span class="cdc-diff-type dt-alter">v' + l.schema_version + '</span>' : '') +
+        '<span style="font-size:12px;color:var(--text-0);">−' + (l.deleted||0) + ' supprimés · +' + (l.reindexed||0) + ' réindexés · ' + (l.relations_preserved||0) + ' relations préservées</span>' +
+        ((l.errors&&l.errors.length) ? '<span style="color:var(--red);font-size:10px;margin-left:6px;"><svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:3px;"><path d="M7 2L13 12H1L7 2z"/><line x1="7" y1="6" x2="7" y2="9"/><circle cx="7" cy="11" r="0.5" fill="currentColor"/></svg>' + l.errors.length + ' erreur(s)</span>' : '') +
+        '<span style="font-size:10px;color:var(--text-3);margin-left:auto;">' + formatCDCDate(l.created_at) + '</span>' +
+      '</div>';
+    }).join('') +
+    '</div>';
+}
+
+// ── Actions ──────────────────────────────────────────────
+async function runCDCDetect(id) {
+  toast('Détection CDC en cours...', 'info');
+  try {
+    var r = await apiFetch('/sources/' + id + '/cdc/detect', {method:'POST'});
+    if (r.status === 'no_change') {
+      toast('Aucun changement détecté (fingerprint stable)', 'success');
+    } else {
+      var msg = 'v' + r.new_version + ' créée · ' + r.total_changes + ' changements' +
+        (r.breaking_count > 0 ? ' · ' + r.breaking_count + ' breaking' : '');
+      toast(msg, r.breaking_count > 0 ? 'error' : 'success');
+    }
+    await renderCDCView(id);
+  } catch(e) { toast('Erreur CDC: ' + e.message, 'error'); }
+}
+
+async function runFileCDC(id) {
+  toast('Vérification fichier en cours...', 'info');
+  try {
+    var r = await apiFetch('/sources/' + id + '/cdc/file/detect', {method:'POST'});
+    if (r.status === 'no_change') {
+      toast('Fichier inchangé', 'success');
+    } else if (r.status === 'error') {
+      toast(r.message, 'error');
+    } else {
+      toast('Fichier ' + r.change_type + (r.size_delta ? ' · ' + (r.size_delta>0?'+':'') + formatBytes(r.size_delta) : ''), 'info');
+    }
+    await renderCDCView(id);
+  } catch(e) { toast('Erreur: ' + e.message, 'error'); }
+}
+
+async function runCDCReindex(id) {
+  toast('Réindexation MeiliSearch lancée en arrière-plan...', 'info');
+  try {
+    await apiFetch('/sources/' + id + '/cdc/reindex', {method:'POST'});
+    toast('Réindexation programmée', 'success');
+  } catch(e) { toast('Erreur: ' + e.message, 'error'); }
+}
+
+async function cdcRollback(sourceId, version) {
+  if (!confirm('Rollback vers v' + version + ' ? Une nouvelle version HEAD sera créée.')) return;
+  try {
+    var r = await apiFetch('/sources/' + sourceId + '/versions/' + version + '/rollback', {method:'POST'});
+    toast('Rollback effectué — v' + r.rollback_version + ' créée', 'success');
+    await renderCDCView(sourceId);
+  } catch(e) { toast('Erreur rollback: ' + e.message, 'error'); }
+}
+
+function cdcTagModal(sourceId, version) {
+  var tag = prompt('Nom du tag pour v' + version + ' (ex: v1.0-stable, avant-migration):');
+  if (!tag) return;
+  var note = prompt('Note optionnelle:') || '';
+  apiFetch('/sources/' + sourceId + '/versions/' + version + '/tag', {
+    method:'POST', body: JSON.stringify({tag: tag, note: note})
+  }).then(function(r) {
+    toast('Tag "' + tag + '" posé sur v' + version, 'success');
+    renderCDCView(sourceId);
+  }).catch(function(e) { toast('Erreur: ' + e.message, 'error'); });
+}
+
+async function markRelReviewed(sourceId, relId) {
+  try {
+    await apiFetch('/sources/' + sourceId + '/cdc/relations/' + relId + '/reviewed', {method:'POST'});
+    var card = document.getElementById('review-' + relId);
+    if (card) { card.style.opacity = '0.4'; card.style.pointerEvents = 'none'; }
+    toast('Relation marquée comme valide', 'success');
+  } catch(e) { toast('Erreur: ' + e.message, 'error'); }
+}
+
+async function rejectReviewedRel(sourceId, relId) {
+  if (!confirm('Rejeter définitivement cette relation ?')) return;
+  try {
+    await apiFetch('/sources/' + sourceId + '/relations/' + relId + '/validate', {
+      method:'PATCH', body: JSON.stringify({is_confirmed: false, reject_reason: 'Rejeté après CDC breaking change'})
+    });
+    var card = document.getElementById('review-' + relId);
+    if (card) { card.style.opacity = '0.3'; card.style.pointerEvents = 'none'; }
+    toast('Relation rejetée', 'info');
+  } catch(e) { toast('Erreur: ' + e.message, 'error'); }
+}
+
+// ── Helpers ──────────────────────────────────────────────
+function formatCDCDate(iso) {
+  if (!iso) return '—';
+  try {
+    var d = new Date(iso);
+    return d.toLocaleDateString('fr-FR') + ' ' + d.toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'});
+  } catch(e) { return iso; }
+}
+
+function formatBytes(b) {
+  if (!b) return '0 B';
+  var abs = Math.abs(b);
+  if (abs < 1024) return b + ' B';
+  if (abs < 1024*1024) return (b/1024).toFixed(1) + ' KB';
+  return (b/1024/1024).toFixed(1) + ' MB';
+}
+
+// Route CDC
+(function() {
+  var _origRestoreRoute = window.restoreRoute;
+})();
+
 
 // ── SIDEBAR TOGGLE ──
 function toggleSidebar() {

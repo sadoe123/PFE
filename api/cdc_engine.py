@@ -12,6 +12,8 @@ from enum import Enum
 from typing import Optional
 from uuid import UUID
 
+import os
+
 import asyncpg
 import redis.asyncio as aioredis
 
@@ -281,6 +283,15 @@ class CDCEngine:
 
         if breaking:
             await self._publish_breaking(source_id, new_version, breaking)
+            # Auto-réindexation MeiliSearch après breaking change
+            try:
+                from .cdc_reindexer import CDCReindexer
+                reindexer = CDCReindexer(self.pg, self.redis)
+                await reindexer.reindex_after_breaking_change(
+                    source_id, new_version, breaking
+                )
+            except Exception as e:
+                logger.warning(f"[CDC] Auto-reindex non-bloquant: {e}")
 
         logger.info(f"[CDC] source {source_id} → v{new_version} ({len(changes)} changements, {len(breaking)} breaking)")
 

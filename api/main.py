@@ -42,8 +42,10 @@ from .repository import (
     list_sources,
     update_source,
 )
-from .cdc_engine       import CDCEngine
-from .schema_versioner import SchemaVersioner
+from .cdc_engine        import CDCEngine
+from .schema_versioner  import SchemaVersioner
+from .cdc_file_watcher  import FileCDCEngine
+from .cdc_reindexer     import CDCReindexer
 
 from .schemas import (
     ConnectorType,
@@ -2695,6 +2697,200 @@ async def cdc_watch(
         "source_id":        str(source_id),
         "detect_in_seconds": interval_seconds,
         "message":          f"Détection CDC programmée dans {interval_seconds}s",
+    }
+
+
+def _get_file_cdc():
+    from .database import _pg_pool, _redis
+    from .cdc_file_watcher import FileCDCEngine
+    return FileCDCEngine(_pg_pool, _redis)
+
+def _get_reindexer():
+    from .database import _pg_pool, _redis
+    from .cdc_reindexer import CDCReindexer
+    return CDCReindexer(_pg_pool, _redis)
+
+
+# ── 10. CDC Fichiers — détecter changement ────────────────────
+
+@app.post("/sources/{source_id}/cdc/file/detect", tags=["CDC"])
+async def cdc_file_detect(source_id: UUID):
+    """
+    Détecte si le fichier source a changé (checksum MD5 + timestamp).
+    Pour sources : file_csv, file_excel, file_json.
+    Si changement détecté → publie notification Redis + retourne needs_resync=True.
+    """
+    engine = _get_file_cdc()
+    try:
+        return await engine.detect_file_change(source_id)
+    except Exception as e:
+        logger.error(f"[CDC File] detect error source {source_id}: {e}")
+        raise HTTPException(500, str(e))
+
+
+# ── 11. CDC Fichiers — historique ────────────────────────────
+
+@app.get("/sources/{source_id}/cdc/file/history", tags=["CDC"])
+async def cdc_file_history(
+    source_id: UUID,
+    limit: int = Query(20, ge=1, le=100),
+):
+    """
+    Retourne l'historique des changements de fichier détectés
+    (checksums, tailles, deltas).
+    """
+    engine = _get_file_cdc()
+    history = await engine.get_file_history(source_id, limit)
+    return {
+        "source_id": str(source_id),
+        "count":     len(history),
+        "history":   history,
+    }
+
+
+# ── 12. CDC Fichiers — notifications Redis ───────────────────
+
+@app.get("/sources/{source_id}/cdc/file/notifications", tags=["CDC"])
+async def cdc_file_notifications(
+    source_id: UUID,
+    limit: int = Query(20, ge=1, le=50),
+):
+    """Retourne les dernières notifications de changement fichier."""
+    engine = _get_file_cdc()
+    notifs = await engine.get_file_notifications(source_id, limit)
+    return {
+        "source_id":     str(source_id),
+        "count":         len(notifs),
+        "notifications": notifs,
+    }
+
+
+# ── 13. Réindexation MeiliSearch forcée ──────────────────────
+
+@app.post("/sources/{source_id}/cdc/reindex", tags=["CDC"])
+async def cdc_force_reindex(
+    source_id: UUID,
+    background_tasks: BackgroundTasks,
+):
+    """
+    Force une réindexation complète de la source dans MeiliSearch.
+    Utile après un rollback ou une resync complète.
+    Lance en background — ne bloque pas la réponse.
+    """
+    async def _do_reindex():
+        reindexer = _get_reindexer()
+        try:
+            result = await reindexer.full_reindex(source_id)
+            logger.info(f"[CDC Reindex] {result}")
+        except Exception as e:
+            logger.error(f"[CDC Reindex] error: {e}")
+
+    background_tasks.add_task(_do_reindex)
+    return {
+        "status":    "reindex_scheduled",
+        "source_id": str(source_id),
+        "message":   "Réindexation MeiliSearch lancée en arrière-plan",
+    }
+
+
+# ── 14. Relations nécessitant une révision ───────────────────
+
+@app.get("/sources/{source_id}/cdc/relations/review", tags=["CDC"])
+async def cdc_relations_to_review(source_id: UUID):
+    """
+    Retourne les relations validées manuellement qui nécessitent
+    une révision suite à un breaking change CDC.
+    """
+    pool = await get_pg_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT
+                id, source_entity, source_field,
+                target_entity, target_field,
+                relation_type, confidence, review_reason, created_at
+            FROM   entity_relations_to_review
+            WHERE  source_id = $1
+            ORDER  BY confidence DESC
+        """, source_id)
+
+    return {
+        "source_id": str(source_id),
+        "count":     len(rows),
+        "relations": [
+            {
+                "id":            str(r["id"]),
+                "from":          f"{r['source_entity']}.{r['source_field']}",
+                "to":            f"{r['target_entity']}.{r['target_field']}",
+                "relation_type": r["relation_type"],
+                "confidence":    r["confidence"],
+                "reason":        r["review_reason"],
+                "created_at":    r["created_at"].isoformat(),
+            }
+            for r in rows
+        ],
+    }
+
+
+@app.post("/sources/{source_id}/cdc/relations/{relation_id}/reviewed", tags=["CDC"])
+async def cdc_mark_relation_reviewed(source_id: UUID, relation_id: UUID):
+    """
+    Marque une relation comme révisée après un breaking change.
+    Confirme que la relation est toujours valide.
+    """
+    pool = await get_pg_pool()
+    async with pool.acquire() as conn:
+        result = await conn.execute("""
+            UPDATE entity_relations
+            SET    needs_review = FALSE,
+                   reviewed_at  = NOW()
+            WHERE  id        = $1
+              AND  source_id = $2
+        """, relation_id, source_id)
+
+    if result == "UPDATE 0":
+        raise HTTPException(404, "Relation introuvable")
+
+    return {
+        "success":     True,
+        "relation_id": str(relation_id),
+        "message":     "Relation marquée comme révisée et toujours valide",
+    }
+
+
+# ── 15. Log réindexation ──────────────────────────────────────
+
+@app.get("/sources/{source_id}/cdc/reindex/log", tags=["CDC"])
+async def cdc_reindex_log(
+    source_id: UUID,
+    limit: int = Query(20, ge=1, le=100),
+):
+    """Retourne l'historique des réindexations automatiques."""
+    pool = await get_pg_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT
+                schema_version, deleted_count, reindexed_count,
+                relations_preserved, errors, created_at
+            FROM   cdc_reindex_log
+            WHERE  source_id = $1
+            ORDER  BY created_at DESC
+            LIMIT  $2
+        """, source_id, limit)
+
+    return {
+        "source_id": str(source_id),
+        "count":     len(rows),
+        "log": [
+            {
+                "schema_version":      r["schema_version"],
+                "deleted":             r["deleted_count"],
+                "reindexed":           r["reindexed_count"],
+                "relations_preserved": r["relations_preserved"],
+                "errors":              r["errors"],
+                "created_at":          r["created_at"].isoformat(),
+            }
+            for r in rows
+        ],
     }
 
 
