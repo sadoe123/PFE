@@ -17,6 +17,9 @@ services:
       - REDIS_HOST=onepilot_redis
       - MEILI_HOST=http://onepilot_meilisearch:7700
       - MEILI_MASTER_KEY=${MEILI_MASTER_KEY:-onepilot_meili_key}
+      - HF_HOME=/tmp/hf_cache
+      - TRANSFORMERS_CACHE=/tmp/hf_cache
+      - SENTENCE_TRANSFORMERS_HOME=/tmp/hf_cache
     volumes:
       - ./core:/app/core
       - ./connectors:/app/connectors

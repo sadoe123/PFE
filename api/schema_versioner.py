@@ -307,18 +307,18 @@ class SchemaVersioner:
         affected_tables = {c["table"] for c in breaking}
         impact_rows = await self.pg.fetch("""
             SELECT DISTINCT
-                se1.name AS from_table,
+                er.source_entity AS from_table,
                 er.source_field,
-                se2.name AS to_table,
+                er.target_entity AS to_table,
                 er.target_field,
                 er.relation_type,
                 er.confidence
             FROM   entity_relations er
-            JOIN   source_entities  se1 ON se1.id = er.source_entity_id
-            JOIN   source_entities  se2 ON se2.id = er.target_entity_id
             WHERE  er.source_id = $1
-              AND  (se1.name = ANY($2) OR se2.name = ANY($2))
+              AND  (er.source_entity = ANY($2) OR er.target_entity = ANY($2))
         """, source_id, list(affected_tables))
+
+        impact_rows = [dict(r) for r in impact_rows]
 
         return {
             "version":         version,
@@ -326,12 +326,12 @@ class SchemaVersioner:
             "affected_tables": sorted(affected_tables),
             "impacted_joins":  [
                 {
-                    "from_table":   r["from_table"],
-                    "source_field": r["source_field"],
-                    "to_table":     r["to_table"],
-                    "target_field": r["target_field"],
+                    "from_table":    r["from_table"],
+                    "source_field":  r["source_field"],
+                    "to_table":      r["to_table"],
+                    "target_field":  r["target_field"],
                     "relation_type": r["relation_type"],
-                    "confidence":   r["confidence"],
+                    "confidence":    r["confidence"],
                 }
                 for r in impact_rows
             ],

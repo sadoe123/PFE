@@ -42,10 +42,16 @@ from .repository import (
     list_sources,
     update_source,
 )
-from .cdc_engine        import CDCEngine
-from .schema_versioner  import SchemaVersioner
-from .cdc_file_watcher  import FileCDCEngine
-from .cdc_reindexer     import CDCReindexer
+from .cdc_engine             import CDCEngine
+from .schema_versioner       import SchemaVersioner
+from .cdc_file_watcher       import FileCDCEngine
+from .cdc_reindexer          import CDCReindexer
+from .metadata_enricher      import MetadataEnricher
+from .graphql_relation_saver import GraphQLRelationSaver, HATEOASLinkExtractor
+from .cdc_db_triggers        import PostgreSQLWALCDC, SQLServerCDC
+from .nlu_engine             import get_nlu_pipeline, get_context, clear_context, Intent, ContextManager, ConversationTurn
+from .query_engine           import SQLGenerator, UniversalQueryPlanner
+from .ambiguity_resolver     import AmbiguityResolver
 
 from .schemas import (
     ConnectorType,
@@ -2892,6 +2898,686 @@ async def cdc_reindex_log(
             for r in rows
         ],
     }
+
+
+@app.get("/sources/{source_id}/enrichment/summary", tags=["Metadata"])
+async def get_enrichment_summary(source_id: UUID):
+    """
+    Résumé de l'enrichissement des métadonnées pour une source.
+    Indique combien d'entités ont des descriptions, dépendances, stats.
+    """
+    pool = await get_pg_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("""
+            SELECT * FROM source_enrichment_summary WHERE source_id = $1
+        """, source_id)
+
+    if not row:
+        raise HTTPException(404, f"Source {source_id} introuvable")
+
+    return {
+        "source_id":                  str(source_id),
+        "source_name":                row["source_name"],
+        "total_entities":             row["total_entities"],
+        "entities_with_description":  row["entities_with_description"],
+        "entities_with_dependencies": row["entities_with_dependencies"],
+        "entities_with_rowcount":     row["entities_with_rowcount"],
+        "hateoas_graphql_relations":  row["hateoas_graphql_relations"],
+        "description_coverage_pct":   round(
+            (row["entities_with_description"] or 0) /
+            max(row["total_entities"] or 1, 1) * 100, 1
+        ),
+    }
+
+
+@app.post("/sources/{source_id}/enrichment/descriptions", tags=["Metadata"])
+async def save_descriptions(source_id: UUID, body: dict):
+    """
+    Sauvegarde les descriptions COMMENT ON extraites.
+    Body: { "descriptions": { "table_name": { "_table": "desc", "col_name": "desc" } } }
+    """
+    descriptions = body.get("descriptions", {})
+    if not descriptions:
+        raise HTTPException(400, "descriptions requis")
+
+    pool = await get_pg_pool()
+    enricher = MetadataEnricher(pool)
+    count = await enricher.save_descriptions(source_id, descriptions)
+    return {"success": True, "saved": count}
+
+
+@app.post("/sources/{source_id}/enrichment/cardinality", tags=["Metadata"])
+async def save_cardinality(source_id: UUID, body: dict):
+    """
+    Sauvegarde les statistiques de cardinalité.
+    Body: { "stats": { "table_name": { "row_count": 123, "size_kb": 456 } } }
+    """
+    stats = body.get("stats", {})
+    if not stats:
+        raise HTTPException(400, "stats requis")
+
+    pool = await get_pg_pool()
+    enricher = MetadataEnricher(pool)
+    count = await enricher.save_cardinality_stats(source_id, stats)
+    return {"success": True, "updated": count}
+
+
+@app.get("/sources/{source_id}/entities/{entity_name}/metadata", tags=["Metadata"])
+async def get_entity_metadata(source_id: UUID, entity_name: str):
+    """
+    Retourne les métadonnées enrichies d'une entité :
+    descriptions, dépendances, statistiques, formules Excel.
+    """
+    pool = await get_pg_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("""
+            SELECT id, name, entity_type, description, row_count, metadata
+            FROM source_entities
+            WHERE source_id = $1 AND name = $2
+        """, source_id, entity_name)
+
+    if not row:
+        raise HTTPException(404, f"Entité {entity_name} introuvable")
+
+    meta = {}
+    try:
+        raw = row["metadata"]
+        meta = json_module.loads(raw) if isinstance(raw, str) else (raw or {})
+    except Exception:
+        pass
+
+    return {
+        "source_id":    str(source_id),
+        "name":         row["name"],
+        "entity_type":  row["entity_type"],
+        "description":  row["description"],
+        "row_count":    row["row_count"],
+        "size_kb":      meta.get("size_kb"),
+        "dependencies": meta.get("dependencies", []),
+        "col_stats":    meta.get("col_stats", {}),
+        "excel_formulas": meta.get("excel_formulas", []),
+        "formula_count":  meta.get("formula_count", 0),
+        "partitions":   meta.get("partitions"),
+    }
+
+
+# ══════════════════════════════════════════════════════════════
+# §2.2.2 — GRAPHQL RELATIONS + HATEOAS
+# ══════════════════════════════════════════════════════════════
+
+@app.post("/sources/{source_id}/relations/graphql", tags=["Relations"])
+async def save_graphql_relations(source_id: UUID, body: dict):
+    """
+    Sauvegarde les relations GraphQL nested types dans entity_relations.
+    Body: { "relations": [ { "source_type": "Order", "source_field": "customer",
+                              "target_type": "Customer", "relation_type": "many_to_one" } ] }
+    """
+    relations = body.get("relations", [])
+    if not relations:
+        raise HTTPException(400, "relations requis")
+
+    pool = await get_pg_pool()
+    saver = GraphQLRelationSaver(pool)
+    count = await saver.save_graphql_relations(source_id, relations)
+    return {"success": True, "saved": count}
+
+
+@app.post("/sources/{source_id}/relations/hateoas", tags=["Relations"])
+async def save_hateoas_relations(source_id: UUID, body: dict):
+    """
+    Sauvegarde les liens HATEOAS détectés dans entity_relations.
+    Body: { "spec": { ... openapi spec ... } }
+    ou   { "relations": [ { ... } ] }
+    """
+    pool = await get_pg_pool()
+    extractor = HATEOASLinkExtractor(pool)
+
+    # Mode 1 : spec OpenAPI fournie → extraction automatique
+    spec = body.get("spec")
+    if spec:
+        relations = extractor.extract_from_openapi(spec)
+    else:
+        # Mode 2 : relations déjà extraites
+        relations = body.get("relations", [])
+
+    if not relations:
+        return {"success": True, "saved": 0, "message": "Aucun lien HATEOAS détecté"}
+
+    count = await extractor.save_hateoas_relations(source_id, relations)
+    return {"success": True, "saved": count, "detected": len(relations)}
+
+
+@app.get("/sources/{source_id}/relations/by-method", tags=["Relations"])
+async def get_relations_by_method(source_id: UUID):
+    """
+    Retourne le compte des relations par méthode de détection.
+    Permet de voir combien de relations viennent de GraphQL, HATEOAS, etc.
+    """
+    pool = await get_pg_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT detection_method, COUNT(*) AS count,
+                   AVG(confidence) AS avg_confidence
+            FROM entity_relations
+            WHERE source_id = $1
+            GROUP BY detection_method
+            ORDER BY count DESC
+        """, source_id)
+
+    return {
+        "source_id": str(source_id),
+        "by_method": [
+            {
+                "method":         r["detection_method"],
+                "count":          r["count"],
+                "avg_confidence": round(float(r["avg_confidence"] or 0), 3),
+            }
+            for r in rows
+        ],
+    }
+
+
+# ══════════════════════════════════════════════════════════════
+# §2.2.5 — CDC DB TRIGGERS (WAL + MSSQL CDC)
+# ══════════════════════════════════════════════════════════════
+
+@app.get("/sources/{source_id}/cdc/wal/status", tags=["CDC"])
+async def cdc_wal_status(source_id: UUID):
+    """
+    Vérifie si PostgreSQL WAL logical replication est configuré
+    pour cette source.
+    """
+    source = await get_source(source_id)
+    if not source:
+        raise HTTPException(404, f"Source {source_id} introuvable")
+
+    if source.connector_type.value not in ("postgresql", "pg"):
+        return {
+            "supported": False,
+            "message": "WAL CDC disponible uniquement pour PostgreSQL",
+        }
+
+    from .database import _redis
+    cdc = PostgreSQLWALCDC(await get_pg_pool(), _redis)
+
+    # Pour le check, on utilise la connexion interne OnePilot
+    # En production, on utiliserait la connexion source
+    return {
+        "supported": True,
+        "source_id": str(source_id),
+        "slot_name": PostgreSQLWALCDC.SLOT_NAME,
+        "message":   "Configurez wal_level=logical et créez le slot de réplication",
+        "setup_sql": (
+            "ALTER SYSTEM SET wal_level = logical;\n"
+            "SELECT pg_reload_conf();\n"
+            "SELECT pg_create_logical_replication_slot('onepilot_cdc', 'wal2json');"
+        ),
+    }
+
+
+@app.get("/sources/{source_id}/cdc/mssql/status", tags=["CDC"])
+async def cdc_mssql_status(source_id: UUID):
+    """
+    Vérifie si SQL Server CDC natif est activé pour cette source.
+    """
+    source = await get_source(source_id)
+    if not source:
+        raise HTTPException(404, f"Source {source_id} introuvable")
+
+    if source.connector_type.value not in ("mssql", "sage_100"):
+        return {
+            "supported": False,
+            "message": "MSSQL CDC disponible uniquement pour SQL Server",
+        }
+
+    from .database import _redis
+    cdc = SQLServerCDC(await get_pg_pool(), _redis)
+    result = await cdc.check_cdc_enabled(source_id)
+    return {
+        "source_id": str(source_id),
+        **result,
+        "setup_sql": (
+            "EXEC sys.sp_cdc_enable_db;\n"
+            "EXEC sys.sp_cdc_enable_table "
+            "@source_schema='dbo', @source_name='Products', "
+            "@role_name=NULL;"
+        ),
+    }
+
+
+@app.post("/sources/{source_id}/cdc/mssql/poll", tags=["CDC"])
+async def cdc_mssql_poll(source_id: UUID):
+    """
+    Lit les changements DDL récents depuis le default trace SQL Server.
+    Ne nécessite pas CDC natif activé — utilise sys.fn_trace_gettable.
+    """
+    source = await get_source(source_id)
+    if not source:
+        raise HTTPException(404, f"Source {source_id} introuvable")
+
+    from .database import _redis
+    cdc = SQLServerCDC(await get_pg_pool(), _redis)
+    result = await cdc.poll_ddl_changes(source_id)
+    return result
+
+
+@app.get("/sources/{source_id}/cdc/wal/notifications", tags=["CDC"])
+async def cdc_wal_notifications(source_id: UUID, limit: int = 20):
+    """Retourne les dernières notifications WAL/DDL."""
+    redis = await get_redis()
+    try:
+        key   = f"cdc:wal:notifications:{source_id}"
+        items = await redis.lrange(key, 0, limit - 1)
+        notifs = [json_module.loads(i) for i in items]
+    except Exception:
+        notifs = []
+
+    # Fallback PostgreSQL
+    if not notifs:
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT event_type, object_name, payload, detected_at
+                FROM cdc_wal_log
+                WHERE source_id = $1
+                ORDER BY detected_at DESC
+                LIMIT $2
+            """, source_id, limit)
+            notifs = [
+                {
+                    "event_type":  r["event_type"],
+                    "object_name": r["object_name"],
+                    "payload":     r["payload"],
+                    "detected_at": r["detected_at"].isoformat(),
+                }
+                for r in rows
+            ]
+
+    return {
+        "source_id":     str(source_id),
+        "count":         len(notifs),
+        "notifications": notifs,
+    }
+
+
+class NLURequest(BaseModel):
+    question:        str
+    source_id:       Optional[str] = None
+    conversation_id: Optional[str] = None
+
+@app.post("/nlu/analyze", tags=["NLU"])
+async def nlu_analyze(req: NLURequest):
+    """
+    Analyse une question en langage naturel.
+    Retourne intent, entités extraites, slots remplis.
+    """
+    import time
+    t0 = time.time()
+
+    nlu     = get_nlu_pipeline()
+    context = get_context(req.conversation_id or "default")
+
+    # Récupère les entités connues de la source
+    known_entities = []
+    known_fields   = {}
+    if req.source_id:
+        try:
+            source_id = UUID(req.source_id)
+            pool = await get_pg_pool()
+            async with pool.acquire() as conn:
+                rows = await conn.fetch(
+                    "SELECT name FROM source_entities WHERE source_id=$1 AND is_visible=TRUE ORDER BY name LIMIT 2000",
+                    source_id
+                )
+                known_entities = [r["name"] for r in rows]
+
+                # Récupère les champs pour les tables détectées
+                field_rows = await conn.fetch("""
+                    SELECT se.name AS table_name, ef.name AS field_name
+                    FROM source_entities se
+                    JOIN entity_fields ef ON ef.entity_id = se.id
+                    WHERE se.source_id = $1 AND se.is_visible = TRUE
+                    LIMIT 1000
+                """, source_id)
+                for r in field_rows:
+                    known_fields.setdefault(r["table_name"], []).append(r["field_name"])
+        except Exception as e:
+            logger.warning(f"[NLU] Entities fetch error: {e}")
+
+    # Pipeline NLU
+    slots = nlu.process(req.question, context, known_entities)
+
+    # Détection ambiguïtés
+    resolver   = AmbiguityResolver()
+    questions  = resolver.analyze(slots, known_entities, known_fields)
+    clarif     = resolver.build_clarification_response(questions)
+
+    # Log dans DB
+    ms = int((time.time() - t0) * 1000)
+    try:
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            await conn.execute("""
+                INSERT INTO nlu_query_log
+                    (conversation_id, source_id, question, intent, confidence,
+                     tables_detected, slots_json, needs_clarification, clarification_json, response_ms)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+            """,
+                req.conversation_id or "default",
+                UUID(req.source_id) if req.source_id else None,
+                req.question,
+                slots.intent,
+                slots.confidence,
+                slots.table_names,
+                json_module.dumps({
+                    "metric":       slots.metric,
+                    "group_by":     slots.group_by,
+                    "date_filter":  slots.date_filter,
+                    "amount_filter":slots.amount_filter,
+                    "top_n":        slots.top_n,
+                }),
+                clarif.get("needs_clarification", False),
+                json_module.dumps(clarif) if clarif.get("needs_clarification") else None,
+                ms,
+            )
+    except Exception as e:
+        logger.warning(f"[NLU] Log error: {e}")
+
+    return {
+        "intent":      slots.intent,
+        "confidence":  slots.confidence,
+        "nlu_method":  getattr(slots, "nlu_method", "hybrid"),
+        "tables":      slots.table_names,
+        "metric":      slots.metric,
+        "group_by":    slots.group_by,
+        "date_filter": slots.date_filter,
+        "top_n":       slots.top_n,
+        "ambiguities": slots.ambiguities,
+        "needs_clarification": clarif.get("needs_clarification", False),
+        "clarification":       clarif if clarif.get("needs_clarification") else None,
+        "response_ms": ms,
+    }
+
+
+# ══════════════════════════════════════════════════════════════
+# §2.3.3 — SQL GENERATOR
+# ══════════════════════════════════════════════════════════════
+
+class SQLGenRequest(BaseModel):
+    question:        str
+    source_id:       str
+    conversation_id: Optional[str] = None
+
+@app.post("/nlu/generate-sql", tags=["NLU"])
+async def generate_sql(req: SQLGenRequest):
+    """
+    Génère du SQL depuis une question en langage naturel.
+    Pipeline complet : NLU → slots → SQL Generator.
+    """
+    import time
+    t0 = time.time()
+
+    source_id = UUID(req.source_id)
+    source    = await get_source(source_id)
+    if not source:
+        raise HTTPException(404, f"Source {req.source_id} introuvable")
+
+    # Récupère le schéma
+    pool = await get_pg_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT se.name AS table_name, ef.name AS field_name
+            FROM source_entities se
+            JOIN entity_fields ef ON ef.entity_id = se.id
+            WHERE se.source_id = $1 AND se.is_visible = TRUE
+            ORDER BY se.name, ef.position
+            LIMIT 2000
+        """, source_id)
+
+    schema: dict = {}
+    for r in rows:
+        schema.setdefault(r["table_name"], []).append(r["field_name"])
+
+    known_entities = list(schema.keys())
+
+    # NLU
+    nlu     = get_nlu_pipeline()
+    context = get_context(req.conversation_id or req.source_id)
+    slots   = nlu.process(req.question, context, known_entities)
+
+    # Vérifie ambiguïtés bloquantes
+    resolver  = AmbiguityResolver()
+    questions = resolver.analyze(slots, known_entities, schema)
+    if questions and questions[0].required:
+        clarif = resolver.build_clarification_response(questions)
+        return {
+            "sql":         None,
+            "explanation": "Clarification nécessaire avant génération SQL",
+            "needs_clarification": True,
+            "clarification":       clarif,
+            "intent":      slots.intent,
+            "response_ms": int((time.time() - t0) * 1000),
+        }
+
+    # Dialecte SQL selon le type de connecteur
+    dialect_map = {"mssql": "mssql", "sage_100": "mssql", "mysql": "mysql",
+                   "postgresql": "postgresql", "sqlite": "sqlite"}
+    dialect = dialect_map.get(source.connector_type.value, "sql")
+
+    # Génère le SQL
+    sql_gen = SQLGenerator()
+    result  = sql_gen.generate(slots, schema, dialect)
+
+    # Sauvegarde dans le log
+    try:
+        async with pool.acquire() as conn:
+            await conn.execute("""
+                UPDATE nlu_query_log SET sql_generated = $1
+                WHERE conversation_id = $2 AND question = $3
+                ORDER BY created_at DESC LIMIT 1
+            """, result["sql"], req.conversation_id or "default", req.question)
+    except Exception:
+        pass
+
+    ms = int((time.time() - t0) * 1000)
+    return {
+        "sql":         result["sql"],
+        "explanation": result["explanation"],
+        "warnings":    result.get("warnings", []),
+        "intent":      slots.intent,
+        "tables":      slots.table_names,
+        "dialect":     dialect,
+        "needs_clarification": False,
+        "response_ms": ms,
+    }
+
+
+# ══════════════════════════════════════════════════════════════
+# §2.3.3.C — UNIVERSAL QUERY PLANNER
+# ══════════════════════════════════════════════════════════════
+
+class QueryPlanRequest(BaseModel):
+    question:   str
+    source_ids: List[str]
+
+@app.post("/nlu/query-plan", tags=["NLU"])
+async def create_query_plan(req: QueryPlanRequest):
+    """
+    Crée un plan d'exécution cross-source pour une question complexe.
+    Décompose la question en sous-requêtes atomiques.
+    """
+    pool = await get_pg_pool()
+
+    # Charge les sources
+    sources = []
+    schemas = {}
+    for sid in req.source_ids[:5]:
+        try:
+            src = await get_source(UUID(sid))
+            if src:
+                sources.append(src.model_dump())
+                # Charge le schéma
+                async with pool.acquire() as conn:
+                    rows = await conn.fetch("""
+                        SELECT se.name AS t, ef.name AS f
+                        FROM source_entities se
+                        JOIN entity_fields ef ON ef.entity_id = se.id
+                        WHERE se.source_id = $1 AND se.is_visible = TRUE
+                        LIMIT 500
+                    """, UUID(sid))
+                schema = {}
+                for r in rows:
+                    schema.setdefault(r["t"], []).append(r["f"])
+                schemas[sid] = schema
+        except Exception as e:
+            logger.warning(f"[QueryPlanner] Source {sid}: {e}")
+
+    if not sources:
+        raise HTTPException(400, "Aucune source valide")
+
+    # NLU
+    nlu     = get_nlu_pipeline()
+    known   = [t for schema in schemas.values() for t in schema.keys()]
+    slots   = nlu.process(req.question, None, known)
+
+    # Query Planner
+    planner = UniversalQueryPlanner()
+    plan    = planner.plan(slots, sources, schemas)
+
+    # Sauvegarde le plan
+    plan_id = None
+    try:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow("""
+                INSERT INTO query_plans (question, source_ids, plan_json, status)
+                VALUES ($1, $2, $3, 'ready')
+                RETURNING id
+            """,
+                req.question,
+                [UUID(s) for s in req.source_ids],
+                json_module.dumps([
+                    {
+                        "step_id":     s.step_id,
+                        "source_id":   s.source_id,
+                        "source_type": s.source_type,
+                        "action":      s.action,
+                        "query":       s.query,
+                        "depends_on":  s.depends_on,
+                        "parallel":    s.parallel,
+                    }
+                    for s in plan.steps
+                ]),
+            )
+            plan_id = str(row["id"])
+    except Exception as e:
+        logger.warning(f"[QueryPlanner] Save error: {e}")
+
+    return {
+        "plan_id":        plan_id,
+        "question":       req.question,
+        "intent":         slots.intent,
+        "steps":          [
+            {
+                "step_id":     s.step_id,
+                "source_id":   s.source_id,
+                "source_type": s.source_type,
+                "action":      s.action,
+                "query":       s.query,
+                "depends_on":  s.depends_on,
+                "parallel":    s.parallel,
+            }
+            for s in plan.steps
+        ],
+        "merge_strategy": plan.merge_strategy,
+        "explanation":    plan.explanation,
+        "estimated_ms":   plan.estimated_ms,
+    }
+
+
+# ══════════════════════════════════════════════════════════════
+# §2.3.4 — CLARIFICATION
+# ══════════════════════════════════════════════════════════════
+
+class ClarificationRequest(BaseModel):
+    conversation_id: str
+    slot_key:        str
+    value:           str
+    original_question: str
+    source_id:       Optional[str] = None
+
+@app.post("/nlu/clarify", tags=["NLU"])
+async def apply_clarification(req: ClarificationRequest):
+    """
+    Applique une réponse de clarification et régénère le SQL.
+    """
+    nlu      = get_nlu_pipeline()
+    resolver = AmbiguityResolver()
+    context  = get_context(req.conversation_id)
+
+    known_entities = []
+    known_fields   = {}
+    if req.source_id:
+        try:
+            pool = await get_pg_pool()
+            async with pool.acquire() as conn:
+                rows = await conn.fetch(
+                    "SELECT name FROM source_entities WHERE source_id=$1 AND is_visible=TRUE ORDER BY name LIMIT 2000",
+                    UUID(req.source_id)
+                )
+                known_entities = [r["name"] for r in rows]
+        except Exception:
+            pass
+
+    # Reprocess la question originale
+    slots = nlu.process(req.original_question, context, known_entities)
+
+    # Applique la clarification
+    slots = resolver.apply_clarification(slots, req.slot_key, req.value)
+
+    # Regénère
+    if req.source_id and not slots.ambiguities:
+        gen_req = SQLGenRequest(
+            question        = req.original_question,
+            source_id       = req.source_id,
+            conversation_id = req.conversation_id,
+        )
+        # Modifie la question pour inclure la clarification
+        gen_req.question = f"{req.original_question} pour {req.value}"
+        return await generate_sql(gen_req)
+
+    return {
+        "slots_updated": True,
+        "intent":        slots.intent,
+        "tables":        slots.table_names,
+        "ambiguities":   slots.ambiguities,
+    }
+
+
+# ══════════════════════════════════════════════════════════════
+# STATS NLU
+# ══════════════════════════════════════════════════════════════
+
+@app.get("/nlu/stats", tags=["NLU"])
+async def nlu_stats():
+    """Statistiques d'utilisation du NLU."""
+    pool = await get_pg_pool()
+    try:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch("SELECT * FROM nlu_intent_stats")
+            total = await conn.fetchval("SELECT COUNT(*) FROM nlu_query_log")
+        return {
+            "total_queries": total,
+            "by_intent": [dict(r) for r in rows],
+        }
+    except Exception as e:
+        return {"total_queries": 0, "by_intent": [], "error": str(e)}
+
+
+@app.delete("/nlu/context/{conversation_id}", tags=["NLU"])
+async def clear_nlu_context(conversation_id: str):
+    """Efface le contexte NLU d'une conversation."""
+    clear_context(conversation_id)
+    return {"success": True, "conversation_id": conversation_id}
 
 
 # ══════════════════════════════════════════════════════════════

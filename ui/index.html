@@ -1198,6 +1198,25 @@ td .btn-sm { padding: 3px 8px !important; font-size: 11px !important; }
 .cdc-loading { display:flex; align-items:center; justify-content:center; padding:32px;
   color:var(--text-2); font-size:13px; gap:10px; }
 
+
+/* ── Chips GraphQL / HATEOAS ── */
+.method-chip.chip-graphql             { border-color:rgba(229,53,171,0.4); color:#e535ab; }
+.method-chip.chip-graphql.active-chip { background:rgba(229,53,171,0.1); border-color:#e535ab; color:#e535ab; }
+.method-chip.chip-hateoas             { border-color:rgba(255,160,0,0.4); color:#ffa000; }
+.method-chip.chip-hateoas.active-chip { background:rgba(255,160,0,0.1); border-color:#ffa000; color:#ffa000; }
+html.light .method-chip.chip-graphql.active-chip { background:#fce4f3; border-color:#880e4f; color:#880e4f; }
+html.light .method-chip.chip-hateoas.active-chip { background:#fff8e1; border-color:#e65100; color:#e65100; }
+/* ── Badge enrichissement descriptions ── */
+.enrich-badge { display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:10px;font-size:11px;font-family:var(--font-mono);font-weight:600;border:1px solid;cursor:default;white-space:nowrap; }
+.enrich-high   { background:var(--green-glow);color:var(--green);border-color:rgba(46,184,138,0.3); }
+.enrich-medium { background:rgba(201,162,62,0.10);color:var(--yellow);border-color:rgba(201,162,62,0.3); }
+.enrich-low    { background:rgba(217,79,107,0.08);color:var(--red);border-color:rgba(217,79,107,0.25); }
+.enrich-none   { background:var(--bg-3);color:var(--text-3);border-color:var(--border); }
+/* ── Badge CDC DB status ── */
+.cdc-status-badge { display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:10px;font-size:11px;font-family:var(--font-mono);font-weight:600;border:1px solid; }
+.cdc-status-on  { background:var(--green-glow);color:var(--green);border-color:rgba(46,184,138,0.3); }
+.cdc-status-off { background:var(--bg-3);color:var(--text-3);border-color:var(--border); }
+
 </style>
 </head>
 <body>
@@ -2124,7 +2143,7 @@ async function loadDomainStats() {
         .sort(function(a,b){ return b[1]-a[1]; })
         .slice(0,3);
       if (!topDomains.length) continue;
-      el.innerHTML = topDomains.map(function(d) {
+  el.innerHTML = topDomains.map(function(d) {
         return '<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:'+getDomainColor(d[0])+';color:#fff;margin-right:3px;opacity:0.9;">'+d[0]+'</span>';
       }).join('');
     } catch(e) {}
@@ -2275,11 +2294,12 @@ async function showSourceDetailRaw(id, page, search) {
       '<button class="btn btn-back btn-sm" onclick="showView(\'overview\')"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 2 2 7 8 12"/><line x1="2" y1="7" x2="13" y2="7"/></svg>Retour</button>' +
       '</div></div>' +
 
-      '<div class="info-grid">' +
+      '<div class="info-grid" style="grid-template-columns:repeat(5,1fr);">' +
       '<div class="info-cell"><div class="info-label">Hôte / URL</div><div class="info-value" style="font-family:var(--font-mono);font-size:12px;">' + (s.host||s.base_url||'—') + (s.port?':'+s.port:'') + '</div></div>' +
       '<div class="info-cell"><div class="info-label">Base / Schéma</div><div class="info-value">' + (s.database_name||'—') + '</div></div>' +
       '<div class="info-cell"><div class="info-label">Authentification</div><div class="info-value">' + s.auth_type + '</div></div>' +
       '<div class="info-cell"><div class="info-label">Entités indexées</div><div class="info-value" style="color:var(--accent)">' + (pg.total_entities||s.entity_count||0) + '</div></div>' +
+      '<div class="info-cell" id="enrich-cell-' + id + '"><div class="info-label">Descriptions</div><div class="info-value"><span class="enrich-badge enrich-none">—</span></div></div>' +
       '</div>' +
 
       '<div style="padding:0 28px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">' +
@@ -2302,6 +2322,23 @@ async function showSourceDetailRaw(id, page, search) {
 async function showSourceDetail(id, page, search) {
   await showSourceDetailRaw(id, page, search);
   setRoute('#source/' + id);
+  loadEnrichmentBadge(id);
+}
+
+async function loadEnrichmentBadge(id) {
+  var cell = document.getElementById('enrich-cell-' + id);
+  if (!cell) return;
+  try {
+    var r = await apiFetch('/sources/' + id + '/enrichment/summary');
+    var pct = r.description_coverage_pct || 0;
+    var cls = pct >= 70 ? 'enrich-high' : pct >= 30 ? 'enrich-medium' : pct > 0 ? 'enrich-low' : 'enrich-none';
+    var icon = pct >= 70
+      ? '<svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;"><polyline points="2 7 5.5 10.5 12 4"/></svg>'
+      : '<svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="display:inline-block;vertical-align:middle;"><rect x="2" y="4" width="10" height="7" rx="1.5"/><line x1="5" y1="7" x2="9" y2="7"/></svg>';
+    cell.querySelector('.info-value').innerHTML =
+      '<span class="enrich-badge ' + cls + '" title="' + r.entities_with_description + '/' + r.total_entities + ' entités décrites">' +
+      icon + ' ' + pct + '%</span>';
+  } catch(e) { /* non-bloquant */ }
 }
 
 async function testSourceById(id) {
@@ -2680,6 +2717,17 @@ function renderMethodChips(sourceType) {
     var ICO_CROSS = '<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="7" cy="7" r="5"/><line x1="4" y1="7" x2="10" y2="7"/><line x1="7" y1="4" x2="7" y2="10"/></svg>';
     html += '<span class="chip-section-sep"></span>';
     html += renderChip({method:'cross_source', cls:'chip-cross', icon:ICO_CROSS, label:'Cross-source', title:'Relations entre sources différentes'});
+  }
+  // GraphQL nested types
+  var hasGraphQL = relAllData.some(function(r) { return r.detection_method === 'graphql_nested_type'; });
+  if (hasGraphQL) {
+    if (!hasCross) html += '<span class="chip-section-sep"></span>';
+    html += renderChip({method:'graphql_nested_type', cls:'chip-graphql', icon:'<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="3" r="1.5"/><circle cx="12" cy="6" r="1.5"/><circle cx="12" cy="10" r="1.5"/><circle cx="7" cy="13" r="1.5"/><circle cx="2" cy="10" r="1.5"/><circle cx="2" cy="6" r="1.5"/><polygon points="7 3 12 6 12 10 7 13 2 10 2 6" fill="none"/></svg>', label:'GraphQL', title:'Relations GraphQL nested types'});
+  }
+  // HATEOAS links
+  var hasHateoas = relAllData.some(function(r) { return r.detection_method && r.detection_method.startsWith('hateoas'); });
+  if (hasHateoas) {
+    html += renderChip({method:'hateoas', cls:'chip-hateoas', icon:'<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 8.5a3.5 3.5 0 0 0 5 0l1.5-1.5a3.5 3.5 0 0 0-5-5L5.5 3.5"/><path d="M8.5 5.5a3.5 3.5 0 0 0-5 0L2 7a3.5 3.5 0 0 0 5 5l1.5-1.5"/></svg>', label:'HATEOAS', title:'Liens HATEOAS / HAL / $ref OpenAPI'});
   }
 
   container.innerHTML = html;
@@ -6378,7 +6426,8 @@ async function renderCDCView(id) {
 
   // Charge les données en parallèle
   var src = (allSources||[]).find(function(s){ return s.id===id; }) || {};
-  var isFile = (src.connector_type||'').startsWith('file_');
+  var isFile     = (src.connector_type||'').startsWith('file_');
+  var isPostgres = (src.connector_type||'').includes('postgres');
 
   var [versions, reviewRels, reindexLog] = await Promise.all([
     apiFetch('/sources/' + id + '/versions?limit=30').catch(function(){return {versions:[]};}),
@@ -6400,6 +6449,9 @@ async function renderCDCView(id) {
   var breaking = vlist.filter(function(v){ return v.has_breaking; }).length;
   var needsRev = rlist.length;
   var lastV    = vlist[0] || null;
+
+  // Charge le badge CDC DB status (WAL/MSSQL) en arrière-plan
+  setTimeout(function(){ loadCDCDBStatus(id, src); }, 100);
 
   el.innerHTML =
     // Header
@@ -6424,11 +6476,13 @@ async function renderCDCView(id) {
     '</div>' +
 
     // Onglets
+    '<div id="cdc-db-status-' + id + '"></div>' +
     '<div class="cdc-tabs">' +
     '<div class="cdc-tab active" onclick="switchCDCTab(\'versions\', this)"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:5px;"><circle cx="7" cy="7" r="5"/><polyline points="7 4 7 7 9 9"/></svg>Historique</div>' +
     (needsRev>0 ? '<div class="cdc-tab" onclick="switchCDCTab(\'review\', this)"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:5px;"><path d="M7 2L13 12H1L7 2z"/><line x1="7" y1="6" x2="7" y2="9"/><circle cx="7" cy="11" r="0.5" fill="currentColor"/></svg>Révision (' + needsRev + ')</div>' : '<div class="cdc-tab" onclick="switchCDCTab(\'review\', this)"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:5px;"><polyline points="2 7 5.5 10.5 12 4"/></svg>Relations</div>') +
     (isFile ? '<div class="cdc-tab" onclick="switchCDCTab(\'file\', this)"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:5px;"><path d="M8 1H3a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5L8 1z"/><polyline points="8 1 8 5 12 5"/></svg>Fichier</div>' : '') +
     '<div class="cdc-tab" onclick="switchCDCTab(\'reindex\', this)"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:5px;"><path d="M1 4c1-2 3-3 6-3a6 6 0 0 1 6 6"/><path d="M13 10c-1 2-3 3-6 3a6 6 0 0 1-6-6"/><polyline points="1 1 1 4 4 4"/><polyline points="13 13 13 10 10 10"/></svg>Réindexation</div>' +
+    (isPostgres ? '<div class="cdc-tab" onclick="switchCDCTab(\'wal\', this);loadWALLogs(\''+id+'\')"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:5px;"><rect x="1" y="2" width="12" height="10" rx="1.5"/><line x1="4" y1="5" x2="10" y2="5"/><line x1="4" y1="7" x2="10" y2="7"/><line x1="4" y1="9" x2="7" y2="9"/></svg>WAL</div>' : '') +
     '</div>' +
 
     // Tab: Historique versions
@@ -6448,6 +6502,11 @@ async function renderCDCView(id) {
     '<div class="cdc-tab-content" id="cdcTab-reindex">' +
     renderCDCReindexLog(logList) +
     '</div>' +
+
+    // Tab: WAL Logs (PostgreSQL uniquement)
+    (isPostgres ? '<div class="cdc-tab-content" id="cdcTab-wal">' +
+    '<div style="padding:16px 20px;text-align:center;color:var(--text-2);font-size:13px;"><div class="spinner" style="width:16px;height:16px;border-width:2px;margin:0 auto 8px;"></div>Chargement des logs WAL...</div>' +
+    '</div>' : '') +
 
     '</div>';
 }
@@ -6706,6 +6765,93 @@ async function rejectReviewedRel(sourceId, relId) {
 }
 
 // ── Helpers ──────────────────────────────────────────────
+async function loadCDCDBStatus(id, src) {
+  var el = document.getElementById('cdc-db-status-' + id);
+  if (!el) return;
+  var ct = (src && src.connector_type) || '';
+  var isPg  = ct.includes('postgres');
+  var isSql = ct.includes('mssql') || ct.includes('sage');
+  if (!isPg && !isSql) return;
+  try {
+    var endpoint = isPg ? '/sources/' + id + '/cdc/wal/status' : '/sources/' + id + '/cdc/mssql/status';
+    var r = await apiFetch(endpoint);
+    var enabled = r.cdc_enabled || r.wal_ok;
+    var label   = isPg ? 'WAL Logical Replication' : 'SQL Server CDC natif';
+    var cls     = enabled ? 'cdc-status-on' : 'cdc-status-off';
+    var iconOk  = '<svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;"><polyline points="2 7 5.5 10.5 12 4"/></svg>';
+    var iconOff = '<svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="display:inline-block;vertical-align:middle;"><line x1="3" y1="3" x2="11" y2="11"/><line x1="11" y1="3" x2="3" y2="11"/></svg>';
+    var tracked = r.tracked_tables != null ? ' · ' + r.tracked_tables + ' tables tracées' : '';
+    el.innerHTML =
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:7px 14px;background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);">' +
+      '<span class="cdc-status-badge ' + cls + '">' + (enabled ? iconOk : iconOff) + ' ' + label + '</span>' +
+      '<span style="font-size:11px;color:var(--text-2);">' + (enabled ? 'Actif' + tracked : 'Non configuré') + '</span>' +
+      '</div>';
+  } catch(e) { /* non-bloquant */ }
+}
+
+
+async function loadWALLogs(sourceId) {
+  var el = document.getElementById('cdcTab-wal');
+  if (!el) return;
+
+  el.innerHTML = '<div style="padding:20px;text-align:center;"><div class="spinner" style="width:16px;height:16px;border-width:2px;margin:0 auto 8px;"></div>Chargement...</div>';
+
+  try {
+    var r = await apiFetch('/sources/' + sourceId + '/cdc/wal/notifications?limit=50');
+    var notifs = r.notifications || [];
+
+    if (!notifs.length) {
+      el.innerHTML =
+        '<div style="padding:32px;text-align:center;color:var(--text-2);font-size:13px;">' +
+        '<svg width="32" height="32" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style="display:block;margin:0 auto 12px;opacity:0.4;"><rect x="1" y="2" width="12" height="10" rx="1.5"/><line x1="4" y1="5" x2="10" y2="5"/><line x1="4" y1="7" x2="10" y2="7"/><line x1="4" y1="9" x2="7" y2="9"/></svg>' +
+        '<div style="font-weight:600;margin-bottom:6px;color:var(--text-1);">Aucun log WAL</div>' +
+        '<div style="font-size:12px;">Les changements DDL (ALTER TABLE, CREATE TABLE) apparaîtront ici automatiquement.</div>' +
+        '</div>';
+      return;
+    }
+
+    var rows = notifs.map(function(n) {
+      var changes = (n.changes || n.payload && n.payload.changes || []);
+      var ts = n.timestamp || n.detected_at || '';
+      var evType = n.event_type || n.event || '';
+      var count = n.count || changes.length || 0;
+
+      return '<div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:12px;">' +
+        '<div style="flex-shrink:0;margin-top:2px;">' +
+        '<span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:var(--bg-3);border:1px solid var(--border);">' +
+        '<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="2" width="12" height="10" rx="1.5"/><line x1="4" y1="5" x2="10" y2="5"/><line x1="4" y1="7" x2="10" y2="7"/></svg>' +
+        '</span></div>' +
+        '<div style="flex:1;min-width:0;">' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">' +
+        '<span style="font-family:var(--font-mono);font-size:11px;font-weight:600;color:var(--text-0);">' + (evType||'DDL_CHANGE') + '</span>' +
+        (count ? '<span style="font-size:10px;background:var(--accent-glow);color:var(--accent);padding:1px 6px;border-radius:8px;border:1px solid rgba(56,178,204,0.3);">' + count + ' changement' + (count>1?'s':'') + '</span>' : '') +
+        '</div>' +
+        (changes.length ? '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px;">' +
+          changes.slice(0,5).map(function(c) {
+            var tbl = c.table || c.object_name || '';
+            var kind = c.kind || c.event_type || '';
+            var color = kind.includes('DROP') ? 'var(--red)' : kind.includes('ALTER') ? 'var(--yellow)' : 'var(--green)';
+            return tbl ? '<span style="font-family:var(--font-mono);font-size:10px;padding:1px 6px;border-radius:4px;border:1px solid var(--border);color:'+color+';">' + (kind?kind+' ':'') + tbl + '</span>' : '';
+          }).join('') +
+          (changes.length > 5 ? '<span style="font-size:10px;color:var(--text-3);">+' + (changes.length-5) + ' autres</span>' : '') +
+        '</div>' : '') +
+        '<div style="font-size:10px;color:var(--text-3);font-family:var(--font-mono);">' + (ts ? formatCDCDate(ts) : '') + '</div>' +
+        '</div></div>';
+    }).join('');
+
+    el.innerHTML =
+      '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--bg-2);">' +
+      '<span style="font-size:12px;color:var(--text-1);">' + notifs.length + ' événement' + (notifs.length>1?'s':'') + ' WAL détecté' + (notifs.length>1?'s':'') + '</span>' +
+      '<button class="btn btn-secondary btn-xs" onclick="loadWALLogs(\'' + sourceId + '\')" style="gap:4px;">' +
+      '<svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4c1-2 3-3 6-3a6 6 0 0 1 6 6"/><path d="M13 10c-1 2-3 3-6 3a6 6 0 0 1-6-6"/><polyline points="1 1 1 4 4 4"/><polyline points="13 13 13 10 10 10"/></svg>Rafraîchir' +
+      '</button></div>' +
+      '<div>' + rows + '</div>';
+
+  } catch(e) {
+    el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--red);font-size:12px;">Erreur chargement WAL: ' + e.message + '</div>';
+  }
+}
+
 function formatCDCDate(iso) {
   if (!iso) return '—';
   try {
