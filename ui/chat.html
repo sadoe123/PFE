@@ -19,7 +19,7 @@
   --orange:#ff7a35;--red:#ff3663;--yellow:#ffbf40;--purple:#8b6eff;
   --font-mono:"JetBrains Mono",monospace;--font-sans:"Inter",-apple-system,BlinkMacSystemFont,sans-serif;
   --r:7px;--r-lg:14px;--r-sm:4px;
-  --sb-w:248px;--header-h:52px;--dp-w:360px;
+  --sb-w:280px;--header-h:52px;--dp-w:360px;
   --shadow:0 12px 40px rgba(0,0,0,.7);
   --tr:all .26s cubic-bezier(.4,0,.2,1);
 }
@@ -240,8 +240,8 @@ html.light .tt-th{transform:translateX(12px);}
 .exp-btn svg{width:11px;height:11px;}
 
 /* ════ DATA PANEL ════ */
-.dp{width:var(--dp-w);min-width:260px;max-width:540px;background:var(--bg-1);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;transition:var(--tr);}
-.dp.closed{width:0;min-width:0;border-left:none;}
+.dp{width:var(--dp-w);min-width:260px;max-width:540px;background:var(--bg-1);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;transition:width .32s cubic-bezier(.4,0,.2,1),opacity .25s ease,transform .32s cubic-bezier(.4,0,.2,1);transform:translateX(0);opacity:1;flex-shrink:0;}
+.dp.closed{width:0!important;min-width:0!important;border-left:none;transform:translateX(100%);opacity:0;pointer-events:none;}
 .dp-hdr{padding:0 14px;height:42px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;flex-shrink:0;}
 .dp-title{font-size:11.5px;font-weight:600;color:var(--text-1);margin-right:auto;}
 .dp-tab{padding:4px 10px;border-radius:var(--r-sm);font-size:11px;font-family:var(--font-mono);color:var(--text-2);cursor:pointer;border:1px solid transparent;transition:.12s;}
@@ -347,9 +347,9 @@ html.light .tt-th{transform:translateX(12px);}
 .sb-home-btn svg{width:13px;height:13px;}
 
 /* ── USER MSG ── */
-.msg-row.usr{flex-direction:row;}
-.msg-row.usr .bubble.usr{margin-left:auto;}
-.bubble.usr{border-bottom-left-radius:3px!important;border-bottom-right-radius:var(--r-lg)!important;}
+.msg-row.usr{flex-direction:row-reverse!important;}
+.msg-row.usr .bubble.usr{margin-left:0;margin-right:0;}
+.bubble.usr{border-bottom-left-radius:var(--r-lg)!important;border-bottom-right-radius:3px!important;}
 .msg-row.usr .msg-time{text-align:right;}
 
 /* ── BULLET POINTS ── */
@@ -432,7 +432,7 @@ html.light .tt-th{transform:translateX(12px);}
 
 /* Bot inchangé */
 .msg-row:not(.usr){flex-direction:row;}
-.av.bot{width:28px;height:28px;border-radius:8px;background:var(--bg-3);border:1px solid var(--border);padding:3px;flex-shrink:0;margin-top:3px;}
+.av.bot{width:28px;height:28px;border-radius:50%;background:var(--bg-3);border:1px solid var(--border);padding:3px;flex-shrink:0;margin-top:3px;}
 .av.bot img{width:100%;height:100%;object-fit:contain;}
 .bubble.bot{font-size:15px;line-height:1.75;color:var(--text-0);word-break:break-word;background:transparent;border:none;padding:0;flex:1;}
 
@@ -511,7 +511,7 @@ html.light .tt-th{transform:translateX(12px);}
 .msg-row.usr{flex-direction:row-reverse;}
 .bubble.usr{max-width:70%;padding:11px 16px;background:var(--bg-3);border:none;border-radius:18px 4px 18px 18px;font-size:15px;line-height:1.65;color:var(--text-0);word-break:break-word;}
 .av.usr{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#030f1c;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;}
-.av.bot{width:28px;height:28px;border-radius:8px;background:var(--bg-3);border:1px solid var(--border);padding:3px;flex-shrink:0;margin-top:2px;}
+.av.bot{width:28px;height:28px;border-radius:50%;background:var(--bg-3);border:1px solid var(--border);padding:3px;flex-shrink:0;margin-top:2px;}
 .av.bot img{width:100%;height:100%;object-fit:contain;}
 .bubble.bot{flex:1;font-size:15px;line-height:1.75;color:var(--text-0);background:transparent;border:none;padding:0;word-break:break-word;}
 .bubble.bot ul,.bubble.bot ol{padding-left:18px;margin:4px 0;}
@@ -529,7 +529,7 @@ html.light .tt-th{transform:translateX(12px);}
 .chip:hover{background:var(--bg-2)!important;border-color:var(--text-2)!important;color:var(--text-0)!important;transform:translateY(-1px);}
 
 /* ══ USER MSG : avatar gauche, bulle droite ══ */
-.msg-row.usr{flex-direction:row!important;}
+.msg-row.usr{flex-direction:row-reverse!important;}
 .bubble.usr{
   max-width:70%;padding:11px 16px;
   background:var(--bg-3);border:none;
@@ -628,7 +628,7 @@ kbd, samp, .font-mono {
 .uav { position: relative !important; }
 
 /* ══ USER MSG — avatar gauche ══ */
-.msg-row.usr { flex-direction: row !important; }
+.msg-row.usr { flex-direction: row-reverse !important; }
 .bubble.usr {
   border-radius: 4px 18px 18px 18px !important;
   background: var(--bg-3) !important;
@@ -899,6 +899,7 @@ code, pre, .bubble code, .bubble pre, kbd, .font-mono{
     <div class="hsp"></div>
     <div class="hdr-src">
       <div class="src-dot off" id="srcDot"></div>
+      <span class="src-lbl" id="srcLbl" style="font-size:11px;font-family:var(--font-mono);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-2);margin-right:4px;"></span>
       <select class="hdr-src-sel" id="srcSel" onchange="changeSource(this.value)">
         <option value="">Aucune source</option>
       </select>
@@ -937,6 +938,34 @@ code, pre, .bubble code, .bubble pre, kbd, .font-mono{
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 6.5L8 2l6 4.5"/><path d="M3 6v8h4v-4h2v4h4V6"/></svg>
             Retour à l'accueil
           </a>
+          <div class="um-divider"></div>
+          <button class="um-item" onclick="toggleVoiceMessages();closeUserMenu()">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 1a3 3 0 013 3v4a3 3 0 01-6 0V4a3 3 0 013-3z"/><path d="M3 8a5 5 0 0010 0"/><line x1="8" y1="13" x2="8" y2="15"/></svg>
+            Messages vocaux
+          </button>
+          <div class="um-divider"></div>
+          <div style="padding:8px 12px;">
+            <div style="font-size:10px;color:var(--text-3);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;">Paramètres voix</div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;">
+                <span style="font-size:12px;color:var(--text-2);">Voix</span>
+                <select id="ttsVoiceMenu" onchange="S.ttsVoice=this.value" style="background:var(--bg-2);border:1px solid var(--border);color:var(--text-1);padding:3px 6px;border-radius:5px;font-size:11px;">
+                  <option value="female">Féminine</option>
+                  <option value="male">Masculine</option>
+                </select>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;">
+                <span style="font-size:12px;color:var(--text-2);">Vitesse</span>
+                <select id="ttsSpeedMenu" onchange="S.ttsSpeed=parseFloat(this.value)" style="background:var(--bg-2);border:1px solid var(--border);color:var(--text-1);padding:3px 6px;border-radius:5px;font-size:11px;">
+                  <option value="0.75">x0.75 lent</option>
+                  <option value="1.0" selected>x1.0 normal</option>
+                  <option value="1.25">x1.25</option>
+                  <option value="1.5">x1.5 rapide</option>
+                  <option value="2.0">x2.0 ultra</option>
+                </select>
+              </div>
+            </div>
+          </div>
           <div class="um-divider"></div>
           <button class="um-item um-logout" onclick="logout()">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M10 2h4v12h-4"/><polyline points="7 11 10 8 7 5"/><line x1="1" y1="8" x2="10" y2="8"/></svg>
@@ -1059,7 +1088,7 @@ function applyAuth(){
 }
 
 // ════ STATE ════
-const S={convId:null,srcId:null,sources:[],convs:[],streaming:false,abort:null,recognition:null,voiceOn:false,voiceTimer:null,voiceSec:0,mediaRec:null,audioChunks:[],ttsAudio:null,ttsBtnRef:null,dpTab:'chart',charts:{},sbOpen:true,dpOpen:false,searchQ:''};
+const S={convId:null,srcId:null,sources:[],convs:[],streaming:false,abort:null,recognition:null,voiceOn:false,voiceTimer:null,voiceSec:0,mediaRec:null,audioChunks:[],ttsAudio:null,ttsBtnRef:null,autoTTS:false,autoTTS:false,dpTab:'chart',charts:{},sbOpen:true,dpOpen:false,searchQ:''};
 let srcCtx=null,lastData=null;
 
 // ════ LAYOUT TOGGLES ════
@@ -1280,7 +1309,7 @@ async function doStream(q){
       }
     }
   }
-  if(full)extractData(q,full);
+  if(full){extractData(q,full);autoSpeak(full);if(S.autoTTS||true)preserveVoiceContext(q,full);}
   await saveConv(q);
   S.streaming=false;S.abort=null;
   document.getElementById('streamBadge').classList.remove('on');
@@ -1423,12 +1452,16 @@ function setTab(tab,el){
   S.dpTab=tab;
   document.querySelectorAll('.dp-tab').forEach(t=>t.classList.remove('active'));
   el.classList.add('active');
-  if(!S.dpOpen)toggleDP();
+  /* auto-open désactivé */
   renderDP();
 }
 function extractData(q,a){
-  const numM=[...a.matchAll(/(\w[\w\s]*?)[\s:]+(\d{1,8})/g)];
+  // N'affiche le graphe que si la réponse contient une vraie agrégation SQL
+  const hasAgg = /\b(SUM|COUNT|AVG|MAX|MIN|GROUP BY|HAVING|OVER|running_total)\b/i.test(a);
+  const hasWindow = /OVER\s*\(/i.test(a);
   const tableM=a.match(/\|.+\|[\s\S]*?\|.+\|/);
+  if(!hasAgg && !hasWindow && !tableM){lastData=null;return;}
+  const numM=[...a.matchAll(/(\w[\w\s]*?)[\s:]+(\d{1,8})/g)];
   if(numM.length>=3){
     const labels=numM.slice(0,12).map(m=>m[1].trim().substring(0,22));
     const values=numM.slice(0,12).map(m=>parseInt(m[2]));
@@ -1440,7 +1473,7 @@ function extractData(q,a){
     const nums=[...a.matchAll(/(\d+)/g)].map(m=>parseInt(m[1])).filter(n=>n>0&&n<1e7).slice(0,4);
     if(nums.length>=2)lastData={type:'stats',values:nums,title:q.substring(0,52)};
   }
-  if(lastData){if(!S.dpOpen)toggleDP();renderDP();}
+  if(lastData){renderDP();}  /* auto-open désactivé */
 }
 function renderDP(){
   if(S.dpTab==='ctx'){renderCtx();return;}
@@ -1521,14 +1554,14 @@ function initResizer(){
 // ════ VOICE STT ════
 function toggleVoice(){S.voiceOn?stopVoice():startVoice();}
 function startVoice(){
-  if('webkitSpeechRecognition'in window||'SpeechRecognition'in window){
-    const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-    S.recognition=new SR();S.recognition.lang='fr-FR';S.recognition.continuous=false;S.recognition.interimResults=true;
-    S.recognition.onresult=e=>{let fi='',it='';for(const r of e.results){if(r.isFinal)fi+=r[0].transcript;else it+=r[0].transcript;}document.getElementById('voTranscript').textContent=fi||it||'Parlez maintenant…';if(fi){stopVoice();document.getElementById('inp').value=fi.trim();refreshSend();}};
-    S.recognition.onerror=()=>{stopVoice();toast('Erreur microphone');};
-    S.recognition.onend=()=>{if(S.voiceOn)stopVoice();};
-    S.recognition.start();
-  }else startMediaRec();
+  // Interruption auto — si Piper lit → stop
+  if(S.ttsAudio){
+    S.ttsAudio.pause();S.ttsAudio=null;
+    document.getElementById('ttsStopBtn')?.remove();
+    if(S.ttsBtnRef){S.ttsBtnRef.classList.remove('playing');S.ttsBtnRef.innerHTML=ttsIco()+'Écouter';S.ttsBtnRef=null;}
+  }
+  // Whisper on-premise uniquement
+  startMediaRec();
   S.voiceOn=true;
   document.getElementById('voBtn')?.classList.add('rec','inp-btn');
   document.getElementById('voiceOverlay').classList.add('show');
@@ -1538,26 +1571,156 @@ function startVoice(){
 async function startMediaRec(){
   try{
     const stream=await navigator.mediaDevices.getUserMedia({audio:true});
-    S.mediaRec=new MediaRecorder(stream);S.audioChunks=[];
-    S.mediaRec.ondataavailable=e=>S.audioChunks.push(e.data);
+    S.audioChunks=[];
+    S.mediaRec=new MediaRecorder(stream);
+    S.mediaRec.ondataavailable=e=>{if(e.data&&e.data.size>0)S.audioChunks.push(e.data);};
     S.mediaRec.onstop=async()=>{
       stream.getTracks().forEach(t=>t.stop());
+      if(!S.audioChunks.length){toast('Aucun audio');return;}
       const blob=new Blob(S.audioChunks,{type:'audio/webm'});
-      try{const form=new FormData();form.append('audio',blob,'rec.webm');const res=await fetch(API_BASE+'/stt',{method:'POST',body:form});const d=await res.json();const tx=d.text||d.transcript||'';if(tx){document.getElementById('inp').value=tx.trim();refreshSend();}else toast('Transcription vide');}
-      catch{toast('STT non disponible — configurez Whisper');}
+      const voT=document.getElementById('voTranscript');
+      if(voT)voT.textContent='Transcription en cours…';
+      try{
+        const form=new FormData();
+        form.append('file',blob,'rec.webm');
+        const res=await fetch(API_BASE+'/stt',{method:'POST',body:form});
+        const d=await res.json();
+        const tx=(d.text||d.transcript||'').trim();
+        if(tx){
+          document.getElementById('inp').value=tx;
+          refreshSend();
+          if(voT)voT.textContent='✅ Vérifiez et corrigez si besoin';
+          // Sauvegarde automatique dans voice messages
+          saveVoiceMsg(tx);
+          // Focus sur le champ pour correction manuelle
+          setTimeout(()=>{
+            const inp=document.getElementById('inp');
+            inp.focus();
+            inp.selectionStart=inp.selectionEnd=inp.value.length;
+            S.autoTTS=true;
+          },200);
+        }
+        else{toast('Transcription vide');if(voT)voT.textContent='Parlez maintenant…';}
+      }catch(err){toast('Erreur STT: '+err.message);}
     };
-    S.mediaRec.start();
-  }catch{toast('Microphone inaccessible');stopVoice();}
+    S.mediaRec.start(500);
+    // VAD via AudioContext RMS
+    let silMs=0,spoken=false;
+    try{
+      const actx=new AudioContext();
+      await actx.resume();
+      const src=actx.createMediaStreamSource(stream);
+      const an=actx.createAnalyser();
+      an.fftSize=256;
+      src.connect(an);
+      const fb=new Float32Array(an.fftSize);
+      S._vad=setInterval(()=>{
+        if(!S.voiceOn){clearInterval(S._vad);S._vad=null;actx.close();return;}
+        an.getFloatTimeDomainData(fb);
+        const rms=Math.sqrt(fb.reduce((s,v)=>s+v*v,0)/fb.length);
+        const voT=document.getElementById('voTranscript');
+        if(rms>0.01){spoken=true;silMs=0;if(voT)voT.textContent='🎤 Parole détectée…';}
+        else if(spoken){
+          silMs+=200;
+          if(voT)voT.textContent='⏳ Silence '+(silMs/1000).toFixed(1)+'s…';
+          if(silMs>=2000){clearInterval(S._vad);S._vad=null;actx.close();stopVoice();}
+        }
+      },200);
+    }catch(e){
+      console.warn('VAD AudioContext failed:',e.message);
+      // Fallback : stop après 15s
+      S._vad=setTimeout(()=>{if(S.voiceOn)stopVoice();},15000);
+    }
+  }catch(err){
+    toast('Microphone inaccessible: '+err.message);
+    stopVoice();
+  }
 }
+
 function stopVoice(){
   S.voiceOn=false;clearInterval(S.voiceTimer);
   document.getElementById('voBtn')?.classList.remove('rec');
   document.getElementById('voiceOverlay').classList.remove('show');
   document.getElementById('voTimer').textContent='0:00';
   if(S.recognition){try{S.recognition.stop();}catch{}S.recognition=null;}
-  if(S.mediaRec&&S.mediaRec.state!=='inactive')S.mediaRec.stop();
+  if(S.mediaRec&&S.mediaRec.state!=='inactive'){
+    // Demander les derniers chunks avant d'arrêter
+    try{S.mediaRec.requestData();}catch{}
+    setTimeout(()=>{
+      try{if(S.mediaRec&&S.mediaRec.state!=='inactive')S.mediaRec.stop();}catch(e){console.error('stop err:',e);}
+    },300);
+  }
 }
 
+// ════ VOICE MESSAGES ════
+const voiceMsgs=JSON.parse(localStorage.getItem('onepilot_voice_msgs')||'[]');
+function saveVoiceMsgs(){localStorage.setItem('onepilot_voice_msgs',JSON.stringify(voiceMsgs));}
+function toggleVoiceMessages(){
+  let panel=document.getElementById('vmPanel');
+  if(panel){panel.remove();return;}
+  panel=document.createElement('div');
+  panel.id='vmPanel';
+  panel.style.cssText='position:fixed;bottom:80px;right:20px;z-index:998;background:var(--bg-1);border:1px solid var(--border);border-radius:12px;padding:12px;width:280px;max-height:400px;overflow-y:auto;box-shadow:0 4px 20px rgba(0,0,0,.2);';
+  const renderVMs=()=>{
+    panel.innerHTML=`<div style="font-size:12px;font-weight:500;margin-bottom:8px;color:var(--text-1);">🎤 Messages vocaux (${voiceMsgs.length})</div>
+    ${voiceMsgs.length===0?'<div style="font-size:11px;color:var(--text-3);">Aucun message. Maintenez le micro pour enregistrer.</div>':
+    voiceMsgs.map((m,i)=>`<div style="background:var(--bg-2);border-radius:8px;padding:8px;margin-bottom:6px;font-size:11px;">
+      <div style="color:var(--text-2);margin-bottom:4px;">${m.time}</div>
+      <div style="color:var(--text-1);margin-bottom:6px;">${m.text}</div>
+      <div style="display:flex;gap:6px;">
+        <button onclick="sendVoiceMsg(${i})" style="background:var(--accent);color:#000;border:none;border-radius:5px;padding:3px 8px;font-size:10px;cursor:pointer;">Envoyer</button>
+        <button onclick="deleteVoiceMsg(${i})" style="background:var(--bg-3);border:1px solid var(--border);color:var(--text-2);border-radius:5px;padding:3px 8px;font-size:10px;cursor:pointer;">Supprimer</button>
+      </div>
+    </div>`).join('')}
+    <button onclick="document.getElementById('vmPanel')?.remove()" style="width:100%;background:var(--bg-2);border:1px solid var(--border);color:var(--text-2);border-radius:6px;padding:5px;font-size:11px;cursor:pointer;margin-top:4px;">Fermer</button>`;
+  };
+  renderVMs();
+  document.body.appendChild(panel);
+}
+function saveVoiceMsg(text){
+  voiceMsgs.unshift({text,time:new Date().toLocaleTimeString()});
+  saveVoiceMsgs();
+  toast('Message vocal sauvegardé');
+}
+function sendVoiceMsg(i){
+  const m=voiceMsgs[i];
+  if(m){document.getElementById('inp').value=m.text;refreshSend();document.getElementById('vmPanel')?.remove();}
+}
+function deleteVoiceMsg(i){voiceMsgs.splice(i,1);saveVoiceMsgs();toggleVoiceMessages();toggleVoiceMessages();}
+
+// ════ CONTEXT PRESERVATION ════
+let lastVoiceContext={question:'',answer:''};
+function preserveVoiceContext(q,a){lastVoiceContext={question:q,answer:a};}
+
+// ════ COMMANDES VOCALES ════
+function handleVoiceCommand(cmd){
+  if(cmd==='repeat_last'){
+    const b=document.querySelector('.bubble.bot:last-child');if(b&&b.id)speak(b.id,null);
+  }else if(cmd==='more_details'){
+    document.getElementById('inp').value='Peux-tu approfondir ta dernière réponse ?';refreshSend();
+  }else if(cmd==='rephrase'){
+    document.getElementById('inp').value='Peux-tu reformuler plus simplement ?';refreshSend();
+  }else if(cmd==='show_dashboard'||cmd==='show_chart'){
+    if(!S.dpOpen)toggleDP();toast('Dashboard ouvert');
+  }else if(cmd==='export_email'||cmd==='export_data'){
+    exportConv();toast('Export lancé');
+  }else if(cmd==='show_history'){
+    if(!S.sbOpen)toggleSB();
+  }else if(cmd==='new_chat'){
+    newChat();
+  }else if(cmd==='cancel'){
+    stopVoice();if(S.ttsAudio){S.ttsAudio.pause();S.ttsAudio=null;document.getElementById('ttsStopBtn')?.remove();}
+  }
+}
+// ════ AUTO TTS ════
+async function autoSpeak(text){
+  if(!text||!S.autoTTS)return;
+  S.autoTTS=false;
+  const clean=text.replace(/```[^`]*```/g,'code.').replace(/[*_`#]/g,'').trim().substring(0,300);
+  if(!clean)return;
+  try{const res=await fetch(API_BASE+'/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:clean})});
+  if(res.ok){const url=URL.createObjectURL(await res.blob());const a=new Audio(url);a.onended=()=>URL.revokeObjectURL(url);a.play();}}catch(e){}
+}
 // ════ TTS ════
 async function speak(bid,btn){
   const bbl=document.getElementById(bid);if(!bbl)return;
@@ -1572,19 +1735,47 @@ async function speak(bid,btn){
 }
 function ttsIco(s){return`<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><polygon points="1 3 5 3 9 0 9 12 5 9 1 9"/><path d="M10.5 4a3.5 3.5 0 010 4"/></svg>${s||''}`;}
 
+// ════ AUTO TTS ════
+async function autoSpeak(text){
+  if(!text||!S.autoTTS)return;
+  S.autoTTS=false;
+  const clean=text.replace(/```[^`]*```/g,'bloc de code.').replace(/[*_`#]/g,'').trim().substring(0,300);
+  if(!clean)return;
+  try{
+    const res=await fetch(API_BASE+'/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:clean,voice:S.ttsVoice||'female',speed:S.ttsSpeed||1.0})});
+    if(res.ok){
+      if(S.ttsAudio){S.ttsAudio.pause();S.ttsAudio=null;}
+      const url=URL.createObjectURL(await res.blob());
+      S.ttsAudio=new Audio(url);
+      // Bouton stop flottant
+      let sb=document.getElementById('ttsStopBtn');
+      if(!sb){sb=document.createElement('button');sb.id='ttsStopBtn';
+        sb.style.cssText='position:fixed;bottom:90px;right:20px;z-index:999;background:#e53;color:#fff;border:none;border-radius:99px;padding:8px 16px;font-size:12px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3);';
+        sb.innerHTML='⏹ Arrêter la lecture';
+        sb.onclick=()=>{if(S.ttsAudio){S.ttsAudio.pause();S.ttsAudio=null;}sb.remove();};
+        document.body.appendChild(sb);}
+      S.ttsAudio.onended=()=>{URL.revokeObjectURL(url);S.ttsAudio=null;document.getElementById('ttsStopBtn')?.remove();};
+      S.ttsAudio.play();
+    }
+  }catch(e){console.warn('autoSpeak:',e);}
+}
 // ════ MARKDOWN ════
 function mdRender(text){
   if(!text)return'';
   let s=esc(text);
-  s=s.replace(/```[\w]*\n?([\s\S]*?)```/g,(_,c)=>`<pre>${c.trim()}</pre>`);
+  // Extraire les blocs code avant de traiter le markdown
+  const codeBlocks=[];
+  s=s.replace(/```[\w]*\n?([\s\S]*?)```/g,(_,c)=>{const i=codeBlocks.length;codeBlocks.push(`<pre>${c.trim()}</pre>`);return`%%CODE${i}%%`;});
   s=s.replace(/(\|.+\|\n?)+/g,t=>{const rows=t.trim().split('\n').filter(r=>!/^\|[\s\-|]+\|$/.test(r.trim()));const ih=rows.length>1;return`<div class="sql-table-wrap"><table class="sql-table">${rows.map((r,i)=>{const cells=r.split('|').filter((_,ci,arr)=>ci>0&&ci<arr.length-1);const tag=(i===0&&ih)?'th':'td';return`<tr>${cells.map(c=>`<${tag}>${c.trim()}</${tag}>`).join('')}</tr>`;}).join('')}</table></div>`;});
   s=s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
-  s=s.replace(/\*([^*]+)\*/g,'<em>$1</em>');
+  s=s.replace(/\*([^*\/]+)\*/g,'<em>$1</em>');
   s=s.replace(/`([^`]+)`/g,'<code>$1</code>');
   s=s.replace(/^#{1,3}\s+(.+)$/gm,'<strong>$1</strong>');
-  s=s.replace(/^[-*]\s+(.+)$/gm,'<li>$1</li>');
+  s=s.replace(/^[-]\s+(.+)$/gm,'<li>$1</li>');
   s=s.replace(/(<li>[\s\S]*?<\/li>)+/g,'<ul>$&</ul>');
   s=s.replace(/\n/g,'<br>');
+  // Réinjecter les blocs code
+  codeBlocks.forEach((b,i)=>s=s.replace(`%%CODE${i}%%`,b));
   return s;
 }
 

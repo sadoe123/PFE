@@ -1674,13 +1674,14 @@ async def save_conversation(conv: ConversationIn):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/conversations")
-async def get_conversations():
-    """Récupérer toutes les conversations"""
+async def get_conversations(limit: int = 200, offset: int = 0):
+    """Récupérer toutes les conversations avec pagination"""
     try:
         pool = await get_pg_pool()
         async with pool.acquire() as conn:
             rows = await conn.fetch(
-                "SELECT id, source_id, title, created_at FROM conversations ORDER BY created_at DESC LIMIT 50"
+                "SELECT id, source_id, title, created_at FROM conversations ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+                min(limit, 500), offset
             )
             
             conversations = []
@@ -1742,8 +1743,209 @@ async def get_conversation(conv_id: str):
 # CHAT & CHAT STREAMING ENDPOINTS
 # ══════════════════════════════════════════════════════════════
 
+
+async def _fix_slots(slots, question: str, schema: dict, known_entities: list,
+                      source_id_str: str = "", pg_pool=None):
+    """
+    Corrige les intents + résout les entités via MeiliSearch/synonymes.
+    Appelée dans _build_chat_answer ET /nlu/generate-sql.
+    """
+    import re as _re_fix
+    q_low = question.lower()
+
+    if not slots:
+        return slots
+
+    # Injections raw_text
+    slots.raw_text = question
+
+    # ── Résolution sémantique : mots métier → vraies tables via MeiliSearch ──
+    # Si aucune table détectée, on cherche dans MeiliSearch
+    if not slots.table_names and source_id_str:
+        try:
+            from .semantic_enricher import semantic_search as _sem_search, SYNONYMS, _SYNONYM_INDEX
+            # Extrait les concepts de la question via les synonymes
+            concepts = []
+            for word in q_low.split():
+                if word in _SYNONYM_INDEX:
+                    concepts.append(_SYNONYM_INDEX[word])
+            # Cherche chaque concept dans MeiliSearch
+            search_terms = set(concepts) if concepts else {q_low.split()[0]}
+            for term in list(search_terms)[:3]:
+                results = await _sem_search(
+                    query      = term,
+                    source_ids = [source_id_str],
+                    limit      = 3,
+                    use_vector = False,
+                )
+                if results:
+                    best = results[0]
+                    if best["relevance"] > 0.3 and best["name"] in known_entities:
+                        slots.table_names = [best["name"]]
+                        logger.info(f"[_fix_slots] Résolution sémantique : '{term}' → '{best['name']}' (score={best['relevance']})")
+                        break
+        except Exception as e:
+            logger.warning(f"[_fix_slots] Semantic search error: {e}")
+
+    # 1. DDL → bloquer (géré ailleurs)
+
+    # 2. HAVING : "ayant / plus de N fois / commandes"
+    _having_kw = ["ayant", "having", "au moins", "au plus", "dont le total"]
+    _filter_kw = ["prix", "price", "montant", "amount", "cout", "cost", "salaire"]
+    _count_ctx  = ["fois", "commandes", "orders", "produits", "articles", "lignes", "enregistrements", "transactions"]
+    _is_filter  = any(kw in q_low for kw in _filter_kw) and not any(kw in q_low for kw in _count_ctx)
+    _is_having  = any(kw in q_low for kw in _having_kw) or (
+        any(kw in q_low for kw in ["plus de", "moins de"]) and not _is_filter
+    )
+    if _is_having and not _is_filter:
+        slots.intent = Intent.GENERATE_AGG
+        # Extrait valeur numérique
+        _num = _re_fix.search(r"(?:plus de|moins de|au moins|au plus|ayant)\s+(\d+)", q_low)
+        if _num:
+            _op = "lt" if any(k in q_low for k in ["moins de", "inferieur", "inférieur"]) else "gt"
+            slots.amount_filter = {"op": _op, "value": int(_num.group(1))}
+        elif slots.amount_filter and slots.amount_filter.get("op") in ("eq", "="):
+            slots.amount_filter["op"] = "gt"
+        # Extrait le sujet "banques ayant..." → group_by = "banque"
+        if not slots.group_by:
+            _hav_m = _re_fix.match(r"(\w+)\s+(?:ayant|having|dont|with)", q_low)
+            if _hav_m:
+                import unicodedata as _ud3
+                _subj = _hav_m.group(1)
+                _subj_n = _ud3.normalize("NFD", _subj).encode("ascii","ignore").decode().lower()
+                if _subj_n.endswith("es"): _subj_n = _subj_n[:-1]
+                elif _subj_n.endswith("s"): _subj_n = _subj_n[:-1]
+                if _subj_n not in ("le","la","les","l","un","une","des","du"):
+                    slots.group_by = _subj_n
+        # Sinon injecte group_by depuis le schéma (champ non-ID)
+        if not slots.group_by and slots.table_names:
+            tbl = slots.table_names[0]
+            tbl_fields = schema.get(tbl, [])
+            gby = next(
+                (f for f in tbl_fields if any(k in f.lower() for k in ["name","nom","banque","societe","company","label"])
+                 and "id" not in f.lower()),
+                next((f for f in tbl_fields if "id" not in f.lower() and "code" not in f.lower()),
+                     tbl_fields[0] if tbl_fields else None)
+            )
+            if gby:
+                slots.group_by = gby
+
+    # 3. Filtre prix/montant
+    elif _is_filter and any(kw in q_low for kw in ["plus de", "superieur", "supérieur", "greater", "inferieur", "inférieur", "moins de"]):
+        slots.intent = Intent.GENERATE_FILTER
+
+    # 4. "montre / affiche + table" → SQL
+    _show_kw = ["montre", "affiche", "donne", "show", "display"]
+    _data_kw = ["premiers", "derniers", "chers", "recents", "first", "last", "expensive"]
+    if (slots.intent == Intent.LIST_ENTITIES and slots.table_names and
+            (any(kw in q_low for kw in _show_kw) or any(kw in q_low for kw in _data_kw))):
+        slots.intent = Intent.GENERATE_SQL
+
+    # 5. AGG FR+EN : "total X by Y", "nombre de X par Y", "sum of X by Y"
+    _agg_trg = ["nombre de", "number of", "total", "sum of", "count of",
+                "average of", "avg of", "total des", "total par",
+                # ES
+                "total de", "suma de", "promedio de", "cantidad de", "numero de",
+                "cuantos", "ventas por", "importe por",
+                # DE
+                "gesamt", "summe", "anzahl", "durchschnitt", "umsatz nach"]
+    _per_trg = ["par", "by", "per", "pour chaque", "for each", "grouped by",
+                # ES
+                "por", "para cada", "agrupado por",
+                # DE
+                "nach", "pro", "je", "gruppiert nach"]
+    if (any(kw in q_low for kw in _agg_trg) and
+            any(kw in q_low for kw in _per_trg) and
+            slots.intent not in (Intent.GENERATE_AGG,)):
+        slots.intent = Intent.GENERATE_AGG
+        if not slots.metric:
+            if any(kw in q_low for kw in ["count", "number of", "nombre de"]):
+                slots.metric = "COUNT"
+            elif any(kw in q_low for kw in ["average", "avg", "moyenne"]):
+                slots.metric = "AVG"
+            else:
+                slots.metric = "SUM"
+        # Extraire group_by depuis "by/par/por/nach/pro/per X" — générique toutes langues
+        import re as _re_gb
+        _by_m = _re_gb.search(
+            r"(?:groupe\s+par|grouped\s+by|agrupado\s+por|gruppiert\s+nach"
+            r"|by|par|por|nach|per|pro|je|pour\s+chaque|for\s+each)\s+(\w+)", q_low
+        )
+        if _by_m and not slots.group_by:
+            slots.group_by = _by_m.group(1)
+        # Si toujours pas de group_by, cherche le mot APRES "par/por/by/nach"
+        if not slots.group_by:
+            _sim = _re_gb.search(r"(?:par|by|por|nach)\s+(\w{3,})", q_low)
+            if _sim:
+                slots.group_by = _sim.group(1)
+
+    # 6. LAG / mois précédent
+    if any(kw in q_low for kw in ["mois precedent", "mois précédent", "par rapport au", "comparaison mois"]):
+        slots.intent = Intent.GENERATE_AGG
+
+    # 7. top N par groupe → window
+    # top N X par/por/by/nach Y → AGG générique toutes langues
+    _top_par = _re_fix.search(
+        r"top\s+(\d+)\s+(\w+)\s+(?:par|by|por|nach|per|pro)\s+(\w+)", q_low
+    )
+    if _top_par:
+        slots.top_n  = int(_top_par.group(1))
+        slots.intent = Intent.GENERATE_AGG
+        _entity_word = _top_par.group(2)  # ex: "clientes", "clients", "kunden"
+        _metric_word = _top_par.group(3)  # ex: "importe", "montant", "betrag"
+        # group_by = le mot ENTITE (avant par/por/by/nach)
+        if not slots.group_by:
+            slots.group_by = _entity_word
+        # metric = SUM sur le mot METRIQUE (après par/por/by/nach)
+        if not slots.metric:
+            slots.metric = "SUM"
+        # Stocker le champ métrique pour le SQL Generator
+        if not getattr(slots, 'numeric_field', None):
+            slots.numeric_field = _metric_word
+
+    # 8. Mapping mots métier → table
+    _entity_kw_map = {
+        "fournisseur": ["Suppliers","SUPPLIER","BPSUPPLIER"],
+        "supplier":    ["Suppliers","SUPPLIER"],
+        "produit":     ["Products","PRODUCT","ITMMATER"],
+        "product":     ["Products","PRODUCT"],
+        "client":      ["Customers","CUSTOMER","BPCUSTOMER"],
+        "customer":    ["Customers","CUSTOMER"],
+        "commande":    ["Orders","ORDER","SORDERQ"],
+        "order":       ["Orders","SORDER"],
+        "employe":     ["Employees","EMPLOYEE"],
+        "employee":    ["Employees","EMPLOYEE"],
+        "categorie":   ["Categories","CATEGORY"],
+        "category":    ["Categories","CATEGORY"],
+    }
+    if not slots.table_names:
+        for kw, candidates in _entity_kw_map.items():
+            if kw in q_low:
+                for c in candidates:
+                    matched = next((e for e in known_entities if e.lower() == c.lower()), None)
+                    if matched:
+                        slots.table_names = [matched]
+                        break
+                if slots.table_names:
+                    break
+
+    # 9. count_entities + table connue → AGG
+    if slots.intent == Intent.COUNT_ENTITIES and slots.table_names and slots.table_names[0] in schema:
+        slots.intent = Intent.GENERATE_AGG
+        if not slots.metric:
+            slots.metric = "COUNT"
+
+    return slots
+
 async def _build_chat_answer(source_id_str: str, question: str) -> str:
-    """Génère une réponse contextuelle basée sur les métadonnées de la source."""
+    """
+    Pipeline complet : NLU → SQLGenerator → SQLValidator → réponse formatée.
+    §2.3.3 — remplace l'ancien système if/elif par le vrai moteur.
+    """
+    import time
+    t0 = time.time()
+
+    # ── Validation source ─────────────────────────────────────────────
     try:
         source_id = UUID(source_id_str)
     except (ValueError, AttributeError):
@@ -1753,12 +1955,12 @@ async def _build_chat_answer(source_id_str: str, question: str) -> str:
     if not source:
         return "❌ Source introuvable."
 
-    q = question.lower()
-    name = source.name
+    name         = source.name
     entity_count = source.entity_count or 0
 
+    # ── Récupère entités et relations (pour intents catalogue) ────────
     try:
-        detail = await get_source_with_entities(source_id, page=1, page_size=20)
+        detail   = await get_source_with_entities(source_id, page=1, page_size=20)
         entities = detail.entities if detail else []
     except Exception:
         entities = []
@@ -1769,36 +1971,272 @@ async def _build_chat_answer(source_id_str: str, question: str) -> str:
     except Exception:
         relations = []
 
-    if any(k in q for k in ["combien", "nombre", "count", "total"]) and any(k in q for k in ["table", "entit", "entity"]):
-        sample = ", ".join(f"`{e.name}`" for e in entities[:6])
-        extra = f"\n\nExemples : {sample}{'…' if entity_count > 6 else ''}" if sample else ""
-        return f"📊 La source **{name}** contient **{entity_count} entités** indexées.{extra}"
+    # ── Récupère le schéma complet pour le SQL Generator ─────────────
+    schema: dict = {}
+    try:
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT se.name AS table_name, ef.name AS field_name
+                FROM source_entities se
+                JOIN entity_fields ef ON ef.entity_id = se.id
+                WHERE se.source_id = $1 AND se.is_visible = TRUE
+                ORDER BY se.name, ef.position
+                LIMIT 20000
+            """, source_id)
+        for r in rows:
+            schema.setdefault(r["table_name"], []).append(r["field_name"])
+    except Exception as e:
+        logger.warning(f"[Chat] Schema fetch error: {e}")
 
-    elif any(k in q for k in ["liste", "list", "table", "entit", "top"]):
-        if not entities:
-            return f"⚠️ Aucune entité synchronisée pour **{name}**.\n\nCliquez sur **↻ Sync** depuis la page d'accueil."
-        rows = "\n".join(f"{i+1}. `{e.name}` — {e.field_count or 0} champs" for i, e in enumerate(entities[:10]))
-        more = f"\n\n*… et {entity_count - 10} autres entités.*" if entity_count > 10 else ""
-        return f"📋 Entités de **{name}** :\n\n{rows}{more}"
+    known_entities = list(schema.keys())
 
-    elif any(k in q for k in ["relation", "fk", "jointure", "join", "lien"]):
+    # Ajoute aussi les entités sans champs (vues, etc.) dans known_entities
+    # pour que directly_mentioned puisse les détecter
+    try:
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            all_names = await conn.fetch("""
+                SELECT name FROM source_entities
+                WHERE source_id = $1 AND is_visible = TRUE
+                  AND name NOT IN (SELECT DISTINCT se.name
+                                   FROM source_entities se
+                                   JOIN entity_fields ef ON ef.entity_id = se.id
+                                   WHERE se.source_id = $1)
+            """, source_id)
+            for r in all_names:
+                if r["name"] not in known_entities:
+                    known_entities.append(r["name"])
+    except Exception:
+        pass
+
+    # ── Détection directe des tables mentionnées dans la question ─────
+    # Normalise : retire accents, espaces pour la comparaison
+    import unicodedata
+    def _norm(s):
+        return unicodedata.normalize('NFD', s).encode('ascii', 'ignore').decode().upper().replace(' ', '_').replace('-', '_')
+
+    q_norm = _norm(question)
+    directly_mentioned = [t for t in known_entities if _norm(t) in q_norm]
+
+    # ── Blocage DDL/DML avant tout (sécurité) ────────────────────────
+    import re as _re
+    _DDL = _re.compile(
+        r"\b(DROP|INSERT|UPDATE|DELETE|TRUNCATE|ALTER|CREATE|EXEC|EXECUTE)\b",
+        _re.IGNORECASE
+    )
+    if _DDL.search(question):
+        return "🚫 **Requête refusée** — instruction interdite.\n\n*Seules les questions en langage naturel sont autorisées.*"
+
+    # ── Pipeline NLU ──────────────────────────────────────────────────
+    try:
+        nlu     = get_nlu_pipeline()
+        context = get_context(source_id_str)
+        slots   = nlu.process(question, context, known_entities)
+    except Exception as e:
+        logger.warning(f"[Chat] NLU error: {e}")
+        slots = None
+
+    # Injecte les tables détectées directement si le NLU les a ratées
+    if slots and directly_mentioned:
+        for t in directly_mentioned:
+            if t not in slots.table_names:
+                slots.table_names.insert(0, t)
+
+    # Inject last_table from context if no table detected
+    context = get_context(source_id_str)
+    if slots and not slots.table_names and context.last_table:
+        if context.last_table in schema:
+            slots.table_names = [context.last_table]
+            logger.info(f"[Chat] Context injection: last_table='{context.last_table}'")
+
+    # Correction intents + raw_text via _fix_slots()
+    q_low = question.lower()
+    if slots:
+        slots = await _fix_slots(slots, question, schema, known_entities, source_id_str=source_id_str, pg_pool=None)
+    if slots:
+        # "ayant / having / plus de N fois" → forcer GENERATE_AGG + injecter group_by
+        _having_kw = ["ayant", "having", "au moins", "au plus", "dont le total"]
+        # "plus de / moins de" → FILTER si sur un champ (prix, montant), AGG si sur un compte
+        _filter_kw = ["prix", "price", "montant", "amount", "cout", "cost", "salaire", "wage"]
+        _count_ctx  = ["fois", "commandes", "orders", "produits", "products", "articles", "lignes"]
+        _is_filter  = any(kw in q_low for kw in _filter_kw) and not any(kw in q_low for kw in _count_ctx)
+        _is_having  = any(kw in q_low for kw in _having_kw) or (
+            any(kw in q_low for kw in ["plus de", "moins de"]) and not _is_filter
+        )
+        if _is_having and not _is_filter:
+            slots.intent = Intent.GENERATE_AGG
+            # Extraire le sujet de la phrase HAVING comme group_by
+            # "banques ayant..." → group_by = "banque"
+            import re as _re_hav
+            _hav_subj = _re_hav.match(r"(\w+)\s+(?:ayant|having|dont|with)", q_low)
+            if _hav_subj and not slots.group_by:
+                import unicodedata as _ud2
+                _subj = _hav_subj.group(1)
+                _subj = _ud2.normalize('NFD', _subj).encode('ascii','ignore').decode().lower()
+                if _subj.endswith('es'): _subj = _subj[:-1]
+                elif _subj.endswith('s'): _subj = _subj[:-1]
+                if _subj not in ("le","la","les","l","un","une","des","du"):
+                    slots.group_by = _subj
+        elif _is_filter and any(kw in q_low for kw in ["plus de", "superieur", "supérieur", "greater", "inferieur", "inférieur", "moins de"]):
+            slots.intent = Intent.GENERATE_FILTER
+            # group_by = première table mentionnée si pas déjà défini
+            if not slots.group_by and slots.table_names:
+                # Cherche un champ ID ou nom dans le schéma de la table
+                tbl = slots.table_names[0]
+                tbl_fields = schema.get(tbl, [])
+                # Priorité : champ name/nom/code, sinon premier champ non-PK
+                gby = next(
+                    (f for f in tbl_fields if any(k in f.lower() for k in ["name","nom","code","company","label"])),
+                    next((f for f in tbl_fields if "id" not in f.lower()), tbl_fields[0] if tbl_fields else None)
+                )
+                if gby:
+                    slots.group_by = gby
+            # Extrait la valeur numérique HAVING depuis la question ("plus de 5" → 5)
+            import re as _re2
+            _num = _re2.search(r"(?:plus de|moins de|au moins|au plus|ayant)\s+(\d+)", q_low)
+            if _num:
+                _op = "lt" if any(k in q_low for k in ["moins de", "inferieur", "inférieur"]) else "gt"
+                # Toujours écraser — notre regex est plus fiable que le NLU
+                slots.amount_filter = {"op": _op, "value": int(_num.group(1))}
+            elif slots.amount_filter:
+                # Corrige op=eq → gt par défaut pour les HAVING
+                if slots.amount_filter.get("op") in ("eq", "="):
+                    slots.amount_filter["op"] = "gt"
+
+        # "montre / affiche / liste les X" + table connue → forcer GENERATE_SQL
+        _show_kw = ["montre", "affiche", "donne", "show", "display"]
+        _data_kw = ["premiers", "derniers", "chers", "recents", "first", "last", "expensive"]
+        if (slots.intent == Intent.LIST_ENTITIES and slots.table_names and
+                (any(kw in q_low for kw in _show_kw) or any(kw in q_low for kw in _data_kw))):
+            slots.intent = Intent.GENERATE_SQL
+
+        # "nombre de X par Y" → forcer COUNT + GENERATE_AGG
+        _count_kw = ["nombre de", "number of", "combien de", "count of"]
+        _per_kw   = ["par", "by", "per", "pour chaque", "for each"]
+        if (any(kw in q_low for kw in _count_kw) and
+                any(kw in q_low for kw in _per_kw) and
+                slots.intent not in (Intent.GENERATE_AGG,)):
+            slots.intent = Intent.GENERATE_AGG
+            if not slots.metric:
+                slots.metric = "COUNT"
+
+        # "mois précédent / par rapport" → forcer window LAG
+        _lag_kw = ["mois precedent", "mois précédent", "par rapport au", "comparaison mois", "vs mois"]
+        if any(kw in q_low for kw in _lag_kw):
+            slots.intent = Intent.GENERATE_AGG
+
+        # "top N X par Y" ou "rang des X par Y" → window ROW_NUMBER
+        import re as _re3
+        # Pattern: "top 5 banques par montant" ou "rang des banques par montant"
+        _top_pat = _re3.search(r"(?:top\s+\d+\s+|rang\s+des?\s+)(\w+)\s+par\s+(\w+)", q_low)
+        if _top_pat and slots.table_names:
+            slots.intent = Intent.GENERATE_AGG
+            slots.raw_text = question
+            # Effacer amount_filter si c est top_n mal interprete
+            if slots.amount_filter:
+                try:
+                    # Effacer si op=top_n OU si value=top_n avec op=eq
+                    af_op = slots.amount_filter.get("op","")
+                    af_val = float(slots.amount_filter.get("value",-1))
+                    if (af_op == "top_n" or
+                        (af_op in ("eq","=") and abs(af_val - float(slots.top_n)) < 0.001)):
+                        slots.amount_filter = None
+                except Exception:
+                    pass
+            group_entity = _top_pat.group(1)   # "banques", "sociétés"...
+            sort_metric  = _top_pat.group(2)   # "montant", "ventes"...
+            _skip = ("le","la","les","l","du","de","des","sur","dans","un","une")
+            # group_by = entité (mot avant "par") — FORCER même si NLU a mis autre chose
+            if group_entity and group_entity not in _skip:
+                # Normalise pluriel → singulier : "banques"→"banque", "sociétés"→"société"
+                import unicodedata as _ud
+                def _norm_word(w):
+                    # Normalise accents
+                    w_ascii = _ud.normalize('NFD', w).encode('ascii','ignore').decode().lower()
+                    # Pluriel → singulier sur version originale (avec accents)
+                    w_orig = w.lower()
+                    # "sociétés" → "société", "banques" → "banque"
+                    if w_orig.endswith('és') or w_orig.endswith('es'):
+                        return w_orig[:-1]  # enlève juste le s
+                    elif w_orig.endswith('s'):
+                        return w_orig[:-1]
+                    return w_orig
+                slots.group_by = _norm_word(group_entity)  # force override NLU
+            # metric = SUM si sort_metric est un mot de montant
+            _amount_kw = ["montant","amount","vente","ventes","total","prix","chiffre","valeur"]
+            if any(kw in sort_metric for kw in _amount_kw):
+                if not slots.metric:
+                    slots.metric = "SUM"
+
+        # Mots métier → mapping table implicite si aucune table détectée
+        _entity_kw_map = {
+            "fournisseur": ["Suppliers","SUPPLIER","BPSUPPLIER"],
+            "supplier":    ["Suppliers","SUPPLIER"],
+            "produit":     ["Products","PRODUCT","ITMMATER"],
+            "product":     ["Products","PRODUCT"],
+            "client":      ["Customers","CUSTOMER","BPCUSTOMER"],
+            "customer":    ["Customers","CUSTOMER"],
+            "commande":    ["Orders","ORDER","SORDERQ"],
+            "order":       ["Orders","SORDER"],
+            "employe":     ["Employees","EMPLOYEE"],
+            "employee":    ["Employees","EMPLOYEE"],
+            "categorie":   ["Categories","CATEGORY"],
+            "category":    ["Categories","CATEGORY"],
+        }
+        if not slots.table_names:
+            for kw, candidates in _entity_kw_map.items():
+                if kw in q_low:
+                    for c in candidates:
+                        matched = next((e for e in known_entities if e.lower() == c.lower()), None)
+                        if matched:
+                            slots.table_names = [matched]
+                            break
+                    if slots.table_names:
+                        break
+
+    # ── Intents catalogue (pas de SQL) ────────────────────────────────
+    q = question.lower()
+
+    if slots and slots.intent == Intent.COUNT_ENTITIES:
+        # Si une table est identifiée → COUNT SQL sur cette table
+        if slots.table_names and slots.table_names[0] in schema:
+            slots.intent = Intent.GENERATE_AGG
+            if not slots.metric:
+                slots.metric = "COUNT"
+        # Sinon → réponse catalogue
+        else:
+            sample = ", ".join(f"`{e.name}`" for e in entities[:6])
+            extra  = f"\n\nExemples : {sample}{'…' if entity_count > 6 else ''}" if sample else ""
+            return f"📊 La source **{name}** contient **{entity_count} entités** indexées.{extra}"
+
+    if slots and slots.intent == Intent.LIST_ENTITIES and not slots.table_names:
+        # Si top_n présent → l'utilisateur veut des données, pas la liste des tables
+        if slots.top_n and schema:
+            # Redirige vers SQL sur la première table du schéma
+            first_table = list(schema.keys())[0]
+            slots.table_names = [first_table]
+            slots.intent = Intent.GENERATE_SQL
+            # Continue vers le pipeline SQL ci-dessous
+        else:
+            if not entities:
+                return f"⚠️ Aucune entité synchronisée pour **{name}**.\n\nCliquez sur **↻ Sync**."
+            rows = "\n".join(f"{i+1}. `{e.name}` — {e.field_count or 0} champs" for i, e in enumerate(entities[:10]))
+            more = f"\n\n*… et {entity_count - 10} autres entités.*" if entity_count > 10 else ""
+            return f"📋 Entités de **{name}** :\n\n{rows}{more}"
+
+    if slots and slots.intent == Intent.GET_RELATIONS:
         if not relations:
             return f"🔗 Aucune relation détectée pour **{name}**.\n\n💡 Lancez la découverte depuis **Relations → ↻ Relancer**."
         rows = "\n".join(
-            f"- `{r.get('source_entity','?')}.{r.get('source_field','?')}` → `{r.get('target_entity','?')}.{r.get('target_field','?')}` *({r.get('detection_method','?')}, {round((r.get('confidence') or 1)*100)}%)*"
+            f"- `{r.get('source_entity','?')}.{r.get('source_field','?')}` → "
+            f"`{r.get('target_entity','?')}.{r.get('target_field','?')}` "
+            f"*({r.get('detection_method','?')}, {round((r.get('confidence') or 1)*100)}%)*"
             for r in relations
         )
-        return f"🔗 Relations détectées pour **{name}** :\n\n{rows}\n\n💡 Explorez toutes les relations dans l'onglet **Relations** de l'accueil."
+        return f"🔗 Relations détectées pour **{name}** :\n\n{rows}\n\n💡 Voir onglet **Relations**."
 
-    elif any(k in q for k in ["sql", "requête", "query", "genere", "génère", "select"]):
-        if relations:
-            r = relations[0]
-            return f"🔧 Exemple SQL pour **{name}** :\n\n```sql\nSELECT a.*, b.*\nFROM {r.get('source_entity','TableA')} a\nJOIN {r.get('target_entity','TableB')} b\n  ON a.{r.get('source_field','id')} = b.{r.get('target_field','id')}\nLIMIT 100;\n```"
-        elif entities:
-            return f"🔧 Exemple SQL :\n\n```sql\nSELECT *\nFROM {entities[0].name}\nLIMIT 100;\n```"
-        return "⚠️ Synchronisez la source d'abord."
-
-    elif any(k in q for k in ["structure", "info", "résumé", "resume", "détail", "detail"]):
+    if slots and slots.intent == Intent.DESCRIBE_ENTITY:
         host_info = f"`{source.host}:{source.port}`" if source.host else "—"
         return (
             f"📊 **{name}**\n\n"
@@ -1810,22 +2248,125 @@ async def _build_chat_answer(source_id_str: str, question: str) -> str:
             f"- **Statut** : {source.status}"
         )
 
-    elif any(k in q for k in ["champ", "field", "colonne", "column"]):
+    if slots and slots.intent == Intent.LIST_FIELDS:
         if entities:
             e = entities[0]
-            fields = e.fields[:8] if e.fields else []
-            rows = "\n".join(f"- `{f.name}` ({f.data_type}{'  🔑' if f.is_primary_key else ''}{'  🔗' if f.is_foreign_key else ''})" for f in fields)
+            flds  = e.fields[:8] if e.fields else []
+            rows  = "\n".join(
+                f"- `{f.name}` ({f.data_type}"
+                f"{'  🔑' if f.is_primary_key else ''}{'  🔗' if f.is_foreign_key else ''})"
+                for f in flds
+            )
             return f"📋 Champs de `{e.name}` :\n\n{rows}"
         return "⚠️ Aucune entité chargée. Lancez une synchronisation d'abord."
 
-    else:
+    if slots and slots.intent in (Intent.GREETING, Intent.HELP):
         return (
-            f"🤖 **OnePilot** — Mode local *(LLM non configuré)*\n\n"
-            f"Source **{name}** : **{entity_count} entités**.\n\n"
-            f"**Je peux répondre sur :**\n"
-            f"- Combien de tables ?\n- Liste des entités\n- Relations détectées\n"
-            f"- Générer du SQL\n- Résumé de la structure"
+            f"👋 Bonjour ! Je suis **OnePilot**, votre assistant données.\n\n"
+            f"Source active : **{name}** ({entity_count} entités)\n\n"
+            f"**Exemples de questions :**\n"
+            f"- *Total des ventes par client*\n"
+            f"- *Top 10 commandes ce mois*\n"
+            f"- *Clients ayant commandé plus de 5 fois*\n"
+            f"- *Total cumulatif des ventes par date*\n"
+            f"- *Jointure entre commandes et clients*"
         )
+
+    # ── Intents SQL : pipeline complet ───────────────────────────────
+    if not schema:
+        return f"⚠️ Aucun schéma disponible pour **{name}**. Lancez une synchronisation d'abord."
+
+    # Vérification ambiguïtés bloquantes
+    if slots:
+        try:
+            resolver  = AmbiguityResolver()
+            questions = resolver.analyze(slots, known_entities, schema)
+            if questions and questions[0].required:
+                clarif = resolver.build_clarification_response(questions)
+                opts   = "\n".join(f"- {o}" for o in clarif.get("options", [])[:5])
+                return f"❓ **{clarif['question']}**\n\n{opts}"
+        except Exception as e:
+            logger.warning(f"[Chat] Ambiguity resolver error: {e}")
+
+    # Dialecte SQL
+    dialect_map = {
+        "mssql": "mssql", "sage_100": "mssql", "sage_x3": "mssql",
+        "mysql": "mysql", "postgresql": "postgresql", "sqlite": "sqlite",
+    }
+    dialect = dialect_map.get(source.connector_type.value if hasattr(source.connector_type, 'value') else str(source.connector_type), "mssql")
+
+    # Génération SQL
+    try:
+        sql_gen = SQLGenerator()
+        result  = sql_gen.generate(slots, schema, dialect) if slots else {
+            "sql": None, "explanation": "", "warnings": [],
+            "validation": {"valid": False, "errors": ["NLU indisponible"], "warnings": [], "score": 0},
+            "complexity": "simple",
+        }
+    except Exception as e:
+        logger.warning(f"[Chat] SQLGenerator error: {e}")
+        return f"❌ Erreur génération SQL : {e}"
+
+    sql        = result.get("sql", "")
+    validation = result.get("validation", {})
+    complexity = result.get("complexity", "simple")
+    explanation = result.get("explanation", "").replace("*", "×")
+    warnings   = result.get("warnings", [])
+    ms         = int((time.time() - t0) * 1000)
+
+    # Met à jour le contexte avec la table utilisée
+    if slots and slots.table_names:
+        try:
+            from .nlu_engine import ConversationTurn
+            turn = ConversationTurn(
+                question  = question,
+                intent    = slots.intent,
+                slots     = slots,
+                answer    = sql or "",
+            )
+            context.add_turn(turn)
+        except Exception:
+            pass
+
+    # ── Réponse si SQL invalide (injection / DDL) ─────────────────────
+    if not validation.get("valid", True):
+        errs = "\n".join(f"- {e}" for e in validation.get("errors", []))
+        return (
+            f"🚫 **Requête refusée** — validation échouée :\n\n{errs}\n\n"
+            f"*Seules les requêtes SELECT sont autorisées.*"
+        )
+
+    # ── Réponse avec SQL généré ───────────────────────────────────────
+    if not sql:
+        return f"⚠️ Impossible de générer une requête SQL pour cette question.\n\nEssayez de préciser la table ou l'action souhaitée."
+
+    # Badge complexité
+    complexity_badge = {
+        "window":   "🪟 Window function",
+        "having":   "🔍 HAVING",
+        "cte":      "📦 CTE",
+        "advanced": "⚡ Avancé (CTE + Window)",
+        "simple":   "",
+        "moderate": "",
+    }.get(complexity, "")
+
+    # Warnings
+    warn_text = ""
+    if warnings:
+        warn_text = "\n\n⚠️ " + " | ".join(warnings[:2])
+
+    # Score validation
+    score = validation.get("score", 1.0)
+    score_badge = f" ✅ score={score}" if score >= 0.9 else f" ⚠️ score={score}"
+
+    badge_line = f"\n*{complexity_badge}{score_badge} — {ms}ms*" if complexity_badge else f"\n*{score_badge} — {ms}ms*"
+
+    return (
+        f"🔧 **{explanation}**\n\n"
+        f"```sql\n{sql}\n```"
+        f"{warn_text}"
+        f"{badge_line}"
+    )
 
 
 
@@ -1886,36 +2427,183 @@ async def chat_stream(req: ChatRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 # ══════════════════════════════════════════════════════════════
+# LLM ENGINE — §2.3.3
+# ══════════════════════════════════════════════════════════════
+
+@app.get("/llm/status", tags=["LLM"])
+async def llm_status():
+    """Vérifie si Ollama est disponible et retourne les modèles."""
+    try:
+        from .llm_engine import check_ollama_available
+        return check_ollama_available()
+    except Exception as e:
+        return {"available": False, "error": str(e)}
+
+class LLMSQLRequest(BaseModel):
+    question:  str
+    source_id: str
+
+@app.post("/llm/generate-sql", tags=["LLM"])
+async def llm_generate_sql(req: LLMSQLRequest):
+    """Génère du SQL directement via LLM (pour tests)."""
+    try:
+        from .llm_engine import generate_sql_with_llm
+        source_id = UUID(req.source_id)
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT se.name, ef.name AS field
+                FROM source_entities se
+                JOIN entity_fields ef ON ef.entity_id = se.id
+                WHERE se.source_id = $1 AND se.is_visible = TRUE
+                LIMIT 2000
+            """, source_id)
+        schema = {}
+        for r in rows:
+            schema.setdefault(r["name"], []).append(r["field"])
+        result = generate_sql_with_llm(
+            question    = req.question,
+            schema      = schema,
+            dialect     = "mssql",
+            table_names = None,
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+# ══════════════════════════════════════════════════════════════
 # TEXT-TO-SPEECH & STT ENDPOINTS
 # ══════════════════════════════════════════════════════════════
 
-@app.post("/tts")
-async def text_to_speech(payload: dict):
-    """Convert text to speech"""
+class TTSRequest(BaseModel):
+    text:   str
+    voice:  str = "fr_FR-upmc-medium"
+    speed:  float = 1.0
+    format: str = "wav"
+
+@app.get("/tts/status", tags=["Voice"])
+async def tts_status():
+    """Vérifie si Piper TTS est disponible."""
     try:
-        text = payload.get("text", "")
-        if not text:
-            raise HTTPException(status_code=400, detail="Missing text")
-        
-        # Placeholder TTS — retourne 204 No Content si pas de moteur configuré
+        from .voice_engine import check_piper_available
+        return check_piper_available()
+    except Exception as e:
+        return {"available": False, "error": str(e)}
+
+@app.post("/tts", tags=["Voice"])
+async def text_to_speech(req: TTSRequest):
+    """
+    Synthétise du texte en audio WAV via Piper TTS (on-premise).
+    Supporte SSML basique, vitesse ajustable, voix multiples.
+    """
+    try:
+        from .voice_engine import get_tts_engine
         from fastapi.responses import Response
+
+        if not req.text:
+            raise HTTPException(400, "Texte vide")
+
+        tts = get_tts_engine()
+        wav_bytes = tts.synthesize(
+            text  = req.text,
+            voice = req.voice,
+            speed = req.speed,
+        )
+
+        if not wav_bytes:
+            raise HTTPException(500, "Synthèse audio échouée")
+
         return Response(
-            content=b"",
-            media_type="audio/mpeg",
-            status_code=204
+            content    = wav_bytes,
+            media_type = "audio/wav",
+            headers    = {"Content-Disposition": "inline; filename=speech.wav"},
         )
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"TTS error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(500, str(e))
 
-@app.post("/stt")
-async def speech_to_text(file: UploadFile = File(...)):
-    """Convert speech to text"""
+@app.post("/tts/ssml", tags=["Voice"])
+async def text_to_speech_ssml(req: TTSRequest):
+    """Synthétise du texte SSML en audio WAV."""
+    return await text_to_speech(req)
+
+@app.get("/stt/status", tags=["Voice"])
+async def stt_status():
+    """Vérifie si Whisper STT et Vosk sont disponibles."""
     try:
-        # For now, return a placeholder transcription
-        return {"text": "Transcribed text placeholder", "confidence": 0.95}
+        from .voice_engine import check_whisper_available, check_vosk_available
+        whisper = check_whisper_available()
+        vosk    = check_vosk_available()
+        return {**whisper, "vosk": vosk}
+    except Exception as e:
+        return {"available": False, "error": str(e)}
+
+@app.post("/stt/vosk", tags=["Voice"])
+async def speech_to_text_vosk(file: UploadFile = File(...)):
+    """
+    Transcrit un fichier audio via Vosk (alternative légère à Whisper).
+    Plus rapide mais moins précis que Whisper.
+    """
+    try:
+        from .voice_engine import get_vosk_engine
+        audio_bytes = await file.read()
+        if not audio_bytes:
+            raise HTTPException(400, "Fichier audio vide")
+        vosk = get_vosk_engine()
+        result = vosk.transcribe_audio_file(audio_bytes, filename=file.filename or "audio.webm")
+        if result.get("error"):
+            raise HTTPException(500, result["error"])
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Vosk STT error: {e}")
+        raise HTTPException(500, str(e))
+
+@app.post("/stt", tags=["Voice"])
+async def speech_to_text(file: UploadFile = File(...)):
+    """
+    Transcrit un fichier audio en texte via Whisper.
+    Supporte : webm, mp3, wav, ogg, m4a
+    """
+    try:
+        from .voice_engine import get_stt_engine
+        audio_bytes = await file.read()
+        if not audio_bytes:
+            raise HTTPException(400, "Fichier audio vide")
+
+        stt    = get_stt_engine()
+
+        # VAD — détection automatique silence/parole
+        # Note: webm nécessite conversion PCM pour VAD
+        # On applique VAD seulement sur WAV/PCM
+        fname = file.filename or "audio.webm"
+        if fname.endswith(".wav") or fname.endswith(".pcm"):
+            try:
+                from .voice_engine import get_vad
+                vad = get_vad()
+                audio_bytes = vad.filter_silence(audio_bytes)
+                logger.info(f"[STT] VAD appliqué — {len(audio_bytes)} bytes après filtrage")
+            except Exception as e:
+                logger.warning(f"[STT] VAD skip: {e}")
+
+        result = stt.transcribe(audio_bytes, filename=fname)
+
+        if result.get("error"):
+            raise HTTPException(500, result["error"])
+
+        return {
+            "text":        result["text"],
+            "raw_text":    result.get("raw_text", ""),
+            "language":    result.get("language", "fr"),
+            "duration_ms": result.get("duration_ms", 0),
+            "command":     result.get("command"),
+            "model":       result.get("model", "base"),
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"STT error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -3345,6 +4033,9 @@ async def generate_sql(req: SQLGenRequest):
     context = get_context(req.conversation_id or req.source_id)
     slots   = nlu.process(req.question, context, known_entities)
 
+    # Corrige intents mal classés
+    slots = await _fix_slots(slots, req.question, schema, known_entities, source_id_str=req.source_id, pg_pool=pool)
+
     # Vérifie ambiguïtés bloquantes
     resolver  = AmbiguityResolver()
     questions = resolver.analyze(slots, known_entities, schema)
@@ -3534,16 +4225,68 @@ async def apply_clarification(req: ClarificationRequest):
     # Applique la clarification
     slots = resolver.apply_clarification(slots, req.slot_key, req.value)
 
-    # Regénère
-    if req.source_id and not slots.ambiguities:
-        gen_req = SQLGenRequest(
-            question        = req.original_question,
-            source_id       = req.source_id,
-            conversation_id = req.conversation_id,
+    # Enregistre le choix pour apprentissage §2.3.4
+    try:
+        from .preference_learner import PreferenceLearner
+        pool = await get_pg_pool()
+        learner = PreferenceLearner(pg_pool=pool)
+        await learner.record_choice(
+            user_id   = req.conversation_id or "default",
+            source_id = req.source_id or "",
+            slot_key  = req.slot_key,
+            value     = req.value,
+            question  = req.original_question,
         )
-        # Modifie la question pour inclure la clarification
-        gen_req.question = f"{req.original_question} pour {req.value}"
-        return await generate_sql(gen_req)
+        logger.info(f"[Clarify] Préférence enregistrée — slot={req.slot_key} value={req.value}")
+    except Exception as e:
+        logger.warning(f"[Clarify] Preference record error: {e}")
+
+    # Regénère avec les slots corrigés directement
+    if req.source_id and not slots.ambiguities:
+        source_id = UUID(req.source_id)
+        pool = await get_pg_pool()
+
+        # Charge le schéma
+        async with pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT se.name AS table_name, ef.name AS field_name
+                FROM source_entities se
+                JOIN entity_fields ef ON ef.entity_id = se.id
+                WHERE se.source_id = $1 AND se.is_visible = TRUE
+                LIMIT 20000
+            """, source_id)
+        schema = {}
+        for r in rows:
+            schema.setdefault(r["table_name"], []).append(r["field_name"])
+
+        # Applique _fix_slots avec le bon intent
+        slots.raw_text = req.original_question
+        slots = await _fix_slots(slots, req.original_question, schema, known_entities,
+                                  source_id_str=req.source_id)
+
+        # Dialecte
+        source = await get_source(source_id)
+        dialect_map = {"mssql":"mssql","sage_100":"mssql","mysql":"mysql",
+                       "postgresql":"postgresql","sqlite":"sqlite"}
+        dialect = dialect_map.get(
+            source.connector_type.value if source and hasattr(source.connector_type,'value')
+            else "mssql", "mssql"
+        )
+
+        # Génère le SQL avec les vrais slots
+        sql_gen = SQLGenerator()
+        result  = sql_gen.generate(slots, schema, dialect)
+
+        return {
+            "sql":         result["sql"],
+            "explanation": result["explanation"],
+            "warnings":    result.get("validation",{}).get("warnings",[]),
+            "intent":      slots.intent,
+            "tables":      slots.table_names,
+            "dialect":     dialect,
+            "needs_clarification": False,
+            "response_ms": 0,
+        }
 
     return {
         "slots_updated": True,
