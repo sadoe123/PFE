@@ -48,6 +48,9 @@ COMPLEX_KEYWORDS = [
     "greater than the", "less than the",
     "dont le total", "dont la somme", "dont le montant",
     "whose total", "whose sum",
+    # Chiffre d'affaires — nécessite JOIN Order Details
+    "chiffre d.affaires", "chiffre affaires", r"\bca\b",
+    "revenus", "recettes", "ventes totales", "turnover",
     # Filtres sur noms propres (ex: client ALFKI)
     "client [a-z]", "produit [a-z]", "categorie [a-z]",
     # YoY / MoM
@@ -120,6 +123,8 @@ Rules:
 - For date filters use DATEADD, MONTH(), YEAR(), GETDATE()
 - For "superieur a la moyenne": use WHERE col > (SELECT AVG(col) FROM table)
 - For "mois dernier": use WHERE col >= DATEADD(MONTH,-1,GETDATE()) AND col < GETDATE()
+- For "chiffre d'affaires" or "revenus" or "CA": revenue = SUM([UnitPrice]*[Quantity]) from [Order Details], join with [Orders] and [Customers]
+- For Northwind revenue: SELECT c.[CompanyName], SUM(od.[UnitPrice]*od.[Quantity]) AS Revenue FROM [Customers] c JOIN [Orders] o ON c.[CustomerID]=o.[CustomerID] JOIN [Order Details] od ON o.[OrderID]=od.[OrderID] GROUP BY c.[CompanyName]
 - For specific month+year like "janvier 2024": use WHERE MONTH(col)=1 AND YEAR(col)=2024
 - Month names: janvier=1,fevrier=2,mars=3,avril=4,mai=5,juin=6,juillet=7,aout=8,septembre=9,octobre=10,novembre=11,decembre=12
 - Always select all relevant columns, not just one column

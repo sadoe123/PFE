@@ -17,9 +17,19 @@ services:
       - REDIS_HOST=onepilot_redis
       - MEILI_HOST=http://onepilot_meilisearch:7700
       - MEILI_MASTER_KEY=${MEILI_MASTER_KEY:-onepilot_meili_key}
-      - HF_HOME=/tmp/hf_cache
-      - TRANSFORMERS_CACHE=/tmp/hf_cache
-      - SENTENCE_TRANSFORMERS_HOME=/tmp/hf_cache
+      # ── Modèles IA — chemins persistants (volumes) ────────
+      - PIPER_VOICES_DIR=/app/models/piper
+      - PIPER_DEFAULT_VOICE=fr_FR-upmc-medium
+      - VOSK_MODEL_PATH=/app/models/vosk/vosk-model-small-fr-0.22
+      - WHISPER_MODEL=small
+      - WHISPER_LANG=fr
+      # ── HuggingFace cache persistant ─────────────────────
+      - HF_HOME=/app/models/hf
+      - TRANSFORMERS_CACHE=/app/models/hf
+      - SENTENCE_TRANSFORMERS_HOME=/app/models/hf
+      # ── Ollama LLM (hôte Windows GPU) ─────────────────────
+      - OLLAMA_HOST=http://host.docker.internal:11434
+      - OLLAMA_MODEL=qwen2.5-coder:3b
     volumes:
       - ./core:/app/core
       - ./connectors:/app/connectors
@@ -27,8 +37,11 @@ services:
       - ./db:/app/db
       - ./ui:/app/ui
       - uploads_data:/app/uploads
-    # FIX 1: --reload supprimé — WatchFiles tuait le sync en plein milieu
-    # FIX 2: --timeout-keep-alive 300 pour les syncs longs (1264 entités ~60-120s)
+      # ── Modèles IA persistants (survivent aux restart) ────
+      - piper_voices:/app/models/piper
+      - vosk_model:/app/models/vosk
+      - whisper_cache:/app/models/whisper
+      - hf_cache:/app/models/hf
     command: >
       uvicorn api.main:app
         --host 0.0.0.0
@@ -49,10 +62,8 @@ services:
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
-      # FIX 3: timeout 10s→60s — le healthcheck échouait pendant un sync actif
       timeout: 60s
       retries: 5
-      # FIX 4: start_period augmenté pour laisser le temps au premier sync de finir
       start_period: 60s
 
   # ── UI (serveur statique) ─────────────────────────────────
@@ -144,7 +155,7 @@ services:
       - onepilot_net
     restart: unless-stopped
 
-  # ── MeiliSearch (moteur recherche sémantique) ────────────────
+  # ── MeiliSearch (moteur recherche sémantique) ─────────────
   meilisearch:
     image: getmeili/meilisearch:v1.6
     container_name: onepilot_meilisearch
@@ -169,6 +180,11 @@ volumes:
   redis_data:
   uploads_data:
   meilisearch_data:
+  # ── Modèles IA persistants ────────────────────────────────
+  piper_voices:      # Voix TTS Piper (~100MB total)
+  vosk_model:        # Modèle Vosk FR (~50MB)
+  whisper_cache:     # Cache modèles Whisper (~240MB small)
+  hf_cache:          # HuggingFace / Sentence-BERT (~500MB)
 
 networks:
   onepilot_net:

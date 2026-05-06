@@ -12,10 +12,10 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
-from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -52,6 +52,10 @@ from .cdc_db_triggers        import PostgreSQLWALCDC, SQLServerCDC
 from .nlu_engine             import get_nlu_pipeline, get_context, clear_context, Intent, ContextManager, ConversationTurn
 from .query_engine           import SQLGenerator, UniversalQueryPlanner
 from .ambiguity_resolver     import AmbiguityResolver
+try:
+    from connectors.factory  import ConnectorFactory
+except ImportError:
+    ConnectorFactory = None
 
 from .schemas import (
     ConnectorType,
@@ -101,7 +105,26 @@ async def lifespan(app: FastAPI):
         await init_schema()
         logger.info("✅ PostgreSQL connecté et schema initialisé")
 
-        # ── Migration : ajout colonne dimension_hierarchy si absente ─────────
+        # ── Migration : table conversation_dashboards ─────────────────────
+        try:
+            pool = await get_pg_pool()
+            async with pool.acquire() as conn:
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS conversation_dashboards (
+                        conv_id      TEXT NOT NULL,
+                        dashboard_id TEXT NOT NULL,
+                        spec_json    TEXT NOT NULL,
+                        updated_at   TIMESTAMPTZ DEFAULT NOW(),
+                        PRIMARY KEY (conv_id, dashboard_id)
+                    )
+                """)
+                await conn.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_conv_dashboards_conv_id
+                    ON conversation_dashboards(conv_id)
+                """)
+            logger.info("✅ Migration conversation_dashboards OK")
+        except Exception as e:
+            logger.warning(f"Migration conversation_dashboards (non-bloquant): {e}")
         try:
             pool = await get_pg_pool()
             async with pool.acquire() as conn:
@@ -119,7 +142,54 @@ async def lifespan(app: FastAPI):
         logger.info("✅ Redis connecté")
     except Exception as e:
         logger.warning(f"⚠️  Redis non disponible: {e}")
+
+    # ── Démarrage WAL CDC listener ────────────────────────────────────
+    _wal_task = None
+    try:
+        from .cdc_db_triggers import PostgreSQLWALCDC
+        pool = await get_pg_pool()
+        redis = await get_redis()
+        wal_cdc = PostgreSQLWALCDC(pool, redis)
+        # Vérifie si le slot existe
+        # Vérifie directement si le slot existe dans PostgreSQL
+        pool = await get_pg_pool()
+        async with pool.acquire() as _wal_conn:
+            _slot = await _wal_conn.fetchrow(
+                "SELECT slot_name, active FROM pg_replication_slots WHERE slot_name = 'onepilot_cdc'"
+            )
+        if _slot:
+            # Démarre le listener en background
+            async def _wal_loop():
+                while True:
+                    try:
+                        # Lit les changements WAL via connexion interne
+                        _pool2 = await get_pg_pool()
+                        async with _pool2.acquire() as _wconn:
+                            await _wconn.fetch(f"""
+                                SELECT lsn, xid, data
+                                FROM pg_logical_slot_peek_changes(
+                                    'onepilot_cdc', NULL, 10,
+                                    'include-schemas', 'true'
+                                )
+                            """)
+                    except Exception as _e:
+                        logger.debug(f"[WAL] loop error: {_e}")
+                    await asyncio.sleep(10)
+            _wal_task = asyncio.create_task(_wal_loop())
+            logger.info("✅ WAL CDC listener démarré (slot: onepilot_cdc)")
+        else:
+            logger.info("ℹ️  WAL slot non trouvé — WAL CDC désactivé")
+    except Exception as e:
+        logger.warning(f"⚠️  WAL CDC non disponible: {e}")
+
     yield
+
+    # ── Arrêt WAL listener ────────────────────────────────────────────
+    if _wal_task:
+        _wal_task.cancel()
+        try: await _wal_task
+        except asyncio.CancelledError: pass
+
     await close_connections()
     logger.info("👋 OnePilot API arrêté")
 
@@ -1248,6 +1318,25 @@ async def ml_train(source_id: UUID):
     try:
         pool = await get_pg_pool()
         result = await train_ml_model(source_id, pool)
+
+        # ── Auto-refresh : supprime les anciennes prédictions ML + redécouvre ──
+        try:
+            async with pool.acquire() as conn:
+                deleted = await conn.fetchval(
+                    "DELETE FROM entity_relations WHERE source_id=$1 AND detection_method='ml_predicted' RETURNING COUNT(*)",
+                    source_id
+                )
+            logger.info(f"[ML Train] {deleted or 0} anciennes prédictions ML supprimées")
+            # Relance la découverte avec le nouveau modèle
+            discovery = await discover_relationships(source_id)
+            result["auto_rediscovery"] = {
+                "deleted_old": deleted or 0,
+                "new_relations": discovery.get("relations_found", 0),
+            }
+            logger.info(f"[ML Train] Auto-rediscovery: {discovery.get('relations_found', 0)} nouvelles relations")
+        except Exception as _e:
+            logger.warning(f"[ML Train] Auto-rediscovery error (non-bloquant): {_e}")
+
         return _safe_json({"source_id": str(source_id), **result})
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -1680,7 +1769,7 @@ async def get_conversations(limit: int = 200, offset: int = 0):
         pool = await get_pg_pool()
         async with pool.acquire() as conn:
             rows = await conn.fetch(
-                "SELECT id, source_id, title, created_at FROM conversations ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+                "SELECT id, source_id, title, created_at, updated_at FROM conversations ORDER BY COALESCE(updated_at, created_at) DESC LIMIT $1 OFFSET $2",
                 min(limit, 500), offset
             )
             
@@ -1690,10 +1779,12 @@ async def get_conversations(limit: int = 200, offset: int = 0):
                     "id": str(row['id']),
                     "source_id": str(row['source_id']),
                     "title": row['title'],
-                    "created_at": row['created_at'].isoformat() if row['created_at'] else None
+                    "created_at": row['created_at'].isoformat() if row['created_at'] else None,
+                    "updated_at": row['updated_at'].isoformat() if row['updated_at'] else None,
                 })
             
-            return {"conversations": conversations}
+            total = await conn.fetchval("SELECT COUNT(*) FROM conversations")
+            return {"conversations": conversations, "total": total}
     except Exception as e:
         logger.error(f"Get conversations error: {e}")
         return {"conversations": []}
@@ -1797,8 +1888,9 @@ async def _fix_slots(slots, question: str, schema: dict, known_entities: list,
     _is_having  = any(kw in q_low for kw in _having_kw) or (
         any(kw in q_low for kw in ["plus de", "moins de"]) and not _is_filter
     )
-    if _is_having and not _is_filter:
-        slots.intent = Intent.GENERATE_AGG
+    if _is_having and not _is_filter and slots.intent != Intent.SHOW_DASHBOARD:
+        if slots.intent != Intent.SHOW_DASHBOARD:
+            slots.intent = Intent.GENERATE_AGG
         # Extrait valeur numérique
         _num = _re_fix.search(r"(?:plus de|moins de|au moins|au plus|ayant)\s+(\d+)", q_low)
         if _num:
@@ -1856,8 +1948,9 @@ async def _fix_slots(slots, question: str, schema: dict, known_entities: list,
                 "nach", "pro", "je", "gruppiert nach"]
     if (any(kw in q_low for kw in _agg_trg) and
             any(kw in q_low for kw in _per_trg) and
-            slots.intent not in (Intent.GENERATE_AGG,)):
-        slots.intent = Intent.GENERATE_AGG
+            slots.intent not in (Intent.GENERATE_AGG, Intent.SHOW_DASHBOARD)):
+        if slots.intent != Intent.SHOW_DASHBOARD:
+            slots.intent = Intent.GENERATE_AGG
         if not slots.metric:
             if any(kw in q_low for kw in ["count", "number of", "nombre de"]):
                 slots.metric = "COUNT"
@@ -1880,8 +1973,9 @@ async def _fix_slots(slots, question: str, schema: dict, known_entities: list,
                 slots.group_by = _sim.group(1)
 
     # 6. LAG / mois précédent
-    if any(kw in q_low for kw in ["mois precedent", "mois précédent", "par rapport au", "comparaison mois"]):
-        slots.intent = Intent.GENERATE_AGG
+    if any(kw in q_low for kw in ["mois precedent", "mois précédent", "par rapport au", "comparaison mois"]) and slots.intent != Intent.SHOW_DASHBOARD:
+        if slots.intent != Intent.SHOW_DASHBOARD:
+            slots.intent = Intent.GENERATE_AGG
 
     # 7. top N par groupe → window
     # top N X par/por/by/nach Y → AGG générique toutes langues
@@ -1890,7 +1984,9 @@ async def _fix_slots(slots, question: str, schema: dict, known_entities: list,
     )
     if _top_par:
         slots.top_n  = int(_top_par.group(1))
-        slots.intent = Intent.GENERATE_AGG
+        if slots.intent != Intent.SHOW_DASHBOARD:
+            if slots.intent != Intent.SHOW_DASHBOARD:
+                slots.intent = Intent.GENERATE_AGG
         _entity_word = _top_par.group(2)  # ex: "clientes", "clients", "kunden"
         _metric_word = _top_par.group(3)  # ex: "importe", "montant", "betrag"
         # group_by = le mot ENTITE (avant par/por/by/nach)
@@ -1931,7 +2027,8 @@ async def _fix_slots(slots, question: str, schema: dict, known_entities: list,
 
     # 9. count_entities + table connue → AGG
     if slots.intent == Intent.COUNT_ENTITIES and slots.table_names and slots.table_names[0] in schema:
-        slots.intent = Intent.GENERATE_AGG
+        if slots.intent != Intent.SHOW_DASHBOARD:
+            slots.intent = Intent.GENERATE_AGG
         if not slots.metric:
             slots.metric = "COUNT"
 
@@ -2019,6 +2116,21 @@ async def _build_chat_answer(source_id_str: str, question: str) -> str:
     q_norm = _norm(question)
     directly_mentioned = [t for t in known_entities if _norm(t) in q_norm]
 
+    # Fuzzy match: "SOINVOICE" peut matcher "SOI_INVOICE" ou "SO_INVOICE" etc.
+    if not directly_mentioned:
+        q_words = q_norm.split()
+        for word in q_words:
+            if len(word) >= 4:  # Ignore mots courts
+                for entity in known_entities:
+                    e_norm = _norm(entity)
+                    # Match si l'un contient l'autre (sans underscore)
+                    if (word in e_norm.replace('_','') or
+                        e_norm.replace('_','') in word or
+                        word in e_norm):
+                        if entity not in directly_mentioned:
+                            directly_mentioned.append(entity)
+                            logger.info(f"[Chat] Fuzzy match: '{word}' → '{entity}'")
+
     # ── Blocage DDL/DML avant tout (sécurité) ────────────────────────
     import re as _re
     _DDL = _re.compile(
@@ -2028,14 +2140,87 @@ async def _build_chat_answer(source_id_str: str, question: str) -> str:
     if _DDL.search(question):
         return "🚫 **Requête refusée** — instruction interdite.\n\n*Seules les questions en langage naturel sont autorisées.*"
 
+    # ── Détection réponse à une clarification en attente ─────────────
+    # Si le contexte a une clarification pendante ET la question est courte
+    # (≤ 5 mots) → c'est probablement une réponse à la clarification
+    context_check = get_context(source_id_str)
+    if context_check.pending_clarification and context_check.pending_slots:
+        pending = context_check.pending_clarification
+        opts_lower = [o.lower().strip() for o in pending.get("options", [])]
+        q_stripped = question.strip().lower()
+        # Vérifie si la réponse correspond à une option (exacte ou partielle)
+        matched_option = None
+        for opt in pending.get("options", []):
+            if (opt.lower().strip() == q_stripped or
+                q_stripped in opt.lower() or
+                opt.lower() in q_stripped or
+                # Match sur les premiers mots (ex: "Comptes" match "Comptes courants")
+                any(word == q_stripped for word in opt.lower().split())):
+                matched_option = opt
+                break
+        # Aussi vérifie si la question est une entité connue
+        if not matched_option and q_stripped in [e.lower() for e in known_entities]:
+            matched_option = next((e for e in known_entities if e.lower() == q_stripped), None)
+
+        if matched_option:
+            logger.info(f"[Chat] Clarification résolue: '{matched_option}' pour slot='{pending.get('slot_key')}'")
+            # Applique la clarification aux slots en attente
+            from .ambiguity_resolver import AmbiguityResolver as _AR
+            _resolver = _AR()
+            resolved_slots = _resolver.apply_clarification(
+                context_check.pending_slots,
+                pending.get("slot_key", "table_names"),
+                matched_option,
+            )
+            # Réinitialise l'état de clarification
+            context_check.pending_clarification = None
+            context_check.pending_slots = None
+            orig_question = context_check.pending_question or question
+            context_check.pending_question = None
+            # Continue avec les slots résolus et la question originale
+            slots = resolved_slots
+            question = orig_question  # Utilise la question originale pour le contexte
+            goto_sql = True
+        else:
+            goto_sql = False
+    else:
+        goto_sql = False
+
     # ── Pipeline NLU ──────────────────────────────────────────────────
-    try:
-        nlu     = get_nlu_pipeline()
-        context = get_context(source_id_str)
-        slots   = nlu.process(question, context, known_entities)
-    except Exception as e:
-        logger.warning(f"[Chat] NLU error: {e}")
-        slots = None
+    if not goto_sql:
+        try:
+            nlu     = get_nlu_pipeline()
+            context = get_context(source_id_str)
+            slots   = nlu.process(question, context, known_entities)
+        except Exception as e:
+            logger.warning(f"[Chat] NLU error: {e}")
+            slots = None
+    # Si goto_sql=True → slots déjà définis par la clarification résolue
+
+    # ── Log NLU dans nlu_query_log (immédiatement après NLU) ─────────
+    if slots:
+        try:
+            _pool_log = await get_pg_pool()
+            async with _pool_log.acquire() as _conn_log:
+                await _conn_log.execute("""
+                    INSERT INTO nlu_query_log
+                        (conversation_id, source_id, question, intent, confidence,
+                         tables_detected, slots_json, needs_clarification, clarification_json, response_ms)
+                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+                """,
+                    "chat",
+                    UUID(source_id_str) if source_id_str else None,
+                    question,
+                    slots.intent,
+                    float(slots.confidence),
+                    slots.table_names or [],
+                    json_module.dumps({"metric": slots.metric, "group_by": slots.group_by}),
+                    False,
+                    json_module.dumps({}),
+                    0,
+                )
+        except Exception as _log_err:
+            logger.warning(f"[Chat] nlu_query_log INSERT error: {_log_err}")
 
     # Injecte les tables détectées directement si le NLU les a ratées
     if slots and directly_mentioned:
@@ -2044,8 +2229,17 @@ async def _build_chat_answer(source_id_str: str, question: str) -> str:
                 slots.table_names.insert(0, t)
 
     # Inject last_table from context if no table detected
+    # Exception: LIST_FIELDS PK/FK global → ne pas injecter last_table
     context = get_context(source_id_str)
-    if slots and not slots.table_names and context.last_table:
+    _pk_fk_kws = ["primaire","primary","etrangere","étrangère","étrangères","etrangeres","foreign","pk","fk","clé","cle","index"]
+    import unicodedata as _ucd_gf
+    def _norm_gf(s): return ''.join(c for c in _ucd_gf.normalize('NFD',s.lower()) if _ucd_gf.category(c)!='Mn')
+    _is_global_fields = (slots and slots.intent == Intent.LIST_FIELDS and
+                         any(kw in _norm_gf(question) for kw in ["primaire","primary","etrangere","foreign","pk","fk","cle","index"]))
+    # Si global fields, forcer table_names vide même si le NLU en a trouvé
+    if slots and slots.intent == Intent.LIST_FIELDS and _is_global_fields:
+        slots.table_names = []
+    if slots and not slots.table_names and context.last_table and not _is_global_fields:
         if context.last_table in schema:
             slots.table_names = [context.last_table]
             logger.info(f"[Chat] Context injection: last_table='{context.last_table}'")
@@ -2053,7 +2247,22 @@ async def _build_chat_answer(source_id_str: str, question: str) -> str:
     # Correction intents + raw_text via _fix_slots()
     q_low = question.lower()
     if slots:
+        _original_intent = slots.intent  # Sauvegarder avant _fix_slots
         slots = await _fix_slots(slots, question, schema, known_entities, source_id_str=source_id_str, pg_pool=None)
+        # ── Protéger SHOW_DASHBOARD — priorité absolue ──────────────────
+        # Si le NLU a détecté show_dashboard, _fix_slots ne peut pas l'écraser
+        if _original_intent == Intent.SHOW_DASHBOARD:
+            slots.intent = Intent.SHOW_DASHBOARD
+            logger.info(f"[Chat] SHOW_DASHBOARD intent protégé contre _fix_slots")
+        # Protéger LIST_FIELDS contre les surcharges de _fix_slots
+        if (_original_intent == Intent.LIST_FIELDS and
+            slots.intent != Intent.LIST_FIELDS and
+            any(kw in question.lower() for kw in [
+                "primaire", "primary", "étrangère", "etrangere", "foreign",
+                "cle", "clé", "index", "champs", "colonnes", "fields", "columns"
+            ])):
+            slots.intent = Intent.LIST_FIELDS
+            logger.info(f"[Chat] LIST_FIELDS intent protégé contre surcharge de _fix_slots")
     if slots:
         # "ayant / having / plus de N fois" → forcer GENERATE_AGG + injecter group_by
         _having_kw = ["ayant", "having", "au moins", "au plus", "dont le total"]
@@ -2065,7 +2274,8 @@ async def _build_chat_answer(source_id_str: str, question: str) -> str:
             any(kw in q_low for kw in ["plus de", "moins de"]) and not _is_filter
         )
         if _is_having and not _is_filter:
-            slots.intent = Intent.GENERATE_AGG
+            if slots.intent != Intent.SHOW_DASHBOARD:
+                slots.intent = Intent.GENERATE_AGG
             # Extraire le sujet de la phrase HAVING comme group_by
             # "banques ayant..." → group_by = "banque"
             import re as _re_hav
@@ -2117,21 +2327,24 @@ async def _build_chat_answer(source_id_str: str, question: str) -> str:
         if (any(kw in q_low for kw in _count_kw) and
                 any(kw in q_low for kw in _per_kw) and
                 slots.intent not in (Intent.GENERATE_AGG,)):
-            slots.intent = Intent.GENERATE_AGG
+            if slots.intent != Intent.SHOW_DASHBOARD:
+                slots.intent = Intent.GENERATE_AGG
             if not slots.metric:
                 slots.metric = "COUNT"
 
         # "mois précédent / par rapport" → forcer window LAG
         _lag_kw = ["mois precedent", "mois précédent", "par rapport au", "comparaison mois", "vs mois"]
         if any(kw in q_low for kw in _lag_kw):
-            slots.intent = Intent.GENERATE_AGG
+            if slots.intent != Intent.SHOW_DASHBOARD:
+                slots.intent = Intent.GENERATE_AGG
 
         # "top N X par Y" ou "rang des X par Y" → window ROW_NUMBER
         import re as _re3
         # Pattern: "top 5 banques par montant" ou "rang des banques par montant"
         _top_pat = _re3.search(r"(?:top\s+\d+\s+|rang\s+des?\s+)(\w+)\s+par\s+(\w+)", q_low)
         if _top_pat and slots.table_names:
-            slots.intent = Intent.GENERATE_AGG
+            if slots.intent != Intent.SHOW_DASHBOARD:
+                slots.intent = Intent.GENERATE_AGG
             slots.raw_text = question
             # Effacer amount_filter si c est top_n mal interprete
             if slots.amount_filter:
@@ -2201,7 +2414,8 @@ async def _build_chat_answer(source_id_str: str, question: str) -> str:
     if slots and slots.intent == Intent.COUNT_ENTITIES:
         # Si une table est identifiée → COUNT SQL sur cette table
         if slots.table_names and slots.table_names[0] in schema:
-            slots.intent = Intent.GENERATE_AGG
+            if slots.intent != Intent.SHOW_DASHBOARD:
+                slots.intent = Intent.GENERATE_AGG
             if not slots.metric:
                 slots.metric = "COUNT"
         # Sinon → réponse catalogue
@@ -2249,16 +2463,105 @@ async def _build_chat_answer(source_id_str: str, question: str) -> str:
         )
 
     if slots and slots.intent == Intent.LIST_FIELDS:
+        q_low_lf = question.lower()
+        is_pk_query = any(kw in q_low_lf for kw in [
+            "primaire", "primary", "clé", "cle", "pk", "index", "foreign", "étrangère"
+        ])
+
+        if is_pk_query and not slots.table_names:
+            # "Quels champs sont des clés primaires ?" → cherche les PK dans toutes les entités
+            try:
+                pool_lf = await get_pg_pool()
+                async with pool_lf.acquire() as conn_lf:
+                    pk_flag = "primary" in q_low_lf or "primaire" in q_low_lf or "pk" in q_low_lf
+                    import unicodedata as _ucd2
+                    def _n2(s): return ''.join(ch for ch in _ucd2.normalize('NFD',s.lower()) if _ucd2.category(ch)!='Mn')
+                    q_norm_lf = _n2(q_low_lf)
+                    fk_flag = "foreign" in q_norm_lf or "etrangere" in q_norm_lf or "fk" in q_norm_lf
+
+                    # Requête ciblée selon le type de clé demandé
+                    if pk_flag and not fk_flag:
+                        where_key = "ef.is_primary_key = TRUE"
+                        title = "clés primaires"
+                        icon = "🔑"
+                    elif fk_flag and not pk_flag:
+                        where_key = "ef.is_foreign_key = TRUE AND ef.is_primary_key = FALSE"
+                        title = "clés étrangères"
+                        icon = "🔗"
+                    else:
+                        where_key = "(ef.is_primary_key = TRUE OR ef.is_foreign_key = TRUE)"
+                        title = "clés (PK + FK)"
+                        icon = "🔑"
+
+                    pk_rows = await conn_lf.fetch(f"""
+                        SELECT se.name AS table_name, ef.name AS field_name,
+                               ef.data_type, ef.is_primary_key, ef.is_foreign_key
+                        FROM source_entities se
+                        JOIN entity_fields ef ON ef.entity_id = se.id
+                        WHERE se.source_id = $1
+                          AND se.is_visible = TRUE
+                          AND {where_key}
+                        ORDER BY se.name, ef.position
+                        LIMIT 500
+                    """, source_id)
+                    # Compte total — dans le même bloc async with
+                    count_row = await conn_lf.fetchrow(f"""
+                        SELECT COUNT(*) as total
+                        FROM source_entities se
+                        JOIN entity_fields ef ON ef.entity_id = se.id
+                        WHERE se.source_id = $1 AND se.is_visible = TRUE
+                          AND {where_key}
+                    """, source_id)
+                    total_count = count_row["total"] if count_row else len(pk_rows)
+                if pk_rows:
+
+                    rows_txt = "\n".join(
+                        f"- `{r['table_name']}`.`{r['field_name']}` ({r['data_type']}) "
+                        f"{'🔑 PK' if r['is_primary_key'] and not r['is_foreign_key'] else '🔗 FK' if r['is_foreign_key'] and not r['is_primary_key'] else '🔑🔗 PK+FK'}"
+                        for r in pk_rows[:30]
+                    )
+                    more = f"\n\n*… et {total_count - 30} autres.*" if total_count > 30 else ""
+                    return f"{icon} **{title.capitalize()} dans {name}** ({total_count} trouvées) :\n\n{rows_txt}{more}"
+                else:
+                    return f"ℹ️ Aucune {title} détectée dans **{name}**. Les métadonnées de clés dépendent du connecteur source."
+            except Exception as e_lf:
+                logger.warning(f"[Chat] PK query error: {e_lf}")
+
         if entities:
             e = entities[0]
-            flds  = e.fields[:8] if e.fields else []
+            flds  = e.fields[:15] if e.fields else []
             rows  = "\n".join(
-                f"- `{f.name}` ({f.data_type}"
-                f"{'  🔑' if f.is_primary_key else ''}{'  🔗' if f.is_foreign_key else ''})"
+                f"- `{f.name}` ({f.data_type})"
+                f"{'  🔑 PK' if f.is_primary_key else ''}{'  🔗 FK' if f.is_foreign_key else ''}"
                 for f in flds
             )
-            return f"📋 Champs de `{e.name}` :\n\n{rows}"
+            pk_count = sum(1 for f in flds if f.is_primary_key)
+            fk_count = sum(1 for f in flds if f.is_foreign_key)
+            meta = f" — {pk_count} PK, {fk_count} FK" if (pk_count or fk_count) else ""
+            return f"📋 **Champs de `{e.name}`**{meta} :\n\n{rows}"
         return "⚠️ Aucune entité chargée. Lancez une synchronisation d'abord."
+
+    # ── Dashboard intent → génération automatique ────────────
+    if slots and slots.intent == Intent.SHOW_DASHBOARD:
+        try:
+            from .dashboard_engine import get_dashboard_generator
+            generator = get_dashboard_generator()
+            spec = await generator.generate(
+                question          = question,
+                slots             = slots,
+                schema            = schema,
+                source_id         = source_id_str,
+                pg_pool           = await get_pg_pool(),
+                redis             = await get_redis(),
+                connector_factory = ConnectorFactory,
+            )
+            spec_dict = spec.to_dict()
+            n_widgets = len(spec_dict.get("widgets", []))
+            # Retourne uniquement le bloc dashboard JSON — le frontend gère l'affichage
+            return f"```dashboard\n{json_module.dumps(spec_dict, default=str)}\n```"
+        except Exception as e:
+            logger.error(f"[Chat/Dashboard] {e}")
+            return f"❌ Erreur génération dashboard : {e}"
 
     if slots and slots.intent in (Intent.GREETING, Intent.HELP):
         return (
@@ -2272,18 +2575,66 @@ async def _build_chat_answer(source_id_str: str, question: str) -> str:
             f"- *Jointure entre commandes et clients*"
         )
 
+    # ── LLM_EXPLAIN : questions conceptuelles → Ollama ───────────────
+    if slots and slots.intent == "llm_explain":
+        try:
+            import httpx as _httpx
+            OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://host.docker.internal:11434")
+            # Contexte source pour enrichir la réponse
+            domain_ctx = f"Source active: {name} ({entity_count} entités ERP)." if name else ""
+            prompt = f"""{domain_ctx}
+Tu es OnePilot, un assistant expert en systèmes ERP et données d'entreprise.
+Réponds en français de manière claire et structurée à la question suivante :
+
+{question}
+
+Donne une réponse concise (5-10 lignes max), pratique et orientée métier."""
+
+            # Routing intelligent : mistral pour questions NL, qwen pour SQL/code
+            q_lower = question.lower()
+            is_technical = any(k in q_lower for k in [
+                'sql','requête','code','script','query','table','colonne',
+                'jointure','select','insert','update','index','schéma'
+            ])
+            llm_model = "qwen2.5-coder:3b" if is_technical else "mistral:latest"
+            logger.info(f"[LLM Explain] model={llm_model} (technical={is_technical})")
+
+            async with _httpx.AsyncClient(timeout=120) as _cli:
+                resp = await _cli.post(
+                    f"{OLLAMA_HOST}/api/generate",
+                    json={"model": llm_model, "prompt": prompt, "stream": False,
+                          "options": {"num_predict": 400, "temperature": 0.3}}
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    answer = data.get("response", "").strip()
+                    if answer:
+                        model_label = "Mistral 7B" if "mistral" in llm_model else "Qwen2.5-Coder 3B"
+                        return f"🤖 **OnePilot IA** *(via {model_label})*\n\n{answer}"
+        except Exception as _e:
+            import traceback
+            logger.warning(f"[LLM Explain] {_e}\n{traceback.format_exc()}")
+        # Fallback si LLM indisponible
+        return f"❓ Je ne peux pas répondre à cette question conceptuelle pour le moment. Essayez de poser une question sur les données de **{name}**."
+
     # ── Intents SQL : pipeline complet ───────────────────────────────
     if not schema:
         return f"⚠️ Aucun schéma disponible pour **{name}**. Lancez une synchronisation d'abord."
 
     # Vérification ambiguïtés bloquantes
-    if slots:
+    if slots and not goto_sql:
         try:
             resolver  = AmbiguityResolver()
             questions = resolver.analyze(slots, known_entities, schema)
             if questions and questions[0].required:
                 clarif = resolver.build_clarification_response(questions)
                 opts   = "\n".join(f"- {o}" for o in clarif.get("options", [])[:5])
+                # Stocke l'état de clarification dans le contexte
+                ctx_store = get_context(source_id_str)
+                ctx_store.pending_clarification = clarif
+                ctx_store.pending_slots = slots
+                ctx_store.pending_question = question
+                logger.info(f"[Chat] Clarification stockée — slot={clarif.get('slot_key')} options={clarif.get('options', [])[:3]}")
                 return f"❓ **{clarif['question']}**\n\n{opts}"
         except Exception as e:
             logger.warning(f"[Chat] Ambiguity resolver error: {e}")
@@ -2373,7 +2724,7 @@ async def _build_chat_answer(source_id_str: str, question: str) -> str:
 
 @app.delete("/conversations/{conv_id}", status_code=204)
 async def delete_conversation(conv_id: str):
-    """Supprimer une conversation"""
+    """Supprimer une conversation et ses dashboards associés"""
     try:
         pool = await get_pg_pool()
         async with pool.acquire() as conn:
@@ -2386,9 +2737,18 @@ async def delete_conversation(conv_id: str):
                     "DELETE FROM conversations WHERE id = $1 OR id::text = $2",
                     uuid_val, conv_id
                 )
+                # Supprimer aussi les dashboards associés
+                await conn.execute(
+                    "DELETE FROM conversation_dashboards WHERE conv_id = $1 OR conv_id = $2",
+                    str(uuid_val), conv_id
+                )
             else:
                 result = await conn.execute(
                     "DELETE FROM conversations WHERE id::text = $1",
+                    conv_id
+                )
+                await conn.execute(
+                    "DELETE FROM conversation_dashboards WHERE conv_id = $1",
                     conv_id
                 )
             if result == "DELETE 0":
@@ -2398,6 +2758,20 @@ async def delete_conversation(conv_id: str):
     except Exception as e:
         logger.error(f"Delete conversation error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/dashboard/conv/{conv_id}/delete", status_code=204, tags=["Dashboard"])
+async def delete_conv_dashboards(conv_id: str):
+    """Supprimer tous les dashboards d'une conversation"""
+    try:
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "DELETE FROM conversation_dashboards WHERE conv_id = $1",
+                conv_id
+            )
+    except Exception as e:
+        logger.warning(f"Delete conv dashboards: {e}")
 
 @app.post("/chat/stream")
 async def chat_stream(req: ChatRequest):
@@ -2429,6 +2803,47 @@ async def chat_stream(req: ChatRequest):
 # ══════════════════════════════════════════════════════════════
 # LLM ENGINE — §2.3.3
 # ══════════════════════════════════════════════════════════════
+
+class DictationRequest(BaseModel):
+    text:      str
+    source_id: str = ""
+
+@app.post("/llm/extract-entities", tags=["LLM"])
+async def extract_entities_from_dictation(req: DictationRequest):
+    """
+    Extrait les entités structurées depuis une dictée vocale.
+    Ex: "Crée une commande pour le client Dupont, 50 unités du produit ABC-123"
+    → {action: "create", entity: "order", client: "Dupont", qty: 50, product: "ABC-123"}
+    """
+    try:
+        from .llm_engine import generate_sql_with_llm
+        prompt = f"""Extract structured entities from this voice dictation in JSON format.
+Text: "{req.text}"
+Return ONLY a JSON object with these fields if present:
+- action: create/update/delete/search
+- entity: order/product/customer/invoice
+- client/customer name
+- quantity (number)
+- product code or name
+- amount (number)
+- date
+- any other relevant fields
+Return only valid JSON, no explanation."""
+
+        import httpx, json as _json, os
+        OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://host.docker.internal:11434")
+        response = httpx.post(
+            f"{OLLAMA_HOST}/api/generate",
+            json={"model": "qwen2.5-coder:3b", "prompt": prompt,
+                  "stream": False, "options": {"temperature": 0.1}},
+            timeout=30,
+        )
+        raw = response.json().get("response", "").strip()
+        raw = raw.replace("```json", "").replace("```", "").strip()
+        entities = _json.loads(raw)
+        return {"entities": entities, "text": req.text}
+    except Exception as e:
+        return {"entities": None, "error": str(e), "text": req.text}
 
 @app.get("/llm/status", tags=["LLM"])
 async def llm_status():
@@ -2504,8 +2919,29 @@ async def text_to_speech(req: TTSRequest):
             raise HTTPException(400, "Texte vide")
 
         tts = get_tts_engine()
+
+        # Préparation vocale dans le endpoint
+        text_for_tts = req.text
+        original_len = len(text_for_tts)
+
+        # Simplifie Markdown, emojis, backticks
+        text_for_tts = tts.simplify_for_voice(text_for_tts)
+
+        # Si le simplificateur a beaucoup coupé → texte original était long → ajoute conclusion
+        if original_len > 400 and len(text_for_tts) < original_len * 0.5:
+            text_for_tts = text_for_tts.rstrip(".:") + ". La réponse complète est affichée à l'écran."
+
+        # Résumé vocal si encore trop long
+        if len(text_for_tts) > 600:
+            text_for_tts = tts.vocal_summary(text_for_tts)
+
+        # Pronunciation hints
+        text_for_tts = tts.pronunciation_hints(text_for_tts)
+
+        logger.info(f"[TTS] Préparé: {original_len} → {len(text_for_tts)} chars : {repr(text_for_tts[:80])}")
+
         wav_bytes = tts.synthesize(
-            text  = req.text,
+            text  = text_for_tts,
             voice = req.voice,
             speed = req.speed,
         )
@@ -2528,6 +2964,51 @@ async def text_to_speech(req: TTSRequest):
 async def text_to_speech_ssml(req: TTSRequest):
     """Synthétise du texte SSML en audio WAV."""
     return await text_to_speech(req)
+
+@app.post("/tts/stream", tags=["Voice"])
+async def text_to_speech_stream(req: TTSRequest):
+    """
+    Streaming TTS — génère et envoie l'audio phrase par phrase.
+    Latence réduite : le navigateur joue dès que la première phrase est prête.
+    """
+    import re
+    from fastapi.responses import StreamingResponse
+
+    try:
+        from .voice_engine import get_tts_engine
+
+        tts = get_tts_engine()
+        text = req.text[:800]
+
+        # Découpe en phrases
+        sentences = re.split(r'(?<=[.!?]) +', text)
+        sentences = [s.strip() for s in sentences if s.strip() and len(s.strip()) > 2]
+        if not sentences:
+            sentences = [text]
+
+        async def generate():
+            for sentence in sentences:
+                try:
+                    wav = tts.synthesize(
+                        text  = sentence,
+                        voice = req.voice,
+                        speed = req.speed,
+                    )
+                    if wav and len(wav) > 44:  # > header WAV vide
+                        yield wav
+                except Exception as e:
+                    logger.warning(f"[TTS/stream] Phrase skip: {e}")
+                    continue
+
+        return StreamingResponse(
+            generate(),
+            media_type="audio/wav",
+            headers={"X-Accel-Buffering": "no"},
+        )
+
+    except Exception as e:
+        logger.error(f"TTS stream error: {e}")
+        raise HTTPException(500, str(e))
 
 @app.get("/stt/status", tags=["Voice"])
 async def stt_status():
@@ -2607,6 +3088,249 @@ async def speech_to_text(file: UploadFile = File(...)):
     except Exception as e:
         logger.error(f"STT error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ══════════════════════════════════════════════════════════════
+# VOICE EXTENSIONS — §2.3.2 (custom vocab, voice messages)
+# ══════════════════════════════════════════════════════════════
+
+class VocabularyRequest(BaseModel):
+    terms:     List[str]
+    source_id: Optional[str] = ""
+
+class VoiceMessageIn(BaseModel):
+    text:      str
+    source_id: Optional[str] = ""
+    user_id:   Optional[str] = "default"
+
+@app.post("/stt/vocabulary", tags=["Voice"])
+async def add_custom_vocabulary(req: VocabularyRequest):
+    """
+    Ajoute des termes métier custom au vocabulaire Whisper.
+    Ces termes sont injectés dans initial_prompt pour améliorer la précision STT.
+    §2.3.2A — Custom vocabulary persistant à runtime.
+    """
+    try:
+        from .voice_engine import extend_vocabulary, get_full_vocabulary
+        if not req.terms:
+            raise HTTPException(400, "Liste de termes vide")
+        cleaned = [t.strip() for t in req.terms if t.strip() and len(t.strip()) <= 60]
+        if not cleaned:
+            raise HTTPException(400, "Aucun terme valide (max 60 car. par terme)")
+        total = extend_vocabulary(cleaned)
+        return {
+            "added":       len(cleaned),
+            "total":       total,
+            "vocabulary":  get_full_vocabulary(),
+            "message":     f"{len(cleaned)} terme(s) ajouté(s) au vocabulaire Whisper",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Vocabulary error: {e}")
+        raise HTTPException(500, str(e))
+
+@app.get("/stt/vocabulary", tags=["Voice"])
+async def get_vocabulary():
+    """Retourne le vocabulaire STT complet (base + custom)."""
+    try:
+        from .voice_engine import get_full_vocabulary, BUSINESS_VOCABULARY, _CUSTOM_VOCABULARY_EXTRA
+        return {
+            "base":   BUSINESS_VOCABULARY,
+            "custom": _CUSTOM_VOCABULARY_EXTRA,
+            "total":  len(BUSINESS_VOCABULARY) + len(_CUSTOM_VOCABULARY_EXTRA),
+        }
+    except Exception as e:
+        return {"base": [], "custom": [], "total": 0, "error": str(e)}
+
+@app.get("/tts/voices", tags=["Voice"])
+async def list_voices():
+    """Liste les voix TTS disponibles."""
+    try:
+        from .voice_engine import get_tts_engine, check_piper_available
+        info = check_piper_available()
+        return {
+            "available": info.get("available", False),
+            "voices":    info.get("voices", []),
+            "default":   info.get("default", "fr_FR-upmc-medium"),
+            "aliases": {
+                "femme":  "fr_FR-upmc-medium",
+                "homme":  "fr_FR-gilles-low",
+                "female": "fr_FR-upmc-medium",
+                "male":   "fr_FR-gilles-low",
+            },
+        }
+    except Exception as e:
+        return {"available": False, "voices": [], "error": str(e)}
+
+@app.websocket("/stt/stream")
+async def stt_stream_websocket(ws: WebSocket):
+    """
+    Streaming STT via WebSocket + Vosk — transcription en temps réel.
+    §2.3.2A — Streaming recognition : retourne les mots au fur et à mesure.
+
+    Protocole :
+      Client → serveur : chunks PCM 16-bit mono 16kHz (bytes bruts)
+      Client → serveur : string "END" pour signaler fin de parole
+      Serveur → client : JSON {"partial": "...", "final": false}
+      Serveur → client : JSON {"text": "...", "final": true, "command": ...}
+    """
+    await ws.accept()
+    logger.info("[WS/STT] Connexion streaming STT ouverte")
+
+    try:
+        from vosk import KaldiRecognizer
+        from .voice_engine import get_vosk_engine, normalize_voice_text, detect_voice_command
+        import json as _json
+
+        vosk = get_vosk_engine()
+        model = vosk._load_model()
+        rec = KaldiRecognizer(model, 16000)
+        rec.SetWords(True)
+
+        partial_text = ""
+        full_results = []
+
+        while True:
+            try:
+                data = await ws.receive()
+            except WebSocketDisconnect:
+                break
+
+            # "END" signal — envoie résultat final
+            if data.get("type") == "websocket.receive" and data.get("text") == "END":
+                final_raw = _json.loads(rec.FinalResult()).get("text", "")
+                if final_raw:
+                    full_results.append(final_raw)
+                full = " ".join(full_results).strip()
+                normalized = normalize_voice_text(full)
+                command = detect_voice_command(normalized)
+                await ws.send_json({
+                    "text":    normalized,
+                    "raw":     full,
+                    "final":   True,
+                    "command": command,
+                })
+                break
+
+            # Chunk audio PCM
+            if data.get("type") == "websocket.receive" and data.get("bytes"):
+                chunk = data["bytes"]
+                if rec.AcceptWaveform(chunk):
+                    result = _json.loads(rec.Result())
+                    word = result.get("text", "")
+                    if word:
+                        full_results.append(word)
+                        partial_text = " ".join(full_results)
+                        await ws.send_json({"partial": partial_text, "final": False})
+                else:
+                    partial = _json.loads(rec.PartialResult()).get("partial", "")
+                    if partial:
+                        await ws.send_json({
+                            "partial": (" ".join(full_results) + " " + partial).strip(),
+                            "final": False,
+                        })
+
+    except ImportError:
+        await ws.send_json({"error": "Vosk non disponible — streaming STT désactivé", "final": True})
+    except Exception as e:
+        logger.error(f"[WS/STT] Erreur: {e}")
+        try:
+            await ws.send_json({"error": str(e), "final": True})
+        except Exception:
+            pass
+    finally:
+        logger.info("[WS/STT] Connexion fermée")
+        try:
+            await ws.close()
+        except Exception:
+            pass
+
+
+class DictationEnhancedRequest(BaseModel):
+    model_config = {"arbitrary_types_allowed": True}
+    text:        str
+    source_id:   str = ""
+    schema_data: Optional[Any] = None  # tables/champs connus (Dict[str, List[str]])
+
+DictationEnhancedRequest.model_rebuild()
+
+
+@app.post("/llm/extract-entities-v2", tags=["LLM"])
+async def extract_entities_enhanced(req: DictationEnhancedRequest):
+    """
+    Extraction d'entités structurées depuis une dictée vocale — version améliorée.
+    §2.3.2D — Dictée structurée avec contexte schéma.
+
+    Retourne:
+    - entities: {action, entity_type, fields: {field: value}, confidence}
+    - suggested_sql: SQL généré si pertinent
+    - confirmation_message: phrase à lire à l'utilisateur pour confirmation
+    """
+    try:
+        import httpx, json as _json, os, re as _re
+        OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://host.docker.internal:11434")
+        OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5-coder:3b")
+
+        schema_hint = ""
+        if req.schema_data:
+            schema_hint = "\nKnown tables and fields:\n"
+            for tbl, fields in list(req.schema_data.items())[:4]:
+                schema_hint += f"  [{tbl}]: {', '.join(fields[:8])}\n"
+
+        prompt = f"""Extract structured entities from this French/English voice dictation.
+Text: "{req.text}"{schema_hint}
+
+Return ONLY valid JSON (no markdown, no explanation):
+{{
+  "action": "create|update|delete|search|filter",
+  "entity_type": "order|product|customer|invoice|payment|other",
+  "fields": {{"field_name": "value"}},
+  "confidence": 0.0-1.0,
+  "confirmation_message": "short French sentence to read back to user for confirmation"
+}}
+
+Examples:
+- "Crée une commande pour Dupont, 50 unités ABC-123" → action=create, entity=order, fields={{customer:"Dupont",qty:50,product:"ABC-123"}}
+- "Filtre les clients dont le montant dépasse 1000" → action=filter, entity=customer, fields={{amount_filter:">1000"}}
+"""
+        resp = httpx.post(
+            f"{OLLAMA_HOST}/api/generate",
+            json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False,
+                  "options": {"temperature": 0.05, "num_predict": 300}},
+            timeout=30,
+        )
+        raw = resp.json().get("response", "").strip()
+        raw = _re.sub(r"```(?:json)?\s*", "", raw).replace("```", "").strip()
+        match = _re.search(r"\{.*\}", raw, _re.DOTALL)
+        entities = _json.loads(match.group(0)) if match else {}
+
+        # Génère un SQL simple si action=search/filter
+        suggested_sql = None
+        if entities.get("action") in ("search", "filter") and req.schema_data:
+            tbl = list(req.schema_data.keys())[0]
+            filters = entities.get("fields", {})
+            where_parts = []
+            for k, v in filters.items():
+                if isinstance(v, str) and v.startswith(">"):
+                    where_parts.append(f"[{k}] > {v[1:].strip()}")
+                elif isinstance(v, str) and v.startswith("<"):
+                    where_parts.append(f"[{k}] < {v[1:].strip()}")
+                else:
+                    where_parts.append(f"[{k}] = '{v}'")
+            if where_parts:
+                suggested_sql = f"SELECT TOP 100 * FROM [{tbl}] WHERE {' AND '.join(where_parts)}"
+
+        return {
+            "entities":             entities,
+            "suggested_sql":        suggested_sql,
+            "confirmation_message": entities.get("confirmation_message", ""),
+            "text":                 req.text,
+        }
+
+    except Exception as e:
+        logger.error(f"[Dictation] Erreur: {e}")
+        return {"entities": None, "error": str(e), "text": req.text}
+
 
 # ══════════════════════════════════════════════════════════════
 # SEMANTIC ENRICHMENT — §2.2.3
@@ -3786,15 +4510,33 @@ async def cdc_wal_status(source_id: UUID):
         }
 
     from .database import _redis
-    cdc = PostgreSQLWALCDC(await get_pg_pool(), _redis)
+    pool = await get_pg_pool()
 
-    # Pour le check, on utilise la connexion interne OnePilot
-    # En production, on utiliserait la connexion source
+    # Vérifie l'état réel du slot WAL
+    async with pool.acquire() as conn:
+        slot_row = await conn.fetchrow("""
+            SELECT slot_name, active, restart_lsn
+            FROM pg_replication_slots
+            WHERE slot_name = 'onepilot_cdc'
+        """)
+        wal_level_row = await conn.fetchrow(
+            "SELECT setting FROM pg_settings WHERE name = 'wal_level'"
+        )
+
+    slot_exists = slot_row is not None
+    slot_active = slot_row["active"] if slot_row else False
+    wal_level   = wal_level_row["setting"] if wal_level_row else "minimal"
+    wal_ok      = wal_level == "logical" and slot_exists
+
     return {
-        "supported": True,
-        "source_id": str(source_id),
-        "slot_name": PostgreSQLWALCDC.SLOT_NAME,
-        "message":   "Configurez wal_level=logical et créez le slot de réplication",
+        "supported":    True,
+        "source_id":    str(source_id),
+        "slot_name":    PostgreSQLWALCDC.SLOT_NAME,
+        "slot_exists":  slot_exists,
+        "slot_active":  slot_active,
+        "wal_level":    wal_level,
+        "wal_ok":       wal_ok,
+        "message":      "WAL Logical Replication actif" if wal_ok else "Configurez wal_level=logical",
         "setup_sql": (
             "ALTER SYSTEM SET wal_level = logical;\n"
             "SELECT pg_reload_conf();\n"
@@ -4182,6 +4924,453 @@ async def create_query_plan(req: QueryPlanRequest):
         "merge_strategy": plan.merge_strategy,
         "explanation":    plan.explanation,
         "estimated_ms":   plan.estimated_ms,
+    }
+
+
+# ══════════════════════════════════════════════════════════════
+# §2.4.3 — DASHBOARD GENERATOR
+# ══════════════════════════════════════════════════════════════
+
+class DashboardRequest(BaseModel):
+    question:  str
+    source_id: str
+
+class DashboardDataRequest(BaseModel):
+    sql:       str
+    source_id: str
+    limit:     int = 200
+
+@app.post("/dashboard/generate", tags=["Dashboard"])
+async def generate_dashboard(req: DashboardRequest):
+    """
+    Génère un dashboard interactif complet depuis une question NL.
+    §2.4.3 — Pipeline : NLU → SQL → Data → Spec → Chart.js widgets
+    """
+    pool  = await get_pg_pool()
+    redis = await get_redis()
+
+    # ── Cache Redis ───────────────────────────────────────────
+    cache_key = f"onepilot:dashboard:{req.source_id}:{abs(hash(req.question))}"
+    try:
+        cached = await redis.get(cache_key)
+        if cached:
+            data = json_module.loads(cached)
+            data["cached"] = True
+            return data
+    except Exception:
+        pass
+
+    source = await get_source(UUID(req.source_id))
+    if not source:
+        raise HTTPException(404, "Source introuvable")
+
+    # ── Schéma ────────────────────────────────────────────────
+    schema: dict = {}
+    try:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT se.name AS t, ef.name AS f
+                FROM source_entities se
+                JOIN entity_fields ef ON ef.entity_id = se.id
+                WHERE se.source_id = $1 AND se.is_visible = TRUE
+                ORDER BY se.name, ef.position
+                LIMIT 5000
+            """, UUID(req.source_id))
+        for r in rows:
+            schema.setdefault(r["t"], []).append(r["f"])
+    except Exception as e:
+        logger.warning(f"[Dashboard] Schema error: {e}")
+
+    # ── NLU ───────────────────────────────────────────────────
+    nlu   = get_nlu_pipeline()
+    known = list(schema.keys())
+    slots = nlu.process(req.question, None, known)
+
+    # ── Dashboard Generator ───────────────────────────────────
+    try:
+        from .dashboard_engine import get_dashboard_generator
+        generator = get_dashboard_generator()
+        spec = await generator.generate(
+            question           = req.question,
+            slots              = slots,
+            schema             = schema,
+            source_id          = req.source_id,
+            pg_pool            = pool,
+            redis              = redis,
+            connector_factory  = ConnectorFactory,
+        )
+        result = spec.to_dict()
+        result["cached"] = False
+
+        # Cache 5 minutes
+        try:
+            await redis.setex(cache_key, 300, json_module.dumps(result, default=str))
+        except Exception:
+            pass
+
+        return result
+
+    except Exception as e:
+        logger.error(f"[Dashboard] Generation error: {e}", exc_info=True)
+        raise HTTPException(500, f"Erreur génération dashboard: {e}")
+
+
+@app.post("/dashboard/data", tags=["Dashboard"])
+async def execute_dashboard_sql(req: DashboardDataRequest):
+    """
+    Exécute un SQL pour un widget dashboard et retourne les données.
+    Permet le refresh individuel d'un widget.
+    """
+    pool = await get_pg_pool()
+    source = await get_source(UUID(req.source_id))
+    if not source:
+        raise HTTPException(404, "Source introuvable")
+    try:
+        connector = ConnectorFactory.create(source.model_dump())
+        rows = connector.execute_query(req.sql)
+        if not rows:
+            return {"rows": [], "columns": [], "count": 0}
+        cols = list(rows[0].keys()) if rows and isinstance(rows[0], dict) else []
+        return {
+            "rows":    rows[:req.limit],
+            "columns": cols,
+            "count":   len(rows),
+        }
+    except Exception as e:
+        logger.error(f"[Dashboard/data] {e}")
+        raise HTTPException(500, str(e))
+
+
+@app.get("/dashboard/templates", tags=["Dashboard"])
+async def list_dashboard_templates():
+    """Retourne les templates de dashboards pré-configurés."""
+    return {
+        "templates": [
+            {
+                "id":          "sales_overview",
+                "name":        "Vue d'ensemble Ventes",
+                "description": "CA, commandes, top clients, évolution mensuelle",
+                "question":    "Dashboard des ventes avec évolution mensuelle et top clients",
+                "icon":        "bar",
+            },
+            {
+                "id":          "top_entities",
+                "name":        "Top Entités",
+                "description": "Classement des entités par valeur",
+                "question":    "Top 10 par montant total",
+                "icon":        "bar_horizontal",
+            },
+            {
+                "id":          "trend_analysis",
+                "name":        "Analyse de tendance",
+                "description": "Évolution temporelle d'une métrique",
+                "question":    "Évolution mensuelle des montants",
+                "icon":        "line",
+            },
+            {
+                "id":          "distribution",
+                "name":        "Répartition",
+                "description": "Distribution des données par catégorie",
+                "question":    "Répartition par catégorie",
+                "icon":        "pie",
+            },
+        ]
+    }
+
+
+# ── Sauvegarde et restauration des dashboards par conversation ────────────
+class DashboardSaveRequest(BaseModel):
+    conv_id:      str
+    dashboard_id: str
+    spec:         dict
+
+@app.post("/dashboard/save", tags=["Dashboard"])
+async def save_dashboard(req: DashboardSaveRequest):
+    """
+    Sauvegarde le spec JSON d'un dashboard pour une conversation.
+    Permet la restauration lors du rechargement de la conv.
+    """
+    try:
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            # Essai 1 : UPSERT avec ON CONFLICT
+            try:
+                await conn.execute("""
+                    INSERT INTO conversation_dashboards
+                        (conv_id, dashboard_id, spec_json, updated_at)
+                    VALUES ($1, $2, $3, NOW())
+                    ON CONFLICT (conv_id, dashboard_id)
+                    DO UPDATE SET
+                        spec_json  = EXCLUDED.spec_json,
+                        updated_at = NOW()
+                """,
+                    req.conv_id,
+                    req.dashboard_id,
+                    json_module.dumps(req.spec, default=str),
+                )
+            except Exception as e_upsert:
+                # Fallback : DELETE + INSERT si la contrainte unique est absente
+                logger.warning(f"[Dashboard/save] UPSERT failed ({e_upsert}), trying DELETE+INSERT")
+                await conn.execute(
+                    "DELETE FROM conversation_dashboards WHERE conv_id=$1 AND dashboard_id=$2",
+                    req.conv_id, req.dashboard_id
+                )
+                await conn.execute("""
+                    INSERT INTO conversation_dashboards
+                        (conv_id, dashboard_id, spec_json, updated_at)
+                    VALUES ($1, $2, $3, NOW())
+                """,
+                    req.conv_id,
+                    req.dashboard_id,
+                    json_module.dumps(req.spec, default=str),
+                )
+        return {"status": "saved", "conv_id": req.conv_id, "dashboard_id": req.dashboard_id}
+    except Exception as e:
+        logger.error(f"[Dashboard/save] {e}")
+        raise HTTPException(500, f"Erreur sauvegarde dashboard : {e}")
+
+
+@app.get("/dashboard/conv/{conv_id}", tags=["Dashboard"])
+async def get_dashboards_for_conv(conv_id: str):
+    """
+    Retourne tous les dashboards sauvegardés pour une conversation.
+    Appelé au chargement d'une conv pour restaurer les visualisations.
+    """
+    try:
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT dashboard_id, spec_json, updated_at
+                FROM conversation_dashboards
+                WHERE conv_id = $1
+                ORDER BY updated_at ASC
+            """, conv_id)
+        if not rows:
+            raise HTTPException(404, "Aucun dashboard pour cette conversation")
+        dashboards = []
+        for r in rows:
+            try:
+                spec = json_module.loads(r["spec_json"])
+                dashboards.append(spec)
+            except Exception:
+                pass
+        if not dashboards:
+            raise HTTPException(404, "Aucun dashboard valide pour cette conversation")
+        # Retourner le dernier dashboard (comportement legacy) + liste complète
+        return {
+            "dashboards": dashboards,
+            "latest":     dashboards[-1],
+            "count":      len(dashboards),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[Dashboard/conv] {e}")
+        raise HTTPException(500, f"Erreur récupération dashboards : {e}")
+
+
+# ══════════════════════════════════════════════════════════════
+# §2.3.3.C — PLAN EXECUTION (parallélisation asyncio.gather)
+# ══════════════════════════════════════════════════════════════
+
+class PlanExecuteRequest(BaseModel):
+    plan_id:    Optional[str] = None
+    question:   str
+    source_ids: List[str]
+
+@app.post("/nlu/execute-plan", tags=["NLU"])
+async def execute_query_plan(req: PlanExecuteRequest):
+    """
+    Exécute un plan cross-source avec parallélisation réelle.
+    Les steps parallel=True sont exécutés via asyncio.gather().
+    §2.3.3C — Universal Query Planner execution.
+    """
+    import time as _time
+    pool  = await get_pg_pool()
+    redis = await get_redis()
+
+    sources, schemas = [], {}
+    for sid in req.source_ids[:5]:
+        try:
+            src = await get_source(UUID(sid))
+            if not src: continue
+            sources.append(src.model_dump())
+            async with pool.acquire() as conn:
+                rows = await conn.fetch("""
+                    SELECT se.name AS t, ef.name AS f
+                    FROM source_entities se
+                    JOIN entity_fields ef ON ef.entity_id = se.id
+                    WHERE se.source_id = $1 AND se.is_visible = TRUE
+                    LIMIT 500
+                """, UUID(sid))
+            schema = {}
+            for r in rows:
+                schema.setdefault(r["t"], []).append(r["f"])
+            schemas[sid] = schema
+        except Exception as e:
+            logger.warning(f"[ExecutePlan] Source {sid}: {e}")
+
+    if not sources:
+        raise HTTPException(400, "Aucune source valide")
+
+    nlu   = get_nlu_pipeline()
+    known = [t for s in schemas.values() for t in s.keys()]
+    slots = nlu.process(req.question, None, known)
+
+    planner = UniversalQueryPlanner()
+    plan    = planner.plan(slots, sources, schemas)
+
+    t0 = _time.time()
+
+    async def _execute_step(step):
+        cache_key = f"onepilot:step:{abs(hash(step.query))}"
+        try:
+            cached = await redis.get(cache_key)
+            if cached:
+                return step.step_id, {"data": json_module.loads(cached), "cached": True}
+        except Exception:
+            pass
+
+        if step.action == "sql":
+            src = next((s for s in sources if str(s.get("id","")) == step.source_id), None)
+            if not src:
+                return step.step_id, {"error": f"Source {step.source_id} introuvable"}
+            try:
+                connector = ConnectorFactory.create(src)
+                loop = asyncio.get_event_loop()
+                rows = await loop.run_in_executor(None, connector.execute_query, step.query)
+                data = rows[:500] if rows else []
+                try:
+                    await redis.setex(cache_key, step.cache_ttl, json_module.dumps(data, default=str))
+                except Exception:
+                    pass
+                return step.step_id, {"data": data, "sql": step.query, "cached": False}
+            except Exception as e:
+                return step.step_id, {"error": str(e), "sql": step.query}
+        return step.step_id, {"skipped": True}
+
+    executed = set()
+    all_results = {}
+    remaining = list(plan.steps)
+    for _ in range(10):
+        if not remaining:
+            break
+        ready = [s for s in remaining if all(d in executed for d in s.depends_on)]
+        if not ready:
+            break
+        step_results = await asyncio.gather(*[_execute_step(s) for s in ready], return_exceptions=True)
+        for item in step_results:
+            if isinstance(item, Exception):
+                continue
+            sid, result = item
+            all_results[sid] = result
+            executed.add(sid)
+        remaining = [s for s in remaining if s.step_id not in executed]
+
+    ms = int((_time.time() - t0) * 1000)
+
+    merged_data = []
+    if plan.merge_strategy == "join":
+        merge_key = planner._find_merge_key(slots, schemas)
+        data_sets = [r.get("data", []) for r in all_results.values() if "data" in r]
+        if len(data_sets) >= 2:
+            base = {row.get(merge_key): row for row in data_sets[0] if isinstance(row, dict)}
+            for row in data_sets[1]:
+                if isinstance(row, dict):
+                    key = row.get(merge_key)
+                    merged_data.append({**base[key], **row} if key and key in base else row)
+        elif data_sets:
+            merged_data = data_sets[0]
+    else:
+        for r in all_results.values():
+            if "data" in r:
+                merged_data = r.get("data", [])
+                break
+
+    return {
+        "question":       req.question,
+        "plan_steps":     len(plan.steps),
+        "executed_steps": len(executed),
+        "merge_strategy": plan.merge_strategy,
+        "duration_ms":    ms,
+        "results":        all_results,
+        "merged_data":    merged_data[:100],
+        "total_rows":     len(merged_data),
+    }
+
+
+class BatchAPIRequest(BaseModel):
+    source_id:   str
+    question:    str
+    total_pages: int = 3
+
+@app.post("/api/batch-query", tags=["Query"])
+async def batch_api_query(req: BatchAPIRequest):
+    """
+    Exécute plusieurs pages d'une requête API en parallèle.
+    §2.3.3B — Batch requests avec asyncio.gather.
+    """
+    import httpx as _httpx
+    source = await get_source(UUID(req.source_id))
+    if not source:
+        raise HTTPException(404, "Source introuvable")
+    nlu   = get_nlu_pipeline()
+    slots = nlu.process(req.question, None, [])
+    from .query_engine import APIQueryBuilder
+    bld   = APIQueryBuilder()
+    pages = bld.build_batch(slots, [], source.base_url or "", req.total_pages)
+
+    async def _fetch(p):
+        try:
+            async with _httpx.AsyncClient(timeout=15) as client:
+                resp = await client.get(p["url"])
+                return {"page": p["page"], "data": resp.json(), "status": resp.status_code}
+        except Exception as e:
+            return {"page": p["page"], "error": str(e)}
+
+    results = await asyncio.gather(*[_fetch(p) for p in pages])
+    all_data = []
+    for r in results:
+        d = r.get("data")
+        if isinstance(d, list): all_data.extend(d)
+        elif isinstance(d, dict) and "value" in d: all_data.extend(d["value"])
+
+    return {"pages_fetched": len(results), "total_rows": len(all_data), "data": all_data[:500]}
+
+
+class ExplainRequest(BaseModel):
+    sql:       str
+    source_id: str
+    dialect:   str = "mssql"
+
+@app.post("/sql/explain", tags=["Query"])
+async def explain_sql(req: ExplainRequest):
+    """
+    Analyse et optimise un SQL — explain plan + WITH(NOLOCK) + index hints.
+    §2.3.3A — SQL Optimizer.
+    """
+    from .query_engine import get_sql_optimizer
+    pool = await get_pg_pool()
+    schema = {}
+    try:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT se.name AS t, ef.name AS f
+                FROM source_entities se JOIN entity_fields ef ON ef.entity_id = se.id
+                WHERE se.source_id = $1 AND se.is_visible = TRUE LIMIT 500
+            """, UUID(req.source_id))
+        for r in rows:
+            schema.setdefault(r["t"], []).append(r["f"])
+    except Exception as e:
+        logger.warning(f"[Explain] {e}")
+
+    result = get_sql_optimizer().optimize(req.sql, schema, req.dialect)
+    return {
+        "original_sql":  req.sql,
+        "optimized_sql": result["sql"],
+        "explain_plan":  result["explain_plan"],
+        "index_hints":   result["index_hints"],
+        "warnings":      result["warnings"],
     }
 
 

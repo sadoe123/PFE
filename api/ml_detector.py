@@ -71,6 +71,8 @@ FEATURE_COLS = [
     'len_diff', 'prefix_match', 'suffix_match',
     # ── 3 profiling features (notebook v6) — neutres si entity_profiles absent ──
     'value_overlap', 'cardinality_ratio', 'null_rate_compat',
+    # ── co-occurrence feature (requêtes utilisateurs) ──
+    'co_occurrence',
 ]
 
 MAX_PREDICTIONS = 500
@@ -179,7 +181,88 @@ def _compute_features(ea, fa, dta, is_pk_a, is_fk_a,
         'value_overlap':          value_overlap,
         'cardinality_ratio':      cardinality_ratio,
         'null_rate_compat':       null_rate_compat,
+        # co_occurrence injecté ultérieurement (0.0 par défaut)
+        'co_occurrence':          0.0,
     }
+
+
+# ======================================================================
+# CO-OCCURRENCE — Calcul depuis nlu_query_log
+# ======================================================================
+
+async def compute_co_occurrence(source_id: UUID, pool) -> dict:
+    """
+    Calcule un index de co-occurrence entre tables depuis nlu_query_log.
+    Retourne un dict {(table_a, table_b): score} normalisé [0, 1].
+
+    Exemple:
+        {('Orders', 'Customers'): 0.42, ('Orders', 'Products'): 0.31}
+
+    Plus deux tables apparaissent ensemble dans les requêtes utilisateurs,
+    plus leur score de co-occurrence est élevé → feature ML.
+    """
+    try:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT tables_detected
+                FROM nlu_query_log
+                WHERE source_id = $1
+                  AND tables_detected IS NOT NULL
+                  AND array_length(tables_detected, 1) >= 2
+                ORDER BY created_at DESC
+                LIMIT 5000
+            """, source_id)
+    except Exception as e:
+        logger.warning(f"[CoOccurrence] Query error: {e}")
+        return {}
+
+    if not rows:
+        return {}
+
+    from collections import Counter
+    pair_counts: Counter = Counter()
+    total_queries = len(rows)
+
+    for row in rows:
+        tables = row["tables_detected"] or []
+        tables_upper = [t.upper() for t in tables]
+        # Génère toutes les paires (non-ordonnées)
+        for i in range(len(tables_upper)):
+            for j in range(i + 1, len(tables_upper)):
+                pair = tuple(sorted([tables_upper[i], tables_upper[j]]))
+                pair_counts[pair] += 1
+
+    # Normalise par le nombre total de requêtes
+    co_index = {}
+    for pair, count in pair_counts.items():
+        score = min(count / max(total_queries, 1), 1.0)
+        co_index[pair] = round(score, 4)
+
+    logger.info(f"[CoOccurrence] {len(co_index)} paires calculées depuis {total_queries} requêtes")
+    return co_index
+
+
+def inject_co_occurrence(df_dataset, co_index: dict) -> "pd.DataFrame":
+    """
+    Injecte la feature co_occurrence dans le dataset de features ML.
+    Remplace la valeur par défaut 0.0 par le score réel pour chaque paire.
+    """
+    if not co_index or df_dataset.empty:
+        return df_dataset
+
+    def _get_score(row):
+        ea = str(row.get('entity_a', '')).upper()
+        eb = str(row.get('entity_b', '')).upper()
+        pair = tuple(sorted([ea, eb]))
+        return co_index.get(pair, 0.0)
+
+    if 'entity_a' in df_dataset.columns and 'entity_b' in df_dataset.columns:
+        df_dataset = df_dataset.copy()
+        df_dataset['co_occurrence'] = df_dataset.apply(_get_score, axis=1)
+        n_nonzero = (df_dataset['co_occurrence'] > 0).sum()
+        logger.info(f"[CoOccurrence] {n_nonzero}/{len(df_dataset)} paires avec score > 0")
+
+    return df_dataset
 
 
 # ======================================================================
@@ -389,8 +472,13 @@ async def train_ml_model(source_id: UUID, pool) -> dict:
     if df_relations.empty:
         raise ValueError("Pas assez de relations pour entraîner le modèle")
 
+    # Co-occurrence depuis nlu_query_log
+    co_index = await compute_co_occurrence(source_id, pool)
+    logger.info(f"[ML Train] Co-occurrence: {len(co_index)} paires")
+
     # Dataset
     df_dataset, entity_map, pk_map, positive_set = _build_dataset(df_fields, df_relations, profile_index)
+    df_dataset = inject_co_occurrence(df_dataset, co_index)
 
     # Vérifier que toutes les features sont présentes
     missing = [c for c in FEATURE_COLS if c not in df_dataset.columns]
@@ -478,12 +566,16 @@ async def train_ml_model(source_id: UUID, pool) -> dict:
         best = results['RandomForest']
         logger.info(f"[ML Train] Tie-break → RandomForest sélectionné (Δ F1={best_f1-rf_f1:.4f} < 0.015)")
 
-    # Seuil optimal via PR curve
+    # Seuil optimal via PR curve — minimum 0.80 pour éviter les faux positifs
     from sklearn.metrics import precision_recall_curve
     precisions, recalls, thresholds = precision_recall_curve(y_test, best['y_proba'])
     f1_scores = 2 * (precisions[:-1] * recalls[:-1]) / (precisions[:-1] + recalls[:-1] + 1e-9)
     best_idx = np.argmax(f1_scores)
     threshold = float(thresholds[best_idx])
+    # Enforce minimum threshold 0.80 pour réduire les faux positifs
+    # (évite le sur-fitting sur petits datasets)
+    threshold = max(threshold, 0.80)
+    logger.info(f"[ML Train] Seuil final: {threshold:.3f} (min=0.80)")
 
     # Sauvegarde modèle
     model_path = MODEL_DIR / f"{source_id}.pkl"

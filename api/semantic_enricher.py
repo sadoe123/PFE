@@ -1320,17 +1320,20 @@ async def semantic_search(
     # ── 3. Fusion hybride ─────────────────────────────────────────────────────
     merged: Dict[str, Dict] = {}
 
-    for r in results_meili:
+    # MeiliSearch: score basé sur le rang (1er = 1.0, 2ème = 0.95, etc.)
+    for i, r in enumerate(results_meili):
         key = r["entity_id"]
-        merged[key] = {**r, "final_score": r["score"] * 0.6}
+        rank_score = max(0.1, 1.0 - i * 0.05)  # Rank-based: 1.0, 0.95, 0.90...
+        meili_score = max(rank_score, float(r.get("score") or rank_score))
+        merged[key] = {**r, "final_score": meili_score * 0.65}
 
     for r in results_vector:
         key = r["entity_id"]
         if key in merged:
-            merged[key]["final_score"] += r["score"] * 0.4
+            merged[key]["final_score"] += float(r["score"] or 0) * 0.35
             merged[key]["method"] = "hybrid"
         else:
-            merged[key] = {**r, "final_score": r["score"] * 0.4}
+            merged[key] = {**r, "final_score": float(r["score"] or 0) * 0.35}
 
     # ── 3. Boost par historique des recherches ────────────────────────────────
     history_boost: Dict[str, float] = {}

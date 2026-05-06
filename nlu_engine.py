@@ -822,8 +822,6 @@ class NLUPipeline:
         _typos = {
             r"\bdashbord\b":    "dashboard",
             r"\bdashbord\b":    "dashboard",
-            r"\bashboard\b":   "dashboard",
-            r"\bdashbord\b":   "dashboard",
             r"\bdashboard\b":   "dashboard",   # normalise casse
             r"\bcamember\b":    "camembert",
             r"\bcamembert\b":   "camembert",
@@ -892,20 +890,19 @@ class NLUPipeline:
             (Intent.GREETING, [
                 r"^(bonjour|salut|hello|hi|coucou|bonsoir|hola|hallo)[\s!]*$",
             ]),
-            # SHOW_DASHBOARD — PRIORITÉ ABSOLUE si "dashboard" présent
-            # Doit être AVANT GENERATE_AGG pour éviter que "dashboard top 10" → GENERATE_AGG
-            (Intent.SHOW_DASHBOARD, [
-                r"dash\w*board",        # dashboard, dashbord, dash board...
-                r"\bashboard\b",        # ashboard (faute frappe fréquente)
-                r"tableau\s+de\s+bord",
-                r"(génère|créer?|show|create|generate)\s+(une?\s+)?visualis",
-            ]),
-            # GENERATE_AGG — top N, classement, ranking (seulement si pas dashboard)
+            # GENERATE_AGG — top N, classement, ranking
             (Intent.GENERATE_AGG, [
                 r"^top\s+\d+",
                 r"^les?\s+\d+\s+(premiers?|meilleurs?|plus)",
                 r"classement\s+(des?|par)",
                 r"ranking\s+by",
+            ]),
+            # SHOW_DASHBOARD — priorité maximale si "dashboard" présent
+            (Intent.SHOW_DASHBOARD, [
+                r"dash\w*board",        # dashboard, dashbord, dash board...
+                r"\bdashboard\b",       # exact
+                r"tableau\s+de\s+bord",
+                r"(génère|créer?|show|create|generate)\s+(une?\s+)?visualis",
             ]),
         ]
         t_lower = text.lower().strip()

@@ -158,6 +158,124 @@ class SQLValidator:
 
 
 # ══════════════════════════════════════════════════════════════════════
+# §2.3.3.A+  SQL OPTIMIZER — Explain Plan + Index Hints
+# ══════════════════════════════════════════════════════════════════════
+
+class SQLOptimizer:
+    """
+    Optimisation SQL post-génération :
+    - Ajout WITH(NOLOCK) pour lectures SQL Server (évite les locks)
+    - Détection tables sans index sur colonnes filtrées → warning
+    - Explain plan textuel basé sur structure de la requête
+    """
+
+    # Tables transactionnelles → toujours WITH(NOLOCK)
+    _NOLOCK_TABLES = {
+        "orders", "order_details", "transactions", "journal",
+        "si_tresorerie", "gs_acc", "financement_bi", "rc_bal",
+    }
+
+    def optimize(
+        self,
+        sql: str,
+        schema: Dict[str, List[str]],
+        dialect: str = "mssql",
+        add_nolock: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        Applique les optimisations SQL.
+        Retourne {sql, warnings, index_hints, explain_plan}.
+        """
+        warnings = []
+        index_hints = []
+        optimized = sql
+
+        if dialect == "mssql" and add_nolock:
+            optimized, nolock_applied = self._add_nolock(sql, schema)
+            if nolock_applied:
+                index_hints.append("WITH(NOLOCK) appliqué sur tables transactionnelles")
+
+        # Détecte absence d'index probable
+        missing_idx = self._detect_missing_index(sql, schema)
+        if missing_idx:
+            warnings.extend(missing_idx)
+
+        explain = self._build_explain_plan(sql, schema)
+
+        return {
+            "sql":          optimized,
+            "warnings":     warnings,
+            "index_hints":  index_hints,
+            "explain_plan": explain,
+        }
+
+    def _add_nolock(self, sql: str, schema: Dict[str, List[str]]) -> tuple:
+        """Ajoute WITH(NOLOCK) sur les tables — évite les doublons."""
+        import re
+        # D'abord supprimer tous les WITH(NOLOCK) existants pour éviter les doublons
+        sql_clean = re.sub(r'\s*WITH\s*\(NOLOCK\)', '', sql, flags=re.IGNORECASE)
+        applied = False
+        def _replace(m):
+            nonlocal applied
+            tbl = m.group(1).strip('[]')
+            alias = m.group(2) or ''
+            if tbl.lower() in self._NOLOCK_TABLES or tbl.lower() in [k.lower() for k in schema.keys()]:
+                applied = True
+                return f"[{tbl}] WITH(NOLOCK){alias}"
+            return m.group(0)
+        result = re.sub(
+            r'\[([^\]]+)\](\s+(?:AS\s+)?\w+)?',
+            _replace, sql_clean, flags=re.IGNORECASE
+        )
+        return result, applied
+
+    def _detect_missing_index(self, sql: str, schema: Dict[str, List[str]]) -> List[str]:
+        """Détecte les colonnes WHERE sans index probable."""
+        import re
+        warnings = []
+        where_cols = re.findall(r'WHERE.*?\[(\w+)\]', sql, re.IGNORECASE | re.DOTALL)
+        non_indexed = {"description", "notes", "remarks", "comment", "address"}
+        for col in where_cols:
+            if col.lower() in non_indexed:
+                warnings.append(f"⚠️ Colonne [{col}] probablement sans index — filtre lent")
+        return warnings
+
+    def _build_explain_plan(self, sql: str, schema: Dict[str, List[str]]) -> str:
+        """Génère un explain plan textuel simplifié."""
+        import re
+        lines = ["Plan d'exécution estimé:"]
+        sql_up = sql.upper()
+
+        # Détecte les opérations
+        tables = re.findall(r'FROM\s+\[([^\]]+)\]|JOIN\s+\[([^\]]+)\]', sql, re.IGNORECASE)
+        flat_tables = [t[0] or t[1] for t in tables]
+
+        if len(flat_tables) > 1:
+            lines.append(f"  1. Hash Join sur {' ⟶ '.join(flat_tables)}")
+        elif flat_tables:
+            lines.append(f"  1. Table Scan / Index Seek sur [{flat_tables[0]}]")
+
+        if 'GROUP BY' in sql_up:
+            lines.append("  2. Hash Aggregate (GROUP BY)")
+        if 'ORDER BY' in sql_up:
+            lines.append("  3. Sort")
+        if 'HAVING' in sql_up:
+            lines.append("  4. Filter (HAVING)")
+
+        top_m = re.search(r'TOP\s+(\d+)', sql, re.IGNORECASE)
+        if top_m:
+            lines.append(f"  → Résultat limité à TOP {top_m.group(1)}")
+
+        return "\n".join(lines)
+
+
+_sql_optimizer = SQLOptimizer()
+
+def get_sql_optimizer() -> SQLOptimizer:
+    return _sql_optimizer
+
+
+# ══════════════════════════════════════════════════════════════════════
 # §2.3.3.E  API QUERY BUILDER (OData-style)  ── nouveau
 # ══════════════════════════════════════════════════════════════════════
 
@@ -747,6 +865,18 @@ class SQLGenerator:
             pass
         except Exception as e:
             logger.warning(f"[SQLGen] LLM fallback error: {e}")
+
+        # Optimisation SQL (WITH NOLOCK + index hints + explain plan)
+        try:
+            opt = get_sql_optimizer()
+            opt_result = opt.optimize(result["sql"], schema_context, dialect)
+            result["sql"]          = opt_result["sql"]
+            result["explain_plan"] = opt_result["explain_plan"]
+            result["index_hints"]  = opt_result["index_hints"]
+            if opt_result["warnings"]:
+                result.setdefault("warnings", []).extend(opt_result["warnings"])
+        except Exception as _e:
+            logger.debug(f"[SQLOptimizer] skip: {_e}")
 
         # Validation automatique
         vr = self._val.validate(result["sql"], dialect)

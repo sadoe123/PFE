@@ -1393,7 +1393,8 @@ html.light .method-chip.chip-hateoas.active-chip { background:#fff8e1; border-co
           <div style="flex:1;"></div>
           <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
             <button class="btn btn-secondary btn-sm" onclick="openSsms(relSourceId)" title="Importer FK depuis SSMS"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M2 11h10M7 2v7M4 6l3 3 3-3"/></svg>Import FK</button>
-            <button class="btn btn-secondary btn-sm" id="mlTrainBtn" onclick="runMLTrain(relSourceId)" title="Entraîner le modèle ML"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="display:inline-block;vertical-align:middle;margin-right:4px;"><circle cx="5" cy="6" r="2.5"/><circle cx="9" cy="6" r="2.5"/><path d="M5 8.5v2.5M9 8.5v2.5M4.5 11h5"/><line x1="5" y1="3.5" x2="9" y2="3.5"/></svg>ML</button>
+            <button class="btn btn-secondary btn-sm" id="mlTrainBtn" onclick="runMLTrain(relSourceId)" title="Prédire les relations ML avec le modèle existant"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="display:inline-block;vertical-align:middle;margin-right:4px;"><circle cx="5" cy="6" r="2.5"/><circle cx="9" cy="6" r="2.5"/><path d="M5 8.5v2.5M9 8.5v2.5M4.5 11h5"/><line x1="5" y1="3.5" x2="9" y2="3.5"/></svg>ML</button>
+            <button class="btn btn-secondary btn-sm" id="mlRetrainBtn" onclick="runMLRetrain(relSourceId)" title="Réentraîner le modèle ML + mettre à jour les relations" style="margin-left:4px;"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M2 7a5 5 0 1 0 1-3"/><polyline points="1 2 2 7 7 6"/></svg>Réentraîner</button>
             <button class="btn btn-secondary btn-sm" onclick="openCrossSourceDetect(relSourceId)" title="Détecter connexions cross-source" style="color:#22d3ee;border-color:rgba(34,211,238,0.3);"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M5.5 8.5a3.5 3.5 0 0 0 5 0l1.5-1.5a3.5 3.5 0 0 0-5-5L5.5 3.5"/><path d="M8.5 5.5a3.5 3.5 0 0 0-5 0L2 7a3.5 3.5 0 0 0 5 5l1.5-1.5"/></svg>Cross</button>
             <button class="btn btn-secondary btn-sm" onclick="openCrossSourcePath(relSourceId)" title="Chemin cross-source" style="color:#a78bfa;border-color:rgba(167,139,250,0.3);"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:4px;"><rect x="1" y="5" width="4" height="4" rx="1"/><rect x="9" y="5" width="4" height="4" rx="1"/><line x1="5" y1="7" x2="9" y2="7"/></svg>Chemin</button>
             <div style="width:1px;height:20px;background:var(--border);"></div>
@@ -3709,6 +3710,30 @@ async function runMLTrain(sourceId) {
     toast('Erreur ML : ' + (e.message || e), 'error');
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'ML'; }
+  }
+}
+
+async function runMLRetrain(sourceId) {
+  if (!sourceId) { toast("Sélectionnez une source d'abord", 'error'); return; }
+  var btn = document.getElementById('mlRetrainBtn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<div class="spinner" style="display:inline-block;width:10px;height:10px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:4px;"></div>Réentraînement...'; }
+  toast('Réentraînement ML en cours (seuil 0.80)...', 'info');
+  try {
+    var result = await apiFetch('/sources/' + sourceId + '/ml/train', {method:'POST'});
+    var modelName = result.model_name || result.model_type || '?';
+    var f1   = result.f1   ? ' F1='  + parseFloat(result.f1).toFixed(4)   : '';
+    var auc  = result.roc_auc ? ' AUC=' + parseFloat(result.roc_auc).toFixed(4) : '';
+    var thr  = result.threshold ? ' seuil=' + parseFloat(result.threshold).toFixed(2) : '';
+    var auto = result.auto_rediscovery;
+    var autoMsg = auto ? (' · ' + (auto.deleted_old||0) + ' supprimées · ' + (auto.new_relations||0) + ' nouvelles') : '';
+    toast('✅ ' + modelName + f1 + auc + thr + autoMsg, 'success');
+    // Refresh relations
+    await loadRelationsData(sourceId);
+    applyRelFilters();
+  } catch(e) {
+    toast('Erreur réentraînement : ' + (e.message || e), 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M2 7a5 5 0 1 0 1-3"/><polyline points="1 2 2 7 7 6"/></svg>Réentraîner'; }
   }
 }
 
@@ -6775,7 +6800,7 @@ async function loadCDCDBStatus(id, src) {
   try {
     var endpoint = isPg ? '/sources/' + id + '/cdc/wal/status' : '/sources/' + id + '/cdc/mssql/status';
     var r = await apiFetch(endpoint);
-    var enabled = r.cdc_enabled || r.wal_ok;
+    var enabled = r.cdc_enabled || r.wal_ok || r.slot_exists || r.wal_level === 'logical';
     var label   = isPg ? 'WAL Logical Replication' : 'SQL Server CDC natif';
     var cls     = enabled ? 'cdc-status-on' : 'cdc-status-off';
     var iconOk  = '<svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;"><polyline points="2 7 5.5 10.5 12 4"/></svg>';

@@ -95,8 +95,14 @@ VOICE_COMMANDS = {
     # Navigation
     "historique":           "show_history",
     "affiche l historique": "show_history",
+    "affiche historique":   "show_history",
     "question suivante":    "next_question",
+    "suivante":             "next_question",
+    "prochaine":            "next_question",
+    "question precedente":  "prev_question",
     "question précédente":  "prev_question",
+    "precedente":           "prev_question",
+    "retour":               "prev_question",
     # Conversation
     "nouvelle conversation":"new_chat",
     "nouvelle conv":        "new_chat",
@@ -168,7 +174,7 @@ def detect_voice_command(text: str) -> Optional[str]:
     # Correspondance partielle pour les commandes courtes
     words = set(text_norm.split())
     cmd_map = {
-        'repete': 'repeat_last', 'repeter': 'repeat_last', 'redis': 'repeat_last',
+        'repete': 'repeat_last', 'repeter': 'repeat_last', 'redis': 'repeat_last', 'repetit': 'repeat_last', 'repeti': 'repeat_last', 'repet': 'repeat_last',
         'reformule': 'rephrase', 'reformuler': 'rephrase',
         'approfondi': 'more_details', 'detaille': 'more_details',
         'dashboard': 'show_dashboard', 'graphe': 'show_chart',
@@ -271,12 +277,14 @@ class WhisperSTT:
                 import whisper
                 import os
                 # Force le cache dans /tmp accessible à tous
-                os.environ["XDG_CACHE_HOME"] = "/tmp/whisper_cache"
-                os.makedirs("/tmp/whisper_cache", exist_ok=True)
-                logger.info(f"[STT] Chargement modèle Whisper '{self.model_name}'...")
+                # Chemin persistant — volume Docker /app/models/whisper
+                whisper_dir = os.environ.get("WHISPER_CACHE_DIR", "/app/models/whisper")
+                os.makedirs(whisper_dir, exist_ok=True)
+                os.environ["XDG_CACHE_HOME"] = whisper_dir
+                logger.info(f"[STT] Chargement modèle Whisper '{self.model_name}' depuis {whisper_dir}...")
                 self._model = whisper.load_model(
                     self.model_name,
-                    download_root="/tmp/whisper_cache"
+                    download_root=whisper_dir
                 )
                 logger.info(f"[STT] Modèle Whisper '{self.model_name}' chargé ✅")
             except Exception as e:
@@ -418,6 +426,130 @@ class PiperTTS:
         text = re.sub(r'<[^>]+>', '', text)
         return text.strip()
 
+    def simplify_for_voice(self, text: str) -> str:
+        """Simplifie le texte pour TTS — supprime emojis, Markdown, tables, backticks."""
+        import re, unicodedata
+        text = re.sub(r'''```[\s\S]*?```''', ' ', text)
+        text = re.sub(r'`[^`\n]+`', '', text)
+        def _rm_emoji(s):
+            out = []
+            for ch in s:
+                cp = ord(ch)
+                cat = unicodedata.category(ch)
+                if cat.startswith('L') or cat.startswith('N') or ch in ' \n.,;:!?()\'-':
+                    out.append(ch)
+                elif 0x1F000<=cp<=0x1FFFF or 0x2600<=cp<=0x27FF:
+                    out.append(' ')
+            return ''.join(out)
+        text = _rm_emoji(text)
+        text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)
+        text = re.sub(r'\*([^*]+)\*', r'\1', text)
+        text = re.sub(r'#{1,6}\s+', '', text)
+        text = re.sub(r'\|[^\n]+', '', text)
+        text = re.sub(r'[`~^_<>{}\[\]]', '', text)
+        text = re.sub(r'\n\s*[A-Z_]+\.[A-Z_]+[^\n]*', '', text)
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        return text.strip()
+
+    def pronunciation_hints(self, text: str) -> str:
+        """
+        Convertit les abréviations numériques en texte prononçable.
+        Exemples: 2.5M → deux virgule cinq millions, 15% → quinze pour cent
+        """
+        import re
+
+        # Milliards
+        def _replace_b(m):
+            val = m.group(1).replace(',', '.').replace(' ', '')
+            try:
+                n = float(val)
+                int_part = int(n)
+                dec_part = round((n - int_part) * 10)
+                if dec_part:
+                    return f"{int_part} virgule {dec_part} milliards"
+                return f"{int_part} milliards"
+            except: return m.group(0)
+
+        # Millions
+        def _replace_m(m):
+            val = m.group(1).replace(',', '.').replace(' ', '')
+            try:
+                n = float(val)
+                int_part = int(n)
+                dec_part = round((n - int_part) * 10)
+                if dec_part:
+                    return f"{int_part} virgule {dec_part} millions"
+                return f"{int_part} millions"
+            except: return m.group(0)
+
+        # Milliers
+        def _replace_k(m):
+            val = m.group(1).replace(',', '.').replace(' ', '')
+            try:
+                n = float(val)
+                int_part = int(n)
+                return f"{int_part} mille"
+            except: return m.group(0)
+
+        text = re.sub(r'([\d,. ]+)\s*[Bb](?!\w)', _replace_b, text)
+        text = re.sub(r'([\d,. ]+)\s*[Mm](?!\w)', _replace_m, text)
+        text = re.sub(r'([\d,. ]+)\s*[Kk](?!\w)', _replace_k, text)
+        # Pourcentages
+        text = re.sub(r'(\d+(?:\.\d+)?)\s*%', lambda m: f"{m.group(1)} pour cent", text)
+        # Euros
+        text = re.sub(r'(\d+(?:[,. ]\d+)?)\s*€', lambda m: f"{m.group(1)} euros", text)
+        # ms → millisecondes
+        text = re.sub(r'(\d+)\s*ms', lambda m: f"{m.group(1)} millisecondes", text)
+        # SQL → "S Q L"
+        text = text.replace('SQL', 'S Q L')
+        text = text.replace('NLU', 'N L U')
+        text = text.replace('API', 'A P I')
+        text = text.replace('KPI', 'K P I')
+        return text
+
+    def vocal_summary(self, text: str, max_chars: int = 600) -> str:
+        """
+        Génère un résumé vocal pour les longues réponses.
+        Si le texte > max_chars après simplification, extrait les points clés.
+        """
+        simplified = self.simplify_for_voice(text)
+        simplified = self.pronunciation_hints(simplified)
+
+        # Si le texte original était long mais simplifié en court → ajoute conclusion
+        original_len = len(text)
+        if len(simplified) <= max_chars:
+            if original_len > 500:
+                return simplified.rstrip('.:') + ". La réponse complète est affichée à l'écran."
+            return simplified
+
+        # Extrait les 2-3 premières phrases significatives
+        import re
+        sentences = re.split(r'(?<=[.!?])\s+', simplified)
+        summary_parts = []
+        total = 0
+        for sent in sentences:
+            sent = sent.strip()
+            if not sent or len(sent) < 10:
+                continue
+            if total + len(sent) > max_chars:
+                break
+            summary_parts.append(sent)
+            total += len(sent)
+
+        if summary_parts:
+            summary = ' '.join(summary_parts)
+            # Ajoute mention du résumé
+            if len(simplified) > max_chars * 1.5:
+                summary += ". La réponse complète est affichée à l'écran."
+            return summary
+
+        # Fallback : tronque proprement à la dernière phrase
+        truncated = simplified[:max_chars]
+        last_dot = max(truncated.rfind('.'), truncated.rfind('!'), truncated.rfind('?'))
+        if last_dot > max_chars // 2:
+            return truncated[:last_dot + 1] + " Suite à l'écran."
+        return truncated + "... Suite à l'écran."
+
     def synthesize(
         self,
         text: str,
@@ -435,13 +567,18 @@ class PiperTTS:
         voice_name = voice or PIPER_DEFAULT_VOICE
         t0 = time.time()
 
-        # Nettoyage SSML
-        clean_text = self._strip_ssml(text)
+        # Pipeline de préparation vocale
+        # 1. Simplification Markdown + code blocks
+        clean_text = self.simplify_for_voice(text)
+        # 2. Nettoyage SSML résiduel
+        clean_text = self._strip_ssml(clean_text)
+        # 3. Résumé vocal si texte long
+        clean_text = self.vocal_summary(clean_text, max_chars=600)
+        # 4. Pronunciation hints
+        clean_text = self.pronunciation_hints(clean_text)
+
         if not clean_text:
             return b""
-
-        # Limite à 500 caractères pour éviter les timeouts
-        clean_text = clean_text[:500]
 
         try:
             piper_voice = self._load_voice(voice_name)
