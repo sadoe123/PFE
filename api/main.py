@@ -5,6 +5,8 @@ Universal Data Access Layer – Phase 3
 from __future__ import annotations
 
 import asyncio
+import subprocess
+import tempfile
 import csv as csv_module
 import io
 import json as json_module
@@ -17,7 +19,7 @@ from uuid import UUID, uuid4
 
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -125,6 +127,47 @@ async def lifespan(app: FastAPI):
             logger.info("✅ Migration conversation_dashboards OK")
         except Exception as e:
             logger.warning(f"Migration conversation_dashboards (non-bloquant): {e}")
+        try:
+            pool = await get_pg_pool()
+            async with pool.acquire() as conn:
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS user_favorites (
+                        id           SERIAL PRIMARY KEY,
+                        user_id      TEXT NOT NULL DEFAULT 'admin',
+                        dashboard_id TEXT NOT NULL,
+                        title        TEXT NOT NULL,
+                        spec_json    TEXT NOT NULL,
+                        source_id    TEXT,
+                        conv_id      TEXT,
+                        created_at   TIMESTAMPTZ DEFAULT NOW(),
+                        UNIQUE(user_id, dashboard_id)
+                    )
+                """)
+                await conn.execute("CREATE INDEX IF NOT EXISTS idx_user_favorites_user_id ON user_favorites(user_id)")
+                await conn.execute("ALTER TABLE user_favorites ADD COLUMN IF NOT EXISTS conv_id TEXT")
+            logger.info("✅ Migration user_favorites OK")
+        except Exception as e:
+            logger.warning(f"Migration user_favorites (non-bloquant): {e}")
+        try:
+            pool = await get_pg_pool()
+            async with pool.acquire() as conn:
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS shared_dashboards (
+                        id           SERIAL PRIMARY KEY,
+                        token        TEXT NOT NULL UNIQUE,
+                        title        TEXT NOT NULL,
+                        spec_json    TEXT NOT NULL,
+                        source_id    TEXT,
+                        created_by   TEXT DEFAULT 'admin',
+                        expires_at   TIMESTAMPTZ NOT NULL,
+                        created_at   TIMESTAMPTZ DEFAULT NOW(),
+                        view_count   INTEGER DEFAULT 0
+                    )
+                """)
+                await conn.execute("CREATE INDEX IF NOT EXISTS idx_shared_token ON shared_dashboards(token)")
+            logger.info("✅ Migration shared_dashboards OK")
+        except Exception as e:
+            logger.warning(f"Migration shared_dashboards (non-bloquant): {e}")
         try:
             pool = await get_pg_pool()
             async with pool.acquire() as conn:
@@ -1851,32 +1894,60 @@ async def _fix_slots(slots, question: str, schema: dict, known_entities: list,
     slots.raw_text = question
 
     # ── Résolution sémantique : mots métier → vraies tables via MeiliSearch ──
-    # Si aucune table détectée, on cherche dans MeiliSearch
-    if not slots.table_names and source_id_str:
-        try:
-            from .semantic_enricher import semantic_search as _sem_search, SYNONYMS, _SYNONYM_INDEX
-            # Extrait les concepts de la question via les synonymes
-            concepts = []
-            for word in q_low.split():
-                if word in _SYNONYM_INDEX:
-                    concepts.append(_SYNONYM_INDEX[word])
-            # Cherche chaque concept dans MeiliSearch
-            search_terms = set(concepts) if concepts else {q_low.split()[0]}
-            for term in list(search_terms)[:3]:
-                results = await _sem_search(
-                    query      = term,
-                    source_ids = [source_id_str],
-                    limit      = 3,
-                    use_vector = False,
-                )
-                if results:
-                    best = results[0]
-                    if best["relevance"] > 0.3 and best["name"] in known_entities:
-                        slots.table_names = [best["name"]]
-                        logger.info(f"[_fix_slots] Résolution sémantique : '{term}' → '{best['name']}' (score={best['relevance']})")
-                        break
-        except Exception as e:
-            logger.warning(f"[_fix_slots] Semantic search error: {e}")
+    # Bloqué pour SHOW_DASHBOARD (routing propre dans dashboard_engine)
+    if not slots.table_names and source_id_str and slots.intent != Intent.SHOW_DASHBOARD:
+        # ── Tables prioritaires SXA pour questions financières ────────────────
+        _SXA_PRIORITY = {
+            "solde": "Dernière integration bancaire",
+            "trésorerie": "Dernière integration bancaire",
+            "tresorerie": "Dernière integration bancaire",
+            "bancaire": "Dernière integration bancaire",
+            "banque": "Dernière integration bancaire",
+            "compte": "Comptes",
+            "comptes": "Comptes",
+            "bancaires": "Dernière integration bancaire",
+            "disponibles": "Comptes",
+            "financement": "FINANCEMENT_BI",
+            "financements": "FINANCEMENT_BI",
+            "amortissements": "Tableaux d'amortissement",
+            "amortissement": "Tableaux d'amortissement",
+            "mouvement": "SI_Bancaire",
+            "transaction": "SI_Bancaire",
+            "virement": "SI_Bancaire",
+        }
+        q_words = q_low.replace("é","e").replace("è","e").replace("ê","e").split()
+        for word in q_words:
+            if word in _SXA_PRIORITY:
+                tbl = _SXA_PRIORITY[word]
+                if tbl in known_entities:
+                    slots.table_names = [tbl]
+                    logger.info(f"[_fix_slots] SXA priority: '{word}' → '{tbl}'")
+                    break
+        
+        # Si toujours pas de table → MeiliSearch sémantique
+        if not slots.table_names:
+            try:
+                from .semantic_enricher import semantic_search as _sem_search, SYNONYMS, _SYNONYM_INDEX
+                concepts = []
+                for word in q_low.split():
+                    if word in _SYNONYM_INDEX:
+                        concepts.append(_SYNONYM_INDEX[word])
+                search_terms = set(concepts) if concepts else {q_low.split()[0]}
+                for term in list(search_terms)[:3]:
+                    results = await _sem_search(
+                        query      = term,
+                        source_ids = [source_id_str],
+                        limit      = 3,
+                        use_vector = False,
+                    )
+                    if results:
+                        best = results[0]
+                        if best["relevance"] > 0.3 and best["name"] in known_entities:
+                            slots.table_names = [best["name"]]
+                            logger.info(f"[_fix_slots] Résolution sémantique : '{term}' → '{best['name']}' (score={best['relevance']})")
+                            break
+            except Exception as e:
+                logger.warning(f"[_fix_slots] Semantic search error: {e}")
 
     # 1. DDL → bloquer (géré ailleurs)
 
@@ -4939,6 +5010,368 @@ class DashboardDataRequest(BaseModel):
     sql:       str
     source_id: str
     limit:     int = 200
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EXPORT POWERPOINT
+# ─────────────────────────────────────────────────────────────────────────────
+
+class PptxMultiRequest(BaseModel):
+    specs_json: str   # JSON array de specs
+    title:      str = "Tableau de bord consolidé"
+
+# ─── PARTAGE PAR LIEN ────────────────────────────────────────────────────────
+
+class ShareRequest(BaseModel):
+    spec_json:  str
+    title:      str
+    source_id:  Optional[str] = None
+    expires_in: int = 24   # heures
+
+@app.post("/api/share")
+async def create_share_link(req: ShareRequest):
+    """Crée un lien de partage temporaire pour un dashboard."""
+    import uuid, hashlib
+    from datetime import timedelta
+    try:
+        # Token stable basé sur le contenu — même dashboard = même lien
+        content_hash = hashlib.md5(req.spec_json.encode()).hexdigest()[:16]
+        token = content_hash
+        expires_at = datetime.utcnow() + timedelta(hours=req.expires_in)
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            # Upsert — si le token existe déjà, on met à jour l'expiration
+            await conn.execute("""
+                INSERT INTO shared_dashboards (token, title, spec_json, source_id, expires_at)
+                VALUES ($1,$2,$3,$4,$5)
+                ON CONFLICT (token) DO UPDATE
+                SET expires_at = EXCLUDED.expires_at,
+                    title      = EXCLUDED.title,
+                    view_count = shared_dashboards.view_count
+            """, token, req.title, req.spec_json, req.source_id, expires_at)
+        base_url = os.environ.get("BASE_URL", "http://localhost:8000")
+        share_url = f"{base_url}/shared/{token}"
+        return {"token": token, "url": share_url, "expires_at": expires_at.isoformat(), "expires_in_hours": req.expires_in}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/shared/{token}", response_class=HTMLResponse)
+async def view_shared_dashboard(token: str):
+    """Page HTML lecture seule pour un dashboard partagé."""
+    import json
+    from datetime import timezone
+    try:
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow("SELECT * FROM shared_dashboards WHERE token=$1", token)
+            if not row:
+                return HTMLResponse("<h2>Lien invalide ou expiré.</h2>", status_code=404)
+            if row["expires_at"].replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+                return HTMLResponse("<h2>Ce lien a expiré.</h2>", status_code=410)
+            await conn.execute("UPDATE shared_dashboards SET view_count=view_count+1 WHERE token=$1", token)
+        spec = json.loads(row["spec_json"])
+        title = row["title"]
+        expires = row["expires_at"].strftime("%d/%m/%Y %H:%M")
+        spec_escaped = json.dumps(spec).replace("</", "<\/")
+        html = f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{title} — OnePilot</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  *{{box-sizing:border-box;margin:0;padding:0;}}
+  body{{font-family:'Inter',system-ui,sans-serif;background:#f4f6fa;color:#1a2b3c;min-height:100vh;}}
+  .header{{background:linear-gradient(135deg,#006eb8,#2d72ff);padding:16px 24px;border-bottom:1px solid #d0e4f4;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 12px rgba(0,110,184,.15);}}
+  .logo{{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:700;color:#fff;}}
+  .badge{{background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.3);color:#fff;padding:3px 10px;border-radius:20px;font-size:11px;}}
+  .meta{{font-size:11px;color:rgba(255,255,255,.7);}}
+  .main{{padding:24px;max-width:1400px;margin:0 auto;}}
+  .dashboard-title{{font-size:22px;font-weight:700;margin-bottom:16px;color:#1a2b3c;}}
+  .widgets-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(400px,1fr));gap:16px;}}
+  .widget{{background:#fff;border:1px solid #d0e4f4;border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(0,110,184,.06);}}
+  .widget-title{{font-size:13px;font-weight:600;color:#4a6a82;margin-bottom:12px;}}
+  .chart-container{{position:relative;height:260px;}}
+  .kpi-card{{text-align:center;padding:20px;}}
+  .kpi-value{{font-size:42px;font-weight:800;color:#006eb8;}}
+  .kpi-label{{font-size:13px;color:#4a6a82;margin-top:8px;}}
+  .kpi-delta{{font-size:13px;margin-top:6px;}}
+  .table-wrap{{overflow-x:auto;max-height:280px;}}
+  table{{width:100%;border-collapse:collapse;font-size:11px;}}
+  th{{background:#006eb8;color:#fff;padding:6px 8px;text-align:left;position:sticky;top:0;}}
+  td{{padding:5px 8px;border-bottom:1px solid #e8f0f8;color:#1a2b3c;}}
+  tr:nth-child(even) td{{background:#f0f6ff;}}
+  .expired-banner{{background:rgba(192,48,48,.1);border:1px solid rgba(192,48,48,.3);color:#c03030;padding:8px 16px;text-align:center;font-size:12px;}}
+  footer{{text-align:center;padding:20px;color:#9ab4c8;font-size:11px;border-top:1px solid #d0e4f4;margin-top:30px;}}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="logo">
+    <img src="data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAH0AfQDASIAAhEBAxEB/8QAHQABAAEFAQEBAAAAAAAAAAAAAAUBAgMEBgcICf/EAEgQAAIBAwIEAwQIBAMECAcAAAABAgMEEQUhBhIxQVFhcRMigZEHFDKhscHR8BUjQlJy4fEIM2LSFiRDU4KTosIXNGODkpTi/8QAGgEBAAMBAQEAAAAAAAAAAAAAAAMEBQIBBv/EADQRAQACAQIEAgkDBQEAAwAAAAABAgMEERIhMUEFEyIyUWFxgZGh8BRCUiOxwdHhMwZi8f/aAAwDAQACEQMRAD8A+MgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAy2tVUa8ZuMZx6Si1nK7gYgTtXTrW5iqtJqnldYdH3zh/ht26EdW065ptcsVVz2hu/THw7EtsF6xvtyR1y1tO27TBVpp4aw0UIkgAAAAAAAAAAAAAAAADZtbK4uN4R5Y4zzS2X72Ja20i3i4ubnUa652Xbt5b9ybHgyZPVhFkzUx+tKDpUqlWXLSpzqS8Ixyzco6Te1En7NQysrmf4+HxOlt6VKCUKcIxWcpJbZ77eJtwgupfx+G7+vb6KGXxHblWHPU+HJuKcrlc2d0o7Y8n1+5G5R4atMp1K9eSx0i0t/kyVqV6FCLlVqRgl1cmlg1rjW9OoRlmsqkotYjD3ub0a2+bJp02kxetP3V/wBTq8nqR9llDh7To/bpup/ik1+DMz4f0pra2S8+ef8AzGhU4ot/Zp07ep7TupJY/Exx4rXs8SsW556qthY9HF/iczk0MdnsY9fPf+zclwvYSTaqV4vtyyWF89zBU4SjzR9neNR7uUFnHks7mKPFbT3sm14e2X/KZY8WwdX3rOVOn4KfNL57HM20Fu231dcPiFekxP0aN1wxqFLmlSlTqxXTDxL5f5kbd6Zf2ufb2lWKX9SjmPzWx1NLirT5VYxlSrxg+spRW3wTyStvrWkV019co8rlhe0fLn4Pt8jz9Jpcn/nk2+P5Dr9Xq8X/AKY9/h+S82B6ZeaJpV/zudvBVJbucdpZaW/+uxzuo8G3MFzWFaNZf2T2fbo+hBl8Nz0jiiN49ybD4ngyTwzPDPvcqDJcUK1vUdOvSnSmu0o4MZQaIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJLR7rkl7CbSi902/u/fmS+xy8W4yUotpp5TXVE/p9yrqhzNr2kcKa/P479P0zoaPPt/Tt8lLU4v3wy1qFCqmqlKMsrGe68Md/2smhW0mL3o1uV4zia2eF4rf0WPiSLzkFrJpsd+3NXpqL1c/cWtxbpSq0pRi3hS6xb8M+PkYDqG0atxYW1aUpuHJJ7+5iKXwwUsmivHq81umqrPrckCCQr6XXi/5L9sn0SWJP4fozRnCdOXLOMoyXZrDKlq2rO0ws1tFo3haADl6AAAASOn6e6mKtxlQ6qHeX6I6pSbztVza0VjeWpbW1W4linH3U8OT6L9+HUmbTT6FBxm17Wa6uazH4L9cmxShCEFCEVGK8EXmnh0da8785UMuqtPKq9Nyee7+8yJpYXjjHmyPvr6lbJxzzVcbRXb1/H5EPd31xc5jKfLTbyoLov1Osuspj5V5y4x6W9+duUJ6vrFrb5jHNWaeMRxj5/wCpFXWtX1bMYT9jF5WIdcepGgoZNVkydZXcemx4+kLqlSdSXNUnKcvGTyy0ArpwAAAAAAAGzaX15aSUre5qU8dEpbfLodBpXGN1QxG8oqvHbEovEvP1OWBNi1GXDO9LbIc2nxZo2yV3ep22ocP8RUPq9XkqNb+zqe7Jbbtfnj/M5ziDgm5oN1tKcrinu/ZP7UfTxOQTaeU8NHSaDxhqOnyVO5bu6Gy5ZS95LZbP08S9Grw6jlqK7T/KP8s79Fn0s8WmtvH8Z/xLnJwlTnKE4uMovEotYafgy09NuLLh/i+1de1qeyu1lcyWJxx/dHuv3k4LXNIvtHu3b3lLH9k47xmvFMrajSWwxxRPFWekx0/4t6bW0zzNJjhvHWJ6/wDYR4AKi4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABmtLidtXVWG+OsX0kvBmEDoOno1KdamqtKWYS+a8n5/tdS5nPWV3UtZvlbcJNOUc7PH+r+Z0FKcKtGNWnOMoyXZ9H3Xjn99DX02ojJHDPVm58E0neOijWAGC2rKxKVI05wcZwhJN53inh+Kz++gBxasWjaYdRaazvEtC40ulJN0ZOEnulJ5j6dM/Hc0bixuaDWYc8Wm1KG626+nx9ehOlVJprGdmmvIq30VLeryWaaq0etzcuDoK9nbVYtOnGLbbyljfx29OnQ0rnS2pN28+aPZS6+mf1wUsmlyU7brVM9LM2n2CopVbiKc2vdi9+Xo848fmb6jt4Ig43F7aNRm24pcqU/eWE+ifbfwN+21ShNKNaMqU+jl1i/PxXyZY02fFSNpjaUGfDkvO8TybspKPdJfJEXf6lJ5pW7ws4c/H08PUwajfSuJOFPMaSfT+71NIj1Gqm/o16JMOninO3UABTWQAAAAAAAAAAAAAAAAAAZbS5r2lxC4tqsqVWDzGUWeg6HxJpnEdktG4jhGFaTxCt0jJ9nn+mXXyfxPOQWMGpvh325xPWO0q2o0tM8RvymOkx1hO8X8N3fD95y1E6ltUb9lV/J+DII7DhbielUt1oXESVfTqqcI1ZbypZ6bvsvHqiI4r0Gtol8oqXtrSsue3rReVOL6b9MnubHSY8zF09ns/57Jc4Mt4nys3rdp7T/wB9sIYAFZbAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAzW1xVt5uVOWM9U+jMIHQStLVYtJVaDTzvKEtkseD7/E2qN5b1XGMa0OZptqXu4+L2z8yEoUalaTVNJtLLy0tviKlGtSSdSlOCfRyi1ks01WWvdBbT47dnSNYeGmn4dPMoc7QuK9DPsqsoKWOZJ7PHTK6M26OqVY4VaEaiy22vdb8vD7izTXR+6EFtJPaUuUTNSnqNrJRzKdN43UllJ+q6r4I2qU41E3TlGWFl8u/bPb9/Es0z479JQWw3r1hcAUbJUOy7ZLomtsprKePFdGaVxp1vU3jmk293FZXnt/obe5QiyYqX9aEtMtqdJQ1XTbmOXCHtEv7evft16Lsab2eGdOi2tSo1lGNWnGaT2z19M+HkVMmhnrSVqmrifWhzQJa40qDWaFVp5+zNbY8cr9CPubWvbtqrTaS/qW6+a2KV8dqetCzW9bdJYQAcOwAAAAAAAAAAACsIuc4xXVvCAoDflpVdY5alKeVnbm/NBaVXcXJ1KSx23y/uwSeTk/jLjzae1oAlaOkxkv5lxOHpST/wDcZ1otpje/r/8A6y/5zr9Pk/i587H7UGdLw7rNvVs3oOuS59Pq7Uqz3lbS7SXkaVXR6SX8q7qTfnRS/wDczBU0m4jFSVSlLK6LOV934ZOqY8uOd4hze2LJG0yx63ptfStRqWdwsuO8JrpOD6SXk0aRIXsdRdrRoXMHOFFNwksScU98NrovJ9NyPIbxtKWkzMcwAHLoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAX0ak6VWNSDxKLyjobK6hWh7SlJxljEknvFeH3fvtzZns7idtWVSPvL+qOWkybBl8u3Poiy4+OPenZW1rKWZ29Oa7rpnbbdb/fuak9Lt3J+/OCb7b4814/P4m5Rq061NTpzUk0u3R+HwKvBpzhxZI4ojqoebkpO0yiqmlVFOSp1YSils5Jpvw2WTDWsLy3qqLp+/lY9nNT37Y5WybyXIinRUnpKWurtHWEFSvrqhPE/fw23Gpnr59H95s0dTj7NqrTkpJbOPR/DsStSXPBU5tuKTST7LwSNapZ2s171CGdveTa2XkjiNPmp6lnXn4r+tClK6t6kVJVaaztiUuVp+D/UzpfNGhPS6Uk3CpKD8Mcy/X8Sisr6jh2ty5Y2UXLl269Htjyz8DuM2anr13czjxW9WyRKZNFXd7S964tIzhjMnHZpZ67ZS+K9C6lqNrKHvOpGeejisP45/I7rq8czz5S4nTXjnHNuphSazu9016prDLISjOmqkJwlF/wBs02vVLp8S7bxJ4mt45Tuhms1nm1rmwt6qXLBQl4x2z+X3GlX0uvBSlSlGpFeai8eOP0ZK9C5MgvpMd+nKfcmpqb1683NVITpzcKkZRkuqaw0WnT1IwqpRqxVSKWMS32fh+8kfcaZSeZUpODztHGU/0Kd9Hkr05rVNTS3XkiAbFzZ17fLnFOOftRec+fjg1yrMTHKU8Tv0AAePQAADa0um6l/SfK5RhJTn6J/tfE1ToNPtvqtHleHOSTm0/u+H77E2DFOS+yPLkild2ytlhLYowDbZCkpKKzJ49Sz29JPHtI/NF7TaxnbwMbt6XMpeyi5J5zg5ni7O68PdnoxnVpupTpznBPDlGLazjPb1KOcYvEm0/BowulTdRVHCMpL+5Jr5PY1L3T4VFzW8Iwl4ZwpfPp9yIL3y0jeIiUtKY7TtvMJNSxLbKcX8U0atzZ29eMuaGJvfnX2s+fj26kdaw1Km1GEJ8vRRm8J+mfyJRyrqnTnKnScpZ5owk/d89/yb7nFctc8bXr9nc4rYudbIG6tqlvPE0+Vv3ZY6mE6avThVi4TjGcX6/Mj6+lRe9Ko4+TWV8/Aq5dJes715wnx6mto58pRIMlelUo1OSpHEvXJjKiyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9ncztqmY7xf2o5J6jONajGrT3g9s+D7p+fTb0OaM1pc1LapzQw1lc0X0l6ljBqJxT7kOXDGSPe6BoIxWd5RuUlGXLNvHJLr8PH4fEzrDWU+ZeKNWmSl43rLOvjtSdpha2UwXPGSmTtwp0KplH1AFcvKaymnlPui2UYyTjKKkm28PdZx59yoObVieUuotMdGu7G1zJxhyt9MSfu+hV0LpTWLucoL/vFzSSxss+HxM+SuSKdPTffp8EkZ7xy6sdSVaNVKVKDTaTdFtrt2lhr4svhLmqOCTim/dlPEY4/xdPky7JSSi4uMkmn1T7nsY716W+p5lbda/QjLKTXf4DJVTnGUpRk1KUeVy7tYxjftj4FkViWZPmWMdcPrnPhnGUvwOotfvDma17Sv2fYwXFpQrtSqQ3Wd08N/r9/bsXx9quqjJb9zK47LDTydWpTJG1oeVtak7xKHr6ZUjHmpT5/FNY/fxwaValUoy5akJRfmuvp4nSbhqLTUoxlFvdNZT69V0ZTyaGOtJWaauf3Q5gE3X0y3qbwbpPHbdfI0K1hWoTi5x9pTzu6Ty8d9uq+KKWTDfH60LVMtb9JZ9Eteef1ma92LxDf+rx+H76EtjBgsbijOnGNJw2X2Y7PZdceS7mdvJqaWla09Gd/az9Ra1rc42UABZQBSXQuSbeEZKVCVSaiurERM9HkzEc5YRsSlS1s7eGa1Rylj7KNCtKk3inBRXm8s9mk1c0yRboxLboVyY6s4whKc5KMY9W33/eemTQrarCMl7Ck5pPOamyfwX6lbJqKY+U9VmmC9+cJPOwbI3TZ6pqd27SxhCVSab5OVPZebyzVq3d9Rqzo1J8s6cuWScFlNbY6eRDOtrtvwpY0s77bpDV6Sq2rkk26eWl4dM/gQZKUdSTtqsaqxUcJRXhLMcfPfPh6Y3iylqL1vbiqt4a2rXawACBKAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAS+n2dvUs4uquZzTbcZYcXlpL7s9Oj+K7x47ZJ2q5taKxvKIM0bu6jTdONzWUHs4qbw/gZr2wnb01UU1OLeHhPKNM8tWaztL2LRaN4bVC/u6LzGrzeHtIqaX/5JmShqdal1pUqv+Pm/JoyaZCyrQ9nUpJ1c7Zct1jyfqbUtMt+yUfi/wBSfHjy3jek/dDkvjrO1o+zTp6pUT/mUoSWf6W0/TuvuM38UpSqf7qpTp+GVN/Pb8DI9LodpNfMp/CqP98iaKamO6Kb6eR6na+0xFVuTxcVn5ZL1e2vsnN14c3aniXN+GPvMf8AC6P98i7+FUP+8mdR+phzM6eWancUZxc3WpRS7Sms/IyQnCpjknGbfSMJKT+S6GtDSrXni5zqyj3UWk/nh/gZnpmldqd7/wCfH/kO4tqI6xEuZjBPdlqNU6jp1HyTXWMtmu/Qq1hb5SfiYY6dYR+x9dj/APej/wApd9VpxkpQuL2LXR/WN1/6TuL5u9Pu4mmLtb7L8LHQo2vAs9him6catXEurbjzfPlz95bC3nDpVk/8UmySL371n7POCn8mVMqmi2EakebMaM8rCcubZ+WGjFGlcxzmtTl5cmDqtp/i5mkfyZ0VKUoS/wC0mn/hj+rMzVHGzn8kSI5Yimxc0k9nleaLHsHjFVtrarLM4YfXmg+WWevX9cllJXdJ7p3Sk+2faL8pZb836GzsNlFSeyfd9CtfBXfij0Z9yxXNbbaecK21SNem503lLaS7xfn3X+XxMjia8o0as1KLXtIr3ZQwmn5+K8mn3MlGclJQmpNZUVOMXhvtnwb/AB7ntM01na/17f8AHN8UTzp9GSDSwvFk3OjTtbH2md2t34vwRDuKe6K1K1WdKNKU24Rey7IvY7xHZRyUnJMc9mKpNyk231MbTk+Vde26W/q9i5o2aEbSWkalGvh13Cn7FZayuZKWPh92SC8ztus0iN4hy9/czuK2ObNOGVBLOMePxNYyXNKVGtKm98dH4oxmBMzM82zG23JLcI3bsuJLGuo8ydVQkvKW355+Bv8A0j2H1LiSpVhDlp3K9qmlhOX9X6/E5ynOVOpGpB4lFpp+DR6L9JtrG60Cw1SgnKEFHMn15JLZ/Nr5l3DXzNNkj+O0/wCJZ+e/lavHP8t4/wAw84ABRaIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHSWqirSk4rH8uLfrhZObOo9m6KdGT/3b5M48Hj8EXdDHpzPuVdXPoQqo5yn0aa9U01+BBaraq1rrkfuTy4rwJ2l9oiuIc+2pZ/tZY1tImnF3V9LeYvw9kWtnlEnYai0lTuZbLpN9vXG7IwGbTJak71aFqRaNpdRFppNNNdmuj80UZAWd5XtZZptOPeMllMlLXUKFZtVJKg8L7e6b77pfj9/fSxaytuV+UqGTS2jnXm3AUX2IzX2ZfZl2fp4jOC3FonorTExylUZK04yq1FTpxlObWVFLLePL7zHVnGlJxqSjCS7SePxweTesdZexSZ6QyIo2Ylc2mcVLulTXK2nvLPl7qbT9TFK5bS9lRq1VJtQlGD5ZPvjOCOdRjjlxO4wX67Nr4FMinze45U5S5otOLlycj23ziWV1L6dNLeWZZ7S2SWN+nV53z9x1XJxdIl5NOHrMLUVw+xmqRjJwfKk4RUU1tnHd9s46leVttktd+6G1ohgw12K7+BnVNeBVUn2R1s4nJDCotroUVLLy+nfBsun5FHHboOF55m6xxoLDVLLW65pdN87YwWT9m5uf1e1k315reDy/iiW0Xh/V9YqNafZVasE8SqNctOHnKTwkvVk7/AeGNFlJa/rMr6uln6tpWJrPhKrL3V54TwczirfnNfqjtrq454YmZn2Q4ynbTvasbejY0KlSbxGNK1hzP5RMtzp1zZVY0ru3nTnSf2KkcNNdE++3gejcL/SVS4Z1ChX0DhjSbGNKW9SUHVrSXdOcntt4JEX9J3FkeLuIa+r/AFaFCVd80oxH6fHtPKPohp4hq7ZYrakxX47uKoUoUoKMXLGHs8dfLGNvmUksoysRjzNJd9j2tYrG0LdskzPFLWeUWM9s+jv6BeIOMOF563Qq06FJwcqMZptzx6Lo/i/I8r4t0G94d1u50u+punXt5uE1v1T6ry7oTH5/tDg12LNfgrPP+/wcxrNHntlVjHLpvd435X4+j/Ehzorul7W2qrb3acpfKLf5HOmNq6RXJO3dv6a3FQPUb6hK4+jGkptTlC0jUj5YWfw/A8uPXLeapcAW1SdNTjG0ptxfSWy2fqW/C68U5K+2ss7xeeGMVo7Xh5GCslhtPsUMpsAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdff/APz9wv8A6svxZyB1VWoqterVWcTnKS9G8l7QetKnrPVgpLM0iN4kjh0HjqpLPyJKj9tGtxBSUrHmUW5Qkpc3ZR3X4tFzVxvhlV007ZoQ+mKlK9hGtFTg1JYfd8rx9+Dau9KqQxOhJTT6xbw18/8AX8TRs+b63RUVmXtI4Xi8nSuWUmUNNgrlrO/Vdz5bY5iY6OYqU6lNpVISjlZWVjK8Sw6qL5ZKUXhp5TXVeZc61dvLrTz/AIiSdBbtLiNZXvDl6M6sZJUZzjJvblbzk3IUdVzJRVanKP2lzckvlsyblKU5uc25Saw5N5bQzsjuuhmOtvo5trI7Qio6Zc1XCNzdYj6uXL+/Iy0dJoRS9pKdR533wnt4fnn4EhuVjlk1dFir15obau8+5ip21vSUVTowXLutt+nd9fyMq656v7yqizJCn5FmuKtPVjZWvlm3Wd2Nptl8IMzwpI3L76k/ZfU6NWklSiqntKik3US95rCWE30W+PFkm3dBORoqPgVUGy/BkpxTayew4mzJa2zqvlS+J1ugcEatqtNytbOtViurjBv8DU4OsoXOpUac1lSml08WkfoP9GOg6ZovCVhTsrenFzoRlOSisybW+TjPmrgpx2jfdnx52r1H6fDaK7RvM/8AH5/alwXrFG9hZwsa87iTwqag8v4fmXw03QeGakpary6xqEcONrRn/Ig/CclvJrwjt4s+xf8AaJ0GlPQqlzpsJQvK8eRxorEppPptv4/M+NOJNE1Kwqy+s2FzSTfWdNr72ialq5MUZKx1Z9c2aNTfSZ7x6M7cu+8b/L85tHiDifVdXg7epVjbWSfuWdsvZ0Y+GIrZ+ryzn5R7s2qsJ5zyvPoYpRx1RzPOW3hrTHXhpGzA1gt38TPGm5NRSbfkZVYXM6kKcKNSU5yUYRUW8tvCwu7bPOqTjrHWWnjPRZOm0nhlUbSGqcQ3cdLsniUIyTdesv8Agh1afi8L5G/TpafwZRVW8p0b/X5RThQklKlaJ/3rvUX9vRdzktWv73VLypeX9xUuK83mU5vOfLyXktj2YivOUEZL6neMfKvt7z8P9vof6N/9oWy4S4fno1vptepb0Y8ls6lROUo9ubol8M7eh4Z9I/E1bivia71m4UVUuajm4x6Jdl8Fg5uT7NmPJHMxvM7bTPVLpvD6YJiYmZ2323npv1WV5KFCs33o1F84tHNE9qjxYzlnC2j6t9vxfwIEyNbO+R9DpY2oHq7pzo/R5Qpzbcnbw6vs2mjyy2pSr3FOjD7VSaivVvB6/wAVyjQ4djDlUM8iUV0WF0Re8Hryy2/+u31ZfjV/Sw09tt/o8guFi4qLwm/xMZkuXm4qvxm/xMZit0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADpLba1pLmz/Lj98Vsc2Tuk1ITs4RSfNHaTb6vO3pthfAt6Kdsmytqo3pu3IPDT8GXaxSVbT6kf6ksx8Mp5+/oWpLBvUoqdKLeWvJ77GvanHS1fbDL4+C8W9kuJi3FqSbTW6aOlpVHUpRqSh7NyipcqWEsrOy8NznrqjK3uKlGXWDxnx8yY0irKrZxUnF+zfLst/FZ/BemOiMnRW4cnDPdqamvFTf2NsqguoeDWZqpWKztg3tR0m90yrSp39CVGVWjCvTjLG8JLMXs+jRihHwSR7tKOcldt4YoU/EzUqSlJJ4Se2S9JFejWDqIQ2tMvauL/oZ0bR/oiseL7PiCN1ezjCdelzRcGpbe5jfbK65yeNypKDxjJMaDxNqGnTpUqtWd3YJOM7OtNulOL6rlzhPumt00n2N3iXRaFGFDVtJqTr6TeN+xlLedKS60542Ul8msNHVa8uu7OrkyYb8GWevSfz6uaUHgo47G7Ght0Erd+DPdpTedG6vD+k3Gs6vbabbLNa4qKnTTeFlvCPW+LfoG1bhO1sb/AFrV7KlZ15YrTi96OFnLzhY7dc5aWGcbwZpq0ZU+LdVqzoWtvUTtqcXipc1V0UcraKeMv4dS76SvpI4n47r0f4vdtW1usUbem2oR/wCJpveXm/uPOG0bT27wp3y3z5LVx2mIjvy237pOlxRougN2XCtrlp4nf3EVKrJ9MwXSK7rv6Hsn0X/ThdWtnQ0m6Ua021CE2/xPlNTcejZLcNXlSlq9vUi23Tbn1/tTf5EkzXJtW8RMKuTwzyt82G8xf2783s30u/SzfcS1JUozdClB+7GMnnK9DyyHG/E1pN+w1m5cM/YqS9pH4xllfcc3WvKtVuTk38TBKbkeTbaIivKI6bJ8HhmOsTOWOKZ6zPPd2X/xF1t7V7LR63i56fTy/uMF1xhaXsVDUeFdEqp9ZUaUqE16Sg0vmmcjKW5a5Hk3meq1Tw7T19Wu3w5PXvol0PgrifjCxtqdvf20s81ShWqRnTkl4SwmseGHnfdH0p9J/wBHfC2k8FXurabbW1nd2ttOdKrGEU4yUXhrbZrs0fH/AATKrw/af9LLipOlyNwsaSk4u4qYw3t1jHO/i2kSHE30scV65pH8LvtTnO36Situbbo8dvLoeWi29bRbbbszL6WcmTJSK8ccoiZn1Z7/AB/IcJrGXeVZSm5ycm3JvLeXvv3ZG1HjJsXFV1JOTecmrVawcTzmZfR4azWsRLE9yyRcyypJRi3JpJLdvsRTy5ytxG87QjtbqrFOkpZz77Xh1S+PX7iLMt3V9tcTqL7Lfu7Y27GIwsl+O02bFK8NYhM8F2f13iS0g4uUKc1Vljso7/LODu+PKqqU7a2dTkUm8yf9OcJN+mSE+iuyUql1qEotuKVKDzt4v/2/tl/Hdzm7rRbSUKTgs77tf5m7pK+T4fa/e0/aPyXz+qt5/iVKdqx95/IcJJ5bb7lAD599EAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABKaJWSjKg2855opeaw/wAERZt6VUdO9gl0qe41nGc9M+WcEmK/BeLOMleKswnkblhLMJQfZ5RprdGS2qKFZPs+p9BSdpYmSu8TCM4ptuS5hcqOFUWJY8Utvu/A09GrRpXEoTzyzWFh4w/9M/M6TVrb63ZTpqK58e62+jyvh2/fU45OUJppuMovZrZpmRq8c4c3FHfm0tLeMuHae3J1DWCnVpFtpWVzQhW7y+1tsmuq/D4YL1jJp47ResWjpKjas1tMS6Ktc6HccLUI8l5/HKdZRlUlPmpSo4eEk9008LHTBFpGCmbEXzNJEinwRSJ2VRdFGx9QuXR9t7KXJ/djYwpNPDR1t7UfHWd9pXQhlrbc7PgK4hSnV0vUIyq6XepRrwXWElnlqR8Gm87dVlHKWseaawj0D6OtOd1q1CnOlNxlJZ917ImxV3tEMnxbNWmC3F+S3o/R1q312rQpUXWhB7VIL3ZJrKabfRrczWfAsrW7nc6zCVvY2y56zaw546Qjv1fTK6H2xwLodjpWgW1OhQp88qacpdcvr1OO+nfhnTrzhqteKlGnVWctd3h4ePFEOLXYb5vK4fhKjqvDvEsOgjV2yR0iZjbpHx9r4r4y1Cvq+o+0nBUqFKPs7ehH7NKmukV+b7s5qrDlbR03ENJUrmpFY2bOcr/aZPflMr+hmPLiK8o2alRYZNcEwtnql1WvJwhSoWNxP3njMnTcYpeLbkiGn9oxSystMh3aNqcdJr7U9pN/w9S4J1bT77S6tXWq1ejOyvI1Hy0oJvni1nun55bXTBBJrBjKrY57JIpEb8yeEyY4M0GfEGsq3lUVC0owdW6ryWY0qcVlt+fZLxaIbDnOMYptyeEl1bO24ikuFOFqfC1Fpaje8tfVWusejp0k+myeX5s7rETzlBqstqxGPH61uXwjvPy/vshOM9cjq2oRjaUnb6bbRVGyt859nBeL7tvLb8WQLllFJsxyfgczMzMys4cNcVIpXsrN7GCb3Lpy2MTZxMrNarZEfrFw4QVKMmpTTzt/Tlr8vxNy4qwpU5TnLCSb9X2S8/8AU5+tUlVqyqTeW/u8jP1mbaOCGjpcX7pWFUm2kllvZIodDwJpa1HWY1KkU6NvicsrKb7L9+BQxY7ZbxSvWVrNlrhxzkt0h6Dw5aLSOHaNKo0pQg51N8rPV7o8+4ku51KdaTn79ea5k+6zn8UjuuL7v2GnexT96s8fBbv8l8TzTW6spXEaXPmMI5x2Te/4YN/xa9cOGuCvaIh894NS2XJbUX6zO6PAB84+lAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdHaXCuKEZ7uTXvZaznv96ePIzdGRGi3KhKVCb2l70fJ9/Tb8CWzk2dLk8zH7+jL1FOC/ulJW0/a0k+r6M5ziSx+r3Cr04KNKps0n0l/n+vQmLOr7Kss55ZbP9TcvKEbm2qUJr3Zxx06efzwT6nD5+LaOsdFXBl/T5efSXJ6PdRoVpU6rSp1O7/pl2f5fHyJvDzhrDXY5u8t6tpczoVo4lH711TJfR7tV6XsZY9rBbbfaXj6r/PxM7R5uGeCzS1OLjjjhJQexs2coqtFy6J7mqtjJF4Zqxylk3rvvD634d4x+iWn9DdPT72nR+uKhyVaLjmpKectr9TwKtq/Bca0pR4Wup77KWoPD+UUcXGrPpzMujLxO4tMMivhdKTvvPTtO3126z73b0uLNJtt9K4R0y3qLpUuJSuGvNKTx9zJrhzifijWNUoWdtcy55y2pUYqnHbd5SSWEll52web2kZ1KkaVKLlOTSSSy8vokd/cyXBmmvTadSL1u6ppXs4vLtoPDVNNbZaeW0/Imx2nffoo6/SYaxFK13tPTfn8+fZ9R8GfTNotnZ/w2/rKr9XXJGrT6Swt0vLOVnyIHjz6Urfiaq9N010M8rdKjX+xVlunHOVu1su258u0tTnBe7Nr0ZhuNSqt86nJNbpp7o4riw0yeZWvNVvpdbm08aS+WZpHbl29vuddrseG9UvK1O4r1uH72MnGVOtF1KTlndZS5o7+Kfqc7q3Buu21u7ylbRvbPqri0mq0GvHMc4Xrg3aValxpQhYXdaFDXKcVG2uJvEbtJbU5vopeEn16PscxQvtZ4f1KpCjXubC6oycJqM3GSw908Hd7RPZa0eHLjjgpbaY7Tz+k9dvq3eG+Ftc4i1mjpWmafWrXNaXLFcjSXm29kvUxcdcK6xwdr1TRdct/YXcIqfKpKSaecNNeOGS2n/Sbxtp91SubfXq8atKSlFyjGXTp1W5l1v6QJcTahO/4v0W01e7nFQlcxlKjUaSwt4+7svIgnbi9zRpbU1iZvWJ90T/vZwy8EZ4W1WcW1Bv0R09vY8FaknUpatfaRVb/AN1cUFWgv/HHDx/4T6V+hL6EuH9S4WhfarOF1OqswlTb5WuzWUn08ULTWlZtadoc31trZIxYqTN57Ty+/R81cHWNLSLarxVqVJVIWklGyoTW1evjb1Udm/gu5zGpXlxfXta9uqsqterNznOTy228tnvH+0nwTDhm+tLS2q/9To0nGjSS2jvlv4t98nz/AHXu1GsndtorHDziXPh+Sc17ZLxtffaY9m3Zhm8sxtoSkY5y2wiOZ7NmtVJvLwjFJxj9qcYru5PC2/fqJyUU230/IhtRu/bS9nTeaafX+79F+/SnqM8Y45dV3Bgm8+5ivrl3FV8rl7NfZT6+rNcAx5mbTvLTiNuULqUJ1akadOEpzk8RjFZbZ67wvpcNH0qFvmLqv3qs1/U/8vyOX+j3QeZx1e6hsv8AcRfycmvwOl4mvnaWLpwf8yqmk090u7/I+i8J0vlUnU5I+D5rxjVTnyRpcc/H89zm+KtQVxdVaik3Tppxhjy9Tias3UqyqNJOUm2ksLcltbr8tCNFNc1R8zw+kU/za77rHmQ5k6/POXLPubeiwRhxRWAAFJbAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAXU5ypzjOEnGUWmmuzOhtKyuKMaiSWeqXZ+H77HOG5plz9XrOL5eSezb7Ps8/v44LGmy+XfeeiHNj8yvvTq8yRsayqQ5H9qK280Rqy8ZTXlgvpzcJqUXhrc26X2ndj5KcUbd2bX9M+u0FOmv50F7uZYyvA5H+ZRrdJQqQl0aw00egW1VV6alHbGzXgyI4j0dV4O5t4pVYr3kl9pfqVNbpOKPNx/NNodXwz5WT5NXTbuNzRSz/MgveXV9ve9P34Z3Iy7M5SMqlCrlZhOL8N0TmnX9O4hGE5ctfOMNbS9P0/HtFptXvtW6xqNN+6qSUty+En6GBPfdnr3+zfwVwXxpq1/Q4t1dWMLekp0aft4Uvatt53fZeXiX5ttEzLMy24I3QPC8aXCmiw4pvIwnqNwnHSqElnGNpVpLwXRJ9Xv2OXrXlW5r1LivUlOtUk5SlJ5bbeW2TP0p3FKfHGo0LW8hdWdtWdC1nTxyKlDaKjhtYSWNuvXucwp7bslm3LZQ0+Diic1+drfaO0fndIKtt1KSq5XU0VU8yvP5ocSbyY3bLquMsxeGvA6uzvbTjKhT03V60bfWqcVC0vpvEbjGypVOyfZSfozinPxZY54fMmc8e3weZdNGSN45THSUjqthe6Ve1bC/oTo16UnGcZLDWO/n5Y2ZpSnhPHU9v/ANn3hyy+lu8loHFN5yQ0ykp0bmEkrmcc4VLLTTgt3lrKeEuprfSvwDwX9GvF9e2uL+tq8YwjUtbLplv/AL2SxhZXRbsb1tfhj4of1N8dP6ld5325d5/x83m/C/Dt3qNGepXVVWOlUGvbXlVPC8orrKXkvLOD2f6Pfp1q8J270yxozubClFQpSr1P5ksLGXs0vJLosLc8S4n4kv8AXKsFcTjTtaOVQtqS5aVFeEYrp0W/V92QqrYezZ1M124dt496O+iyam0ZMk8Mx02nbb5/kPTfpZ+ke/4z1Kd3eVFhLEILGIr5I8vuJuU856sVKrcst5Necs+hza2/KOy9pNJXBXavf6kpeBhrTUKcpzajGO7b6IxXd3St4ZnJOWV/LT3ff4Lf9M4IS5uKlxPmm9l0XgUc+rinKvOWvg002526Ml/du4m1DMafZPq/P/I1QDJtabTvLRiIiNoDoODeH5axdurXjONnT+00vtvwTLOFeHq+sXCnNSp2kH79TH2vKPj+R6haUKFnaQoUYqnSpxxFZ2SNbwzw6c9vMvHox92N4r4nGmr5eOfTn7FWVGztXOeIUqce3ZLscBq9+7qvUua0lGHXxwl0X77kpxPqyu6n1ei/5FN9f7n4+ngcbq9yqklRp5xH7e3V+Hj/AJ+hoeJ6yK14afn/AOKfhGhtH9TJ1lp3NWVevKrJJcz2S7LsvkYwD5h9MAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJfSrxSpq3qP3o7RfivD4fvoSK6ZOYjKUZKUW4yTymnhpk3p14riHJN/wA1deiz5/v/AE0NJqP2W+SlqcO/pVSVrXlQqqcenRrxRM0ZwrU1ODyn27ryIAz2lzO3nzR3XdPozWx5OHlPRlZsXHG8dV2t6FG8/nW3JTqpbrGFL1/U5K4o1berKlWg4Tj1TPSLWrTuKanTefFPqmYNU0u21CkoV44kuk49V1+7f06FXVeHxk9PEk0viM454MrjbDUuTELjmkuiku3qu/76kvTrYip0p5jLaMovZ46/kROr6Jd6fJyx7Wj2qRX4rsaFtcVrefPSnyvwayn6p7MoU1GTDPDeGpbDjzRxVl0/tG3lvI5/PBFW2qU5csa0PZvvJNtdsbdV67m9RqRq0vaU5KccZfK8437+G/iXsepx36SpX01qdmx7TzKqo84MCe3U3dEpW1xqtpQvKvsrapWhGrPP2INpN/BZZYiUFoisTM9mNOUmoxTbbxt1On0/hG4harUOILmGj2PVKsn7asv+Cn1fhl4XmegfSb/0C4D/AIauAnaajf3FvzXFzVn7Z28ljDinsm3l9O3gzyTVNTvdTu5XV9dVbmtPrOpJtv5/gdcoZ1MubUxvjjhr7e/y7fnR1FPi6noeKHB1KppsIPLvJS/6zV/xSW0V35UsdMtnP6zq99q11O71G7q3NxP7U6k3KT+LIrnx03Mcptnk2lPi0eOk8URz9vdlnPL6lkpGJvxZjuq8aFLnk0s9n19V4422RFky1pG8ruPDNp2hmnOMIuU5qMV1beEv34dSJu9VzmNvHfdOcln5L9fuNG6uKtxU5qk+bG0V2SMJl5tXfJyjlDTxaatOc85Vk3JtybbfVsoDd0rS77U6vs7O3lUWUpTxiMfVlWIm07QnmYrG8tI6nhXhStfyjc30XStuqi9nPy8kdFw7whaWGK9443NwsNbNRg/L49zpJ8tOLlJqKiuucJI3tF4PM7Xz9PZ/t87r/G4jfHp+c+3/AEWtClbUI0qUI06cVhRSwl+hzPE2te0crO0n7i2qTX9XkvL8SziDXpVlK1tJONPdTn0cvJeX4nLXt1ChT7Ob2S8/PfOC/rNZTHThpyiPzaFTQeH3tfzMvOZ/N5W6rcxp0OSMs1J9vBbp5+JCF9apOtVlUqS5pSeWyw+Wy5Zy24pfV46RSu0AAInYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAF0JyhNThJxlF5TXYtAE5p97C4iozajVit039rzX6fl03Tl03FpptNbpolbHU3KXJdS954SqePm/Pz+ZoafV7ejf6qebTb86pi3r1LeanTeH38H5Mm7G+pXKSfuVPDOzOehJSinF5WPH4lU2nlPD7GrjyzXp0ZWbTxfryl1bT646fcQuocNWV1zSpZoVW/tR6fFem/Z9clbLVqlJKFxH2sF0f9S+PcmratQuYc1CpGWFlruvVE18eHUxtaFKL59LO9Z/04DUeH9Rs1zezVaH91Ld/Lr+RFLMXlZTX3Hq0o74aNa60jT7181zawnJ4zJbNpea3RnZfCJ645+UtHD41Xplj6PO4ahdKSlKp7TfL51ly9X1+82I6pLdyo7t5SjPCS8PH7zpbngu3nJu3u6lJdfeipJfg/0Iy44N1Wnl05UKqSysSab8sY6/cVJ02rxdIn5c16ut0mX90fPk1qWrW8pZre3prwjFT+/MTN/FdNx/vLz/AMiP/Oalxw3rdB/zLCb/AMEoz/Bswy0TV4pOWm3KT6Zps487U167/RJFNNbpMfVt1tWt0/5UatRf8UVD82a89XlzJxoLbrGcsp7eWH95ZHRNXl9nTbl7Z2pszW/DeuXDxT02t/48R/Fo849Rf2/R7tp6dZj6tOV/dt5VZwednBYa+PU1TprbgjXK2OeFGju0+eecfLOfhkm7H6O6eE7zUZyb6xpQ5Uvi85+SOqaDVZZ5Un5/9RZPEtJhjnePlz/s8+N/TdH1LUGvqtpUlB/1tYj1x1PULHhTRbPldOyjUkse9V99t+Pl8MdEyWdN9DSw+A5J/wDW23wZWf8A+RY4j+lXf4uK0PgehTftNUq+3kv+zg2o/F9X9x11ra0bajGjb040qcVhRisY8jNUdOjTdSrOMIR6yk8JfEgNW4mo0uanYx9pNbe0kvdXourNfHp9Po43iOf3Y19Rq/ELbb7x9IhL311b2VF1bioorsu8n4JdzkNb1qtft0oZp0E9orv5t/kR13dV7mq6txUlOTfdkXeajCmuWjic9mn1S/e372KGr8Q5e77y19D4XFJ3nnPtZb25p0aTbknUe0Y9c+fp5/LviFrVZ1qjnN5f4eSLZNyeZNt+ZQ+dy5rZZ3l9FjxxjjaAAESQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAbNne1rf3U+ennPI309PAmLa7oXCbhJKSTbjJ4fn6/5M54E+LUXxdOiLJhrk6un6l1OpOnJShKUZLo08EHQ1K4p/7x+2WMJye6+Pfw3zsSdveW1fljCrGM5dY1MRx8Xt+ZoY9XS3XlKjfS2r05wnLTW68MKvFVYrbwfzJi01OxrLer7OT/pmvz6HI82S5dDQpqLV77s7Losdu20u+p01KKlFqSe6aeUzNCk8HAUbivQfNRqzg14NkjR4i1WnHl9tGaX90E380slumsp+6Nmbl8Myfstu7KNF+BlhRbXQ5WhxbcwSVW0pVPRuLNynxnSSXNpr+Fb/ACLFdVh7z9lO/h+qjpG/zdHC3fh9xmhbbdDmv+nFFdNMb9a3/wDJbU47q8uKOnUoP/iqOX3LBLGs09Y6/ZBPhuttPq7fN1sbbyLvq+OxwVXjPWZ5dOpSpJ/20k8fPJE32rajetu5vK1TPbmwvktiO3iOKI9GJlNj8E1Fp9O0RD0G/wBV0yy5o3F3TUl1hF8z+Syc7qPF0XFxsbZp52nUefuX6nJZbeHnOdu+5gr3dvRS56i3/pW7+X64KGbxO23WIhrabwXFXaZ3tP2SV/qN3ezcrmtKXgs4S9F0RHXFxRoxzUkltlLu/T9ojrjU6k48tKKhv9p9X+RoTlKcnKcnKT3bby2YubXzafR+rfw6OKxz+jau72pW92PuxXdbN+pqAGfa02neV2IiI2gABy9AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGWjc16KxTqyUc55eqz44exuUtVqqUfaUoyS68r5W/wAUvgiOB1W9q+rLm1K26wmlqtBxgnGak/t5WyfluzMru2lNRhXpzyk855UvL3sepz4LEazLHXminTY57Ohq3NCnJRlXpt4z7s1Jfdkp9bt9/wCdD5o58Hca6/shxOko6GFzb1KnJGtST8ZSSXzexSdzbwqKNSvTSfWSkpL/ANOWc+Dydbk9z2NLRN/xO1TkpSqNY91whlP54/fY1qmqybXJRXTD5nlP5YwRoIranLbukjDSOzYq3lzVUlKtJRn9qMfdT9UuprgEMzM9UoADwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB/9k=" alt="OnePilot" width="36" height="36" style="object-fit:contain;width:36px;height:36px;filter:drop-shadow(0 0 3px rgba(0,200,245,0.5));">
+    OnePilot
+  </div>
+  <span class="badge">Lecture seule</span>
+  <span class="meta">Expire le {expires}</span>
+</div>
+<div class="main">
+  <div class="dashboard-title">{title}</div>
+  <div class="widgets-grid" id="grid"></div>
+</div>
+<footer>Généré par OnePilot — Agent Conversationnel ERP · Ce lien expire le {expires}</footer>
+<script>
+const spec = {spec_escaped};
+const COLORS = ['#006eb8','#2d72ff','#00a050','#d4a000','#c03030','#7c3aed'];
+const grid = document.getElementById('grid');
+
+function fmtVal(v) {{
+  if(v===null||v===undefined) return '—';
+  const n=parseFloat(v); if(isNaN(n)) return String(v);
+  if(Math.abs(n)>=1e6) return (n/1e6).toFixed(2)+'M';
+  if(Math.abs(n)>=1e3) return (n/1e3).toFixed(1)+'K';
+  return n.toLocaleString('fr-FR',{{maximumFractionDigits:2}});
+}}
+
+(spec.widgets||[]).forEach((w,i) => {{
+  const div = document.createElement('div'); div.className='widget';
+  const ct = w.chart_type||''; const d = w.data||{{}};
+  let inner = `<div class="widget-title">${{w.title||''}}</div>`;
+
+  if(ct==='kpi_card'||ct==='kpi_delta') {{
+    const dv=parseFloat(d.delta); const col=dv>=0?'#00d9a0':'#f07070'; const arr=dv>=0?'▲':'▼';
+    inner += `<div class="kpi-card"><div class="kpi-value">${{fmtVal(d.value)}}</div>
+      <div class="kpi-label">${{d.label||w.title||''}}</div>
+      ${{!isNaN(dv)?`<div class="kpi-delta" style="color:${{col}}">${{arr}} ${{Math.abs(dv).toFixed(1)}}%</div>`:''}}
+    </div>`;
+  }} else if(ct==='table'||ct==='pivot') {{
+    const headers=d.headers||[]; const rows=(d.rows||[]).slice(0,50);
+    inner += `<div class="table-wrap"><table><thead><tr>${{headers.map(h=>`<th>${{h}}</th>`).join('')}}</tr></thead>
+      <tbody>${{rows.map(r=>`<tr>${{r.map(c=>`<td>${{c??''}}</td>`).join('')}}</tr>`).join('')}}</tbody></table></div>`;
+  }} else {{
+    inner += `<div class="chart-container"><canvas id="c${{i}}"></canvas></div>`;
+  }}
+  div.innerHTML = inner; grid.appendChild(div);
+
+  if(!['kpi_card','kpi_delta','table','pivot'].includes(ct)) {{
+    const labels=d.labels||[]; const ds=d.datasets||[];
+    const ctx=document.getElementById('c'+i)?.getContext('2d'); if(!ctx) return;
+    const isBar=ct==='bar'||ct==='bar_horizontal'||ct==='column';
+    const isPie=ct==='pie'||ct==='doughnut';
+    new Chart(ctx, {{
+      type: isPie?ct:'bar'===ct?'bar':ct==='bar_horizontal'?'bar':ct==='line'||ct==='area'?'line':'bar',
+      data: {{
+        labels,
+        datasets: ds.map((s,j)=>({{
+          label:s.label||'',
+          data:s.data||[],
+          backgroundColor:isPie?COLORS:COLORS[j%COLORS.length]+'33',
+          borderColor:isPie?COLORS:COLORS[j%COLORS.length],
+          borderWidth:isPie?0:2,
+          fill:ct==='area',
+          tension:0.4,
+        }}))
+      }},
+      options:{{
+        indexAxis: ct==='bar_horizontal'?'y':'x',
+        responsive:true, maintainAspectRatio:false,
+        plugins:{{legend:{{labels:{{color:'#7ea4be',font:{{size:10}}}}}}}},
+        scales: isPie?{{}}:{{
+          x:{{ticks:{{color:'#4a6a82',font:{{size:9}}}},grid:{{color:'#e8f0f8'}}}},
+          y:{{ticks:{{color:'#4a6a82',font:{{size:9}}}},grid:{{color:'#e8f0f8'}}}}
+        }}
+      }}
+    }});
+  }}
+}});
+</script>
+</body>
+</html>"""
+        return HTMLResponse(html)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/share/{token}")
+async def delete_share_link(token: str):
+    """Supprime un lien de partage."""
+    try:
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            await conn.execute("DELETE FROM shared_dashboards WHERE token=$1", token)
+        return {"status": "ok"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ─── FAVORIS ─────────────────────────────────────────────────────────────────
+
+class FavoriteRequest(BaseModel):
+    dashboard_id: str
+    title:        str
+    spec_json:    str
+    source_id:    Optional[str] = None
+    conv_id:      Optional[str] = None
+    user_id:      str = "admin"
+
+@app.post("/api/favorites")
+async def add_favorite(req: FavoriteRequest):
+    try:
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            await conn.execute("""
+                INSERT INTO user_favorites (user_id, dashboard_id, title, spec_json, source_id, conv_id)
+                VALUES ($1,$2,$3,$4,$5,$6)
+                ON CONFLICT (user_id, dashboard_id)
+                DO UPDATE SET title=EXCLUDED.title, spec_json=EXCLUDED.spec_json,
+                              source_id=EXCLUDED.source_id, conv_id=EXCLUDED.conv_id, created_at=NOW()
+            """, req.user_id, req.dashboard_id, req.title, req.spec_json, req.source_id, req.conv_id)
+        return {"status": "ok", "dashboard_id": req.dashboard_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/favorites/{dashboard_id}")
+async def remove_favorite(dashboard_id: str, user_id: str = "admin"):
+    try:
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            await conn.execute("DELETE FROM user_favorites WHERE user_id=$1 AND dashboard_id=$2", user_id, dashboard_id)
+        return {"status": "ok"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/favorites")
+async def get_favorites(user_id: str = "admin"):
+    try:
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT dashboard_id, title, spec_json, source_id, conv_id, created_at
+                FROM user_favorites WHERE user_id=$1 ORDER BY created_at DESC
+            """, user_id)
+        return {"favorites": [dict(r) for r in rows]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/dashboard/export/pptx-multi", tags=["Dashboard"])
+async def export_dashboard_pptx_multi(req: PptxMultiRequest):
+    """Génère un PPT multi-slides : 1 slide par dashboard."""
+    import json, sys, os
+    from fastapi.responses import Response
+    try:
+        specs = json.loads(req.specs_json)
+        sys.path.insert(0, os.path.dirname(__file__))
+        from pptx_generator import generate_pptx_multi
+        pptx_bytes = generate_pptx_multi(specs)
+        title_safe = req.title.replace(" ","_")[:40]
+        return Response(
+            content=pptx_bytes,
+            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            headers={"Content-Disposition": f'attachment; filename="{title_safe}.pptx"'}
+        )
+    except Exception as e:
+        logger.error(f"[PPTX-MULTI] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class PptxImageRequest(BaseModel):
+    image_base64: str
+    title:        str = "Dashboard"
+    subtitle:     Optional[str] = None
+
+@app.post("/api/dashboard/export/pptx-image", tags=["Dashboard"])
+async def export_dashboard_pptx_image(req: PptxImageRequest):
+    """Génère un PPT avec le dashboard capturé comme image pleine page."""
+    import base64, io
+    from fastapi.responses import Response
+    try:
+        from pptx import Presentation
+        from pptx.util import Inches, Pt
+        from pptx.dml.color import RGBColor
+        from pptx.enum.text import PP_ALIGN
+
+        img_bytes = base64.b64decode(req.image_base64)
+
+        prs = Presentation()
+        prs.slide_width  = Inches(13.33)
+        prs.slide_height = Inches(7.5)
+
+        # ── Slide de couverture ──
+        s0 = prs.slides.add_slide(prs.slide_layouts[6])
+        s0.background.fill.solid()
+        s0.background.fill.fore_color.rgb = RGBColor(0xFF,0xFF,0xFF)
+        # Barre header
+        hdr = s0.shapes.add_shape(1, Inches(0), Inches(0), Inches(13.33), Inches(0.5))
+        hdr.fill.solid(); hdr.fill.fore_color.rgb = RGBColor(0x00,0x6E,0xB8)
+        hdr.line.fill.background()
+        # Titre
+        tb = s0.shapes.add_textbox(Inches(0.4), Inches(0.07), Inches(9), Inches(0.38))
+        tf = tb.text_frame; p = tf.paragraphs[0]; r = p.add_run()
+        r.text = req.title; r.font.size = Pt(16); r.font.bold = True
+        r.font.color.rgb = RGBColor(0xFF,0xFF,0xFF); r.font.name = "Calibri"
+        # Sous-titre/date
+        if req.subtitle:
+            tb2 = s0.shapes.add_textbox(Inches(9.5), Inches(0.12), Inches(3.5), Inches(0.28))
+            tf2 = tb2.text_frame; p2 = tf2.paragraphs[0]; p2.alignment = PP_ALIGN.RIGHT
+            r2 = p2.add_run(); r2.text = req.subtitle
+            r2.font.size = Pt(9); r2.font.color.rgb = RGBColor(0xCC,0xEA,0xFF); r2.font.name = "Calibri"
+        # Image dashboard pleine page
+        img_stream = io.BytesIO(img_bytes)
+        s0.shapes.add_picture(img_stream, Inches(0), Inches(0.5), Inches(13.33), Inches(6.8))
+        # Footer
+        ft = s0.shapes.add_textbox(Inches(0), Inches(7.18), Inches(13.33), Inches(0.28))
+        tft = ft.text_frame; pft = tft.paragraphs[0]; pft.alignment = PP_ALIGN.CENTER
+        rft = pft.add_run(); rft.text = "OnePilot — Agent Conversationnel ERP"
+        rft.font.size = Pt(8); rft.font.color.rgb = RGBColor(0x9A,0xB4,0xC8)
+        rft.font.name = "Calibri"; rft.font.italic = True
+
+        buf = io.BytesIO()
+        prs.save(buf)
+        pptx_bytes = buf.getvalue()
+
+        title_safe = req.title.replace(" ","_").replace("/","_")[:40]
+        return Response(
+            content=pptx_bytes,
+            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            headers={"Content-Disposition": f'attachment; filename="{title_safe}.pptx"'}
+        )
+    except Exception as e:
+        logger.error(f"[PPTX-IMG] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class PptxExportRequest(BaseModel):
+    spec_json: str
+    title:     Optional[str] = None
+
+@app.post("/api/dashboard/export/pptx", tags=["Dashboard"])
+async def export_dashboard_pptx(req: PptxExportRequest):
+    """Génère un fichier PowerPoint depuis un spec de dashboard (python-pptx)."""
+    import json, sys, os
+    from fastapi.responses import Response
+    try:
+        spec = json.loads(req.spec_json)
+        if req.title:
+            spec["title"] = req.title
+        # Import du générateur python-pptx
+        sys.path.insert(0, os.path.dirname(__file__))
+        from pptx_generator import generate_pptx
+        pptx_bytes = generate_pptx(spec)
+        title_safe = (spec.get("title","dashboard")).replace(" ","_").replace("/","_")[:40]
+        return Response(
+            content=pptx_bytes,
+            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            headers={"Content-Disposition": f'attachment; filename="{title_safe}.pptx"'}
+        )
+    except HTTPException:
+        raise
+    except ImportError as e:
+        logger.error(f"[PPTX] Import error (python-pptx manquant?): {e}")
+        raise HTTPException(status_code=500, detail=f"Module manquant: {e}")
+    except Exception as e:
+        import traceback
+        logger.error(f"[PPTX] Export error: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/dashboard/generate", tags=["Dashboard"])
 async def generate_dashboard(req: DashboardRequest):

@@ -82,6 +82,7 @@ class DashboardSpec:
     insights:     List[str] = field(default_factory=list)
     generated_at: str = ""
     duration_ms:  int = 0
+    options:      Dict[str, Any] = field(default_factory=dict)   # Sprint 3: recommendations
 
     def to_dict(self) -> Dict:
         return {
@@ -93,6 +94,7 @@ class DashboardSpec:
             "duration_ms":  self.duration_ms,
             "filters":      self.filters,
             "insights":     self.insights,
+            "options":      self.options,          # Sprint 3 : recommendations
             "widgets": [
                 {
                     "widget_id":  w.widget_id,
@@ -342,6 +344,8 @@ class VisualizationSelector:
         if intent.is_composition and n_rows > 8:
             return ChartType.BAR
 
+        if intent.is_correlation and n_num >= 3:
+            return ChartType.BUBBLE   # 3 métriques → bulles (x, y, taille)
         if intent.is_correlation and n_num >= 2:
             return ChartType.SCATTER
 
@@ -653,6 +657,34 @@ class DashboardDesigner:
                     "backgroundColor": "rgba(0,200,245,0.6)",
                     "pointRadius": 4,
                 }],
+            }
+
+        if chart_type == ChartType.BUBBLE:
+            x_col = num_cols[0] if len(num_cols) >= 1 else cols[0]
+            y_col = num_cols[1] if len(num_cols) >= 2 else num_cols[0]
+            r_col = num_cols[2] if len(num_cols) >= 3 else num_cols[0]
+            # Normaliser la taille des bulles entre 4 et 30
+            r_vals = [float(row.get(r_col, 0) or 0) for row in rows[:200]]
+            r_max = max(r_vals) if r_vals else 1
+            r_min = min(r_vals) if r_vals else 0
+            r_range = r_max - r_min or 1
+            palette = self._palette(1)
+            return {
+                "type": "bubble",
+                "datasets": [{
+                    "label": f"{x_col} / {y_col} / {r_col}",
+                    "data": [{
+                        "x": float(row.get(x_col, 0) or 0),
+                        "y": float(row.get(y_col, 0) or 0),
+                        "r": 4 + ((float(row.get(r_col, 0) or 0) - r_min) / r_range) * 26,
+                    } for row in rows[:200]],
+                    "backgroundColor": palette[0].replace("0.85)", "0.55)"),
+                    "borderColor":     palette[0],
+                    "borderWidth": 1,
+                }],
+                "x_label": x_col,
+                "y_label": y_col,
+                "r_label": r_col,
             }
 
         if chart_type == ChartType.TABLE:
@@ -1024,11 +1056,19 @@ class DashboardDesigner:
 
     def _generate_title(self, question: str) -> str:
         q = question.strip()
+        # Nettoyer les préfixes de commande
         q = re.sub(r"^(génère|montre|affiche|donne|crée|show|create|generate|fais)\s+", "", q, flags=re.IGNORECASE)
         q = re.sub(r"^(un|une|le|la|les|des|du)\s+", "", q, flags=re.IGNORECASE)
         q = re.sub(r"^(dashboard|tableau\s+de\s+bord)\s+(des?|du|de\s+la|les|l\'|d\')?\s*", "", q, flags=re.IGNORECASE)
-        # Capitalise proprement (pas tout en majuscules)
-        q = q[:70].strip()
+        # Supprimer le bruit des recommandations enchaînées
+        # Ex: "évolution trimestrielle évolution mensuelle détail anomalies baisses répartition..."
+        # → garder seulement la partie significative avant les mots "détail/anomalie/répartition/baisses"
+        _noise = r"\s+(détail\s+anomalies?|anomalies?\s+baisses?|répartition\s+dashboard|baisses?\s+répartition|dashboard\s+top|complet\s+top).*$"
+        q_clean = re.sub(_noise, "", q, flags=re.IGNORECASE).strip()
+        if q_clean and len(q_clean) > 6:
+            q = q_clean
+        # Tronquer à 50 chars max pour la sidebar
+        q = q[:50].strip()
         return q[:1].upper() + q[1:] if q else "Dashboard"
 
     def _palette(self, n: int, alpha: float = 0.85) -> List[str]:
@@ -1088,6 +1128,124 @@ class DashboardGenerator:
         # 2. Génération des requêtes SQL
         sql_gen = SQLGenerator()
         datasets = []
+
+        # ── JOINs prioritaires : fournisseurs et employés ────────────────────
+        # Ces JOINs doivent s'exécuter AVANT _find_relevant_tables pour éviter
+        # que le routing générique ne route vers Products/Orders avec mauvaises colonnes
+        import unicodedata as _ucd
+        q_lower_early = _ucd.normalize("NFD", question.lower()).encode("ascii","ignore").decode()
+
+        def _find_tbl(hints):
+            for t in schema:
+                if any(h in t.lower().replace(" ","").replace("_","") for h in hints): return t
+            return None
+
+        # ── Fournisseurs ─────────────────────────────────────────────────────
+        if any(k in q_lower_early for k in ["fournisseur","supplier","vendor"]):
+            sup_tbl  = _find_tbl(["suppliers","supplier","bpsupplier"])
+            prod_tbl = _find_tbl(["products","product","itmmaster"])
+            if sup_tbl and prod_tbl:
+                sf = schema.get(sup_tbl, [])
+                pf = schema.get(prod_tbl, [])
+                sup_id   = next((f for f in sf if "supplierid" in f.lower()), None)
+                sup_name = next((f for f in sf if "companyname" in f.lower() or ("name" in f.lower() and "id" not in f.lower())), None)
+                prod_sup = next((f for f in pf if "supplierid" in f.lower()), None)
+                if sup_id and sup_name and prod_sup:
+                    top_n = intent.top_n or 10
+                    sql_sup = (
+                        f"SELECT TOP {top_n} s.[{sup_name}] AS Fournisseur,\n"
+                        f"  COUNT(*) AS Nb_Produits\n"
+                        f"FROM [{sup_tbl}] s WITH(NOLOCK)\n"
+                        f"JOIN [{prod_tbl}] p WITH(NOLOCK) ON s.[{sup_id}] = p.[{prod_sup}]\n"
+                        f"GROUP BY s.[{sup_name}]\n"
+                        f"ORDER BY Nb_Produits DESC"
+                    )
+                    rows_s, cols_s = await self._execute_sql(sql_sup, source_id, pg_pool, connector_factory)
+                    if rows_s:
+                        datasets.append({"sql": sql_sup, "rows": rows_s, "columns": cols_s, "title": f"Top {top_n} fournisseurs"})
+                        logger.info(f"[Dashboard] Supplier JOIN early: {len(rows_s)} rows")
+
+        # ── Employés ─────────────────────────────────────────────────────────
+        if any(k in q_lower_early for k in ["employe","employee","staff","personnel"]):
+            emp_tbl = _find_tbl(["employees","employee","empl"])
+            ord_tbl = _find_tbl(["orders","order","sorder","commandes"])
+            if emp_tbl and ord_tbl:
+                ef = schema.get(emp_tbl, [])
+                of = schema.get(ord_tbl, [])
+                emp_id  = next((f for f in ef if "employeeid" in f.lower()), None)
+                emp_fn  = next((f for f in ef if "firstname" in f.lower()), None)
+                emp_ln  = next((f for f in ef if "lastname" in f.lower()), None)
+                ord_emp = next((f for f in of if "employeeid" in f.lower()), None)
+                ord_id  = next((f for f in of if "orderid" in f.lower()), None)
+                if emp_id and (emp_fn or emp_ln) and ord_emp and ord_id:
+                    name_expr = (
+                        f"s.[{emp_fn}] + ' ' + s.[{emp_ln}]" if emp_fn and emp_ln
+                        else f"s.[{emp_fn or emp_ln}]"
+                    )
+                    top_n = intent.top_n or 10
+                    sql_emp = (
+                        f"SELECT TOP {top_n} {name_expr} AS Employé,\n"
+                        f"  COUNT(o.[{ord_id}]) AS Nb_Commandes\n"
+                        f"FROM [{emp_tbl}] s WITH(NOLOCK)\n"
+                        f"JOIN [{ord_tbl}] o WITH(NOLOCK) ON s.[{emp_id}] = o.[{ord_emp}]\n"
+                        f"GROUP BY {name_expr}\n"
+                        f"ORDER BY Nb_Commandes DESC"
+                    )
+                    rows_e, cols_e = await self._execute_sql(sql_emp, source_id, pg_pool, connector_factory)
+                    if rows_e:
+                        datasets.append({"sql": sql_emp, "rows": rows_e, "columns": cols_e, "title": f"Top {top_n} employés"})
+                        logger.info(f"[Dashboard] Employee JOIN early: {len(rows_e)} rows")
+
+        # ── Produits par revenus (early JOIN Order Details + Products) ────────
+        if any(k in q_lower_early for k in ["produit","product","revenu","revenue","top"]) and not datasets:
+            prod_tbl = next((t for t in schema if t.lower().replace(" ","").replace("_","") in ("products","product","itmmaster")), None)
+            od_tbl   = next((t for t in schema if t.lower().replace(" ","").replace("_","") in ("orderdetails","orderdetail","order details")), None)
+            if prod_tbl and od_tbl:
+                pf = schema.get(prod_tbl, [])
+                of = schema.get(od_tbl, [])
+                if not pf:
+                    _, pf = await self._execute_sql(f"SELECT TOP 1 * FROM [{prod_tbl}] WITH(NOLOCK)", source_id, pg_pool, connector_factory)
+                    if pf: schema[prod_tbl] = pf
+                if not of:
+                    _, of = await self._execute_sql(f"SELECT TOP 1 * FROM [{od_tbl}] WITH(NOLOCK)", source_id, pg_pool, connector_factory)
+                    if of: schema[od_tbl] = of
+                prod_id   = next((f for f in pf if "productid" in f.lower()), None)
+                prod_name = next((f for f in pf if "productname" in f.lower()), None)
+                od_pid    = next((f for f in of if "productid" in f.lower()), None)
+                od_price  = next((f for f in of if "unitprice" in f.lower()), None)
+                od_qty    = next((f for f in of if "quantity" in f.lower()), None)
+                if prod_id and prod_name and od_pid and od_price and od_qty:
+                    top_n = intent.top_n or 10
+                    sql_prod = (
+                        f"SELECT TOP {top_n} p.[{prod_name}] AS Produit,\n"
+                        f"  CAST(SUM(od.[{od_price}] * od.[{od_qty}]) AS FLOAT) AS Revenus,\n"
+                        f"  SUM(od.[{od_qty}]) AS Quantite\n"
+                        f"FROM [{prod_tbl}] p WITH(NOLOCK)\n"
+                        f"JOIN [{od_tbl}] od WITH(NOLOCK) ON p.[{prod_id}] = od.[{od_pid}]\n"
+                        f"GROUP BY p.[{prod_name}]\n"
+                        f"ORDER BY Revenus DESC"
+                    )
+                    rows_p, cols_p = await self._execute_sql(sql_prod, source_id, pg_pool, connector_factory)
+                    if rows_p:
+                        datasets.append({"sql": sql_prod, "rows": rows_p, "columns": cols_p, "title": f"Top {top_n} produits par revenus"})
+                        logger.info(f"[Dashboard] Product JOIN early: {len(rows_p)} rows")
+
+        # Si les JOINs prioritaires ont trouvé des données → skip _find_relevant_tables
+        if datasets:
+            spec = self.designer.design(question, intent, datasets, source_id)
+            spec.duration_ms = int((time.time() - t0) * 1000)
+            try:
+                spec = enrich_spec_sprint3(spec, intent)
+            except Exception as _e3:
+                logger.warning(f"[Dashboard] Sprint3 enrich error: {_e3}")
+            if redis:
+                try:
+                    cache_key = f"onepilot:dashboard:{source_id}:{hash(question)}"
+                    await redis.setex(cache_key, 300, json.dumps(spec.to_dict(), default=str))
+                except Exception:
+                    pass
+            logger.info(f"[Dashboard] Généré '{spec.title}' — {len(spec.widgets)} widgets, {spec.duration_ms}ms")
+            return spec
 
         # Détermine les tables à visualiser
         if slots.table_names:
@@ -1168,6 +1326,10 @@ class DashboardGenerator:
                                 await redis.setex(cache_key, 300, json.dumps(spec.to_dict(), default=str))
                             except Exception: pass
                         logger.info(f"[Dashboard] Généré '{spec.title}' — {len(spec.widgets)} widgets, {spec.duration_ms}ms")
+                        try:
+                            spec = enrich_spec_sprint3(spec, intent)
+                        except Exception as _e3:
+                            logger.warning(f"[Dashboard] Sprint3 enrich error: {_e3}")
                         return spec
 
         # ── JOIN spécial : top clients par chiffre d'affaires ───────────────
@@ -1256,7 +1418,77 @@ class DashboardGenerator:
                                 await redis.setex(cache_key, 300, json.dumps(spec.to_dict(), default=str))
                             except Exception: pass
                         logger.info(f"[Dashboard] Généré '{spec.title}' — {len(spec.widgets)} widgets, {spec.duration_ms}ms")
+                        try:
+                            spec = enrich_spec_sprint3(spec, intent)
+                        except Exception as _e3:
+                            logger.warning(f"[Dashboard] Sprint3 enrich error: {_e3}")
                         return spec
+
+        # ── JOIN spécial : fournisseurs par nombre de produits ───────────────
+        is_supplier_q = any(k in q_lower_join for k in ["fournisseur","supplier","vendors"])
+        if is_supplier_q and not datasets:
+            def _ft(hints):
+                for t in schema:
+                    if any(h in t.lower().replace(" ","").replace("_","") for h in hints): return t
+                return None
+            sup_tbl  = _ft(["suppliers","supplier","bpsupplier"])
+            prod_tbl = _ft(["products","product","itmmaster"])
+            if sup_tbl and prod_tbl:
+                sf = schema.get(sup_tbl, [])
+                pf = schema.get(prod_tbl, [])
+                sup_id   = next((f for f in sf if "supplierid" in f.lower()), None)
+                sup_name = next((f for f in sf if "companyname" in f.lower() or ("name" in f.lower() and "id" not in f.lower())), None)
+                prod_sup = next((f for f in pf if "supplierid" in f.lower()), None)
+                if sup_id and sup_name and prod_sup:
+                    top_n = intent.top_n or 10
+                    sql_sup = (
+                        f"SELECT TOP {top_n} s.[{sup_name}] AS Fournisseur,\n"
+                        f"  COUNT(p.[{prod_sup}]) AS Nb_Produits\n"
+                        f"FROM [{sup_tbl}] s WITH(NOLOCK)\n"
+                        f"JOIN [{prod_tbl}] p WITH(NOLOCK) ON s.[{sup_id}] = p.[{prod_sup}]\n"
+                        f"GROUP BY s.[{sup_name}]\n"
+                        f"ORDER BY Nb_Produits DESC"
+                    )
+                    rows_s, cols_s = await self._execute_sql(sql_sup, source_id, pg_pool, connector_factory)
+                    if rows_s:
+                        datasets.append({"sql": sql_sup, "rows": rows_s, "columns": cols_s, "title": f"Top {top_n} fournisseurs"})
+                        logger.info(f"[Dashboard] Supplier JOIN: {len(rows_s)} rows")
+
+        # ── JOIN spécial : employés par nombre de commandes ──────────────────
+        is_employee_q = any(k in q_lower_join for k in ["employé","employe","employee","staff"])
+        if is_employee_q and not datasets:
+            def _ft2(hints):
+                for t in schema:
+                    if any(h in t.lower().replace(" ","").replace("_","") for h in hints): return t
+                return None
+            emp_tbl = _ft2(["employees","employee","empl"])
+            ord_tbl = _ft2(["orders","order","sorder","commandes"])
+            if emp_tbl and ord_tbl:
+                ef = schema.get(emp_tbl, [])
+                of = schema.get(ord_tbl, [])
+                emp_id    = next((f for f in ef if "employeeid" in f.lower() or f.lower()=="id"), None)
+                emp_fn    = next((f for f in ef if "firstname" in f.lower()), None)
+                emp_ln    = next((f for f in ef if "lastname" in f.lower()), None)
+                ord_emp   = next((f for f in of if "employeeid" in f.lower()), None)
+                ord_id    = next((f for f in of if "orderid" in f.lower()), None)
+                if emp_id and (emp_fn or emp_ln) and ord_emp and ord_id:
+                    name_expr = (
+                        f"s.[{emp_fn}] + ' ' + s.[{emp_ln}]" if emp_fn and emp_ln
+                        else f"s.[{emp_fn or emp_ln}]"
+                    )
+                    top_n = intent.top_n or 10
+                    sql_emp = (
+                        f"SELECT TOP {top_n} {name_expr} AS Employé,\n"
+                        f"  COUNT(o.[{ord_id}]) AS Nb_Commandes\n"
+                        f"FROM [{emp_tbl}] s WITH(NOLOCK)\n"
+                        f"JOIN [{ord_tbl}] o WITH(NOLOCK) ON s.[{emp_id}] = o.[{ord_emp}]\n"
+                        f"GROUP BY {name_expr}\n"
+                        f"ORDER BY Nb_Commandes DESC"
+                    )
+                    rows_e, cols_e = await self._execute_sql(sql_emp, source_id, pg_pool, connector_factory)
+                    if rows_e:
+                        datasets.append({"sql": sql_emp, "rows": rows_e, "columns": cols_e, "title": f"Top {top_n} employés"})
+                        logger.info(f"[Dashboard] Employee JOIN: {len(rows_e)} rows")
 
         for tbl in tables_to_query[:3]:
             if tbl not in schema:
@@ -1283,6 +1515,10 @@ class DashboardGenerator:
                         if date_col and has_price and has_qty and fk_col and pk_col:
                             metric = (f"CAST(SUM(d.[{has_price}]*(1-ISNULL(d.[{disc}],0))*d.[{has_qty}]) AS FLOAT)"
                                       if disc else f"SUM(d.[{has_price}]*d.[{has_qty}])")
+                            # Filtrer sur une année si mentionnée dans la question (ex: "2023")
+                            import re as _re_yr
+                            _yr = _re_yr.search(r'\b(20\d{2})\b', question)
+                            _yr_filter = f"WHERE YEAR(o.[{date_col}]) = {_yr.group(1)}\n" if _yr else ""
                             sql = (
                                 f"SELECT TOP 100\n"
                                 f"  CONVERT(varchar(7), o.[{date_col}], 120) AS periode,\n"
@@ -1290,6 +1526,7 @@ class DashboardGenerator:
                                 f"  COUNT(*) AS nb_commandes\n"
                                 f"FROM [{tbl}] d WITH(NOLOCK)\n"
                                 f"JOIN [{join_tbl}] o WITH(NOLOCK) ON d.[{fk_col}] = o.[{pk_col}]\n"
+                                f"{_yr_filter}"
                                 f"GROUP BY CONVERT(varchar(7), o.[{date_col}], 120)\n"
                                 f"ORDER BY periode"
                             )
@@ -1364,7 +1601,123 @@ class DashboardGenerator:
                 pass
 
         logger.info(f"[Dashboard] Généré '{spec.title}' — {len(spec.widgets)} widgets, {spec.duration_ms}ms")
+        # ── Sprint 3 : enrichissement alt_viz + recommandations ──
+        try:
+            spec = enrich_spec_sprint3(spec, intent)
+        except Exception as _e3:
+            logger.warning(f"[Dashboard] Sprint3 enrich error: {_e3}")
         return spec
+        """SQL optimal pour visualisation avec métrique calculée."""
+        _dk=["date","time","period","at","month","year","jour","mois","annee","ordered","shipped","required","datetime","closingbalancedatetime","integration","trndate","rngdate","debut","fin","maturity","maturite","maturité","début","début"]
+        _lk=["name","nom","title","company","companyname","productname","customername","categoryname","city","country","region","contact","firstname","lastname","description","banque","societe","société","code","devises","type_transaction","type","état","etat","groupe","société","banque","libelle"]
+        _bk=["discontinued","active","enabled","flag"]
+        _tk=["quantityperunit","description","notes","picture","homepage","address","phone","fax","email","url","photo"]
+        _mk=["price","amount","total","stock","instock","onorder","salary","cost","revenue","montant","freight","reorderlevel","rate","pct","unitprice","unitsinstock","unitsonorder","weight","size","number","quantity","qty","discount","value","valeur","balance","budget","tax","subtotal","net","gross","closingbalanceamount","montantavecsigne","solde","encours","amounti","prpcntrvamount","prpfinlinerate"]
+        def _iid(f): fl=f.lower(); return fl in ["id","rowid","seqno","seqnum","reportsto","trn_id","finline_dtls_id","gnrlstatus","acc_id","isdebiti","closingbalancecreditindicator","state"] or (fl.endswith("id") and len(fl)>2 and fl not in ["acid","valid"])
+        def _isk(f): fl=f.lower(); return _iid(f) or any(b in fl for b in _bk) or fl in _tk
+
+        # ── Routing géographique prioritaire ─────────────────────────────────
+        # Si la question est géographique, on génère un SQL orienté pays/ville
+        if intent.is_geo:
+            GEO_COL_HINTS = ["country","pays","countryname","shipcountry","city","ville","shipcity","region","cntr"]
+            # Priorité : country > city — les colonnes pays donnent de meilleures cartes
+            COUNTRY_HINTS = ["country","pays","countryname","shipcountry"]
+            CITY_HINTS    = ["city","ville","shipcity"]
+            geo_col = (
+                next((f for f in fields if any(h in f.lower() for h in COUNTRY_HINTS)), None)
+                or next((f for f in fields if any(h in f.lower() for h in CITY_HINTS)), None)
+                or next((f for f in fields if any(h in f.lower() for h in ["region","cntr"])), None)
+            )
+            if geo_col:
+                # Cherche une métrique NUMÉRIQUE — exclure la colonne géo elle-même
+                # et exclure les colonnes texte (country codes, nvarchar)
+                NUMERIC_METRIC_HINTS = ["amount","price","qty","quantity","revenue","total","montant","freight","unitprice","weight","cost","value","valeur","nb","count"]
+                metric_col = next(
+                    (f for f in fields
+                     if any(h in f.lower() for h in NUMERIC_METRIC_HINTS)
+                     and f.lower() != geo_col.lower()
+                     and not _iid(f)
+                     and not any(geo_h in f.lower() for geo_h in GEO_COL_HINTS)),
+                    None
+                )
+                # Toujours utiliser COUNT(*) — SUM ne marche que sur colonnes numériques
+                # et on ne peut pas détecter le type SQL depuis les métadonnées
+                if metric_col:
+                    sql = (
+                        f"SELECT TOP 50 [{geo_col}],\n"
+                        f"       COUNT(*) AS nb_lignes\n"
+                        f"FROM [{table}] WITH(NOLOCK)\n"
+                        f"WHERE [{geo_col}] IS NOT NULL AND [{geo_col}] <> ''\n"
+                        f"GROUP BY [{geo_col}]\n"
+                        f"ORDER BY nb_lignes DESC"
+                    )
+                else:
+                    sql = (
+                        f"SELECT TOP 50 [{geo_col}],\n"
+                        f"       COUNT(*) AS nb_lignes\n"
+                        f"FROM [{table}] WITH(NOLOCK)\n"
+                        f"WHERE [{geo_col}] IS NOT NULL AND [{geo_col}] <> ''\n"
+                        f"GROUP BY [{geo_col}]\n"
+                        f"ORDER BY nb_lignes DESC"
+                    )
+                logger.info(f"[Dashboard] Geo SQL for {table}.{geo_col}: {sql[:80]}")
+                return sql
+        nf=[f for f in fields if not _isk(f) and any(k in f.lower() for k in _mk)]
+        cf=[f for f in fields if f not in nf and not _isk(f)][:5]
+        df=[f for f in fields if any(k in f.lower() for k in _dk)]
+        lh=[f for f in cf if any(h in f.lower() for h in _lk)]
+        bl=lh[0] if lh else (cf[0] if cf else None)
+        _p=["amount","total","revenue","price","unitprice","quantity","qty","salary","freight","balance","cost","subtotal","net","gross","montant","closingbalanceamount","amounti","prpcntrvamount"]
+        pn=[f for f in nf if any(p in f.lower() for p in _p)]
+        bm=pn[0] if pn else (nf[0] if nf else None)
+        hp=next((f for f in fields if f.lower()=="unitprice"),None)
+        hq=next((f for f in fields if f.lower() in ("quantity","qty")),None)
+        dc=next((f for f in fields if f.lower()=="discount"),None)
+        comp=(f"CAST(SUM([{hp}]*(1-ISNULL([{dc}],0))*[{hq}]) AS FLOAT) AS montant_total" if dc else f"CAST(SUM([{hp}]*[{hq}]) AS FLOAT) AS montant_total") if hp and hq else None
+
+        # SXA Treasury: CLOSINGBALANCEAMOUNT = solde, MontantAvecSigne = montant signé
+        sxa_amount = next((f for f in fields if f.lower() == "montant"), None) or \
+                     next((f for f in fields if f.lower() in ("closingbalanceamount","montantavecsigne","amounti","prpcntrvamount","prpfinlinerate")), None)
+        sxa_date   = next((f for f in fields if any(k in f.lower() for k in ("closingbalancedatetime","trndate","rngdate","date","début","fin","maturity","maturit"))), None)
+        sxa_label  = next((f for f in fields if any(k in f.lower() for k in ("type_transaction","banque","sociét","societe","état","etat","description","groupe","libelle","groupe_soci","groupe_de_comptes","groupe_societes","devises","code"))), None)
+        # Priorité : utiliser sxa_amount comme meilleure métrique si bm n'est pas déjà meilleur
+        if sxa_amount and not comp:
+            if not bm or sxa_amount.lower() in ("montant","closingbalanceamount","amounti","prpcntrvamount"):
+                bm = sxa_amount  # ← FIX : bm pas best_metric
+        if sxa_date and not df:
+            df = [sxa_date]
+        if sxa_label and not bl:
+            bl = sxa_label
+        gb=None; ob=None; sp=[]
+        if intent.is_trend and df:
+            d=df[0]; sp.append(f"CONVERT(varchar(7),[{d}],120) AS periode")
+            if comp: sp+=[comp,"COUNT(*) AS nb_commandes"]
+            elif bm: sp+=[f"CAST(SUM([{bm}]) AS FLOAT) AS total_{bm.lower()}","COUNT(*) AS nb_commandes"]
+            else: sp.append("COUNT(*) AS nb_commandes")
+            gb=f"CONVERT(varchar(7),[{d}],120)"; ob=gb
+        elif bl and (intent.is_composition or intent.is_top_n or intent.is_kpi or slots.group_by):
+            gc=slots.group_by if slots.group_by else bl
+            # Skip reserved SQL words as group columns
+            if gc and gc.lower() in ("type","key","value","name","date","order","group","index","state","status","level","rank"):
+                gc = next((f for f in fields if f.lower()=="type_transaction"), gc)
+            sp.append(f"[{gc}]")
+            if comp: sp+=[comp,"COUNT(*) AS nb_lignes"]
+            elif bm: sp+=[f"CAST(SUM([{bm}]) AS FLOAT) AS total",f"CAST(AVG([{bm}]) AS FLOAT) AS moyenne","COUNT(*) AS nb_lignes"]
+            else: sp.append("COUNT(*) AS nb_lignes")
+            gb=f"[{gc}]"; ob="2 DESC"
+        elif bl and (comp or bm):
+            sp.append(f"[{bl}]")
+            if comp: sp+=[comp,"COUNT(*) AS nb_lignes"]
+            else: sp+=[f"CAST(SUM([{bm}]) AS FLOAT) AS total",f"CAST(AVG([{bm}]) AS FLOAT) AS moyenne","COUNT(*) AS nb_lignes"]
+            gb=f"[{bl}]"; ob="2 DESC"
+        else:
+            pf=(lh+nf+cf)[:8] or [f for f in fields if not _isk(f)][:6] or fields[:6]
+            sp=[f"[{f}]" for f in pf]
+        tn=intent.top_n or (20 if intent.is_top_n else 100)
+        sql="SELECT TOP "+str(tn)+" "+", ".join(sp)+"\nFROM ["+table+"] WITH(NOLOCK)"
+        if gb: sql+="\nGROUP BY "+gb
+        if ob: sql+="\nORDER BY "+ob
+        return sql
 
     def _build_dashboard_sql(self, table, fields, intent, slots):
         """SQL optimal pour visualisation avec métrique calculée."""
@@ -1826,7 +2179,12 @@ class DashboardGenerator:
             "catégorie":  ["CATEGORIES","CATEGORY","CAT","PRODUCT"],
             "categorie":  ["CATEGORIES","CATEGORY","CAT","PRODUCT"],
             "category":   ["CATEGORIES","CATEGORY","CAT","PRODUCT"],
-            "fournisseur":["SUPPLIER","BPSUPPLIER","VENDOR"],
+            # ── Fournisseurs → Suppliers (Northwind) ───────────────────────
+            "fournisseur":["SUPPLIERS","SUPPLIER","BPSUPPLIER","VENDOR"],
+            # ── Employés → Employees (Northwind) ──────────────────────────
+            "employé":    ["EMPLOYEES","EMPLOYEE","EMPL","STAFF"],
+            "employe":    ["EMPLOYEES","EMPLOYEE","EMPL","STAFF"],
+            "employee":   ["EMPLOYEES","EMPLOYEE","EMPL","STAFF"],
             "comptabilit":["GACCENTRY","JOURNAL","GL","ACC"],
             "tresorerie": ["SI_T","TRESORERIE","TRS","CASH","VDTSSXA","SI_BANCAIRE","DERNIER"],
             "trésorerie": ["SI_T","TRESORERIE","TRS","VDTSSXA","SI_BANCAIRE"],
@@ -1843,6 +2201,14 @@ class DashboardGenerator:
             "revenue":    ["ORDERDETAIL","ORDER DETAIL","ORDER DETAILS","ORDER_DETAIL","ORDER_DETAILS","SOILV","SOINV"],
             "revenu":     ["ORDERDETAIL","ORDER DETAIL","ORDER DETAILS","ORDER_DETAIL","ORDER_DETAILS","SOILV","SOINV"],
             "top":        ["ORDERDETAIL","ORDER DETAIL","ORDER DETAILS","ORDER_DETAIL","ORDER_DETAILS","CUSTOMER","CUSTOMERS"],
+            # ── Entonnoir / bilan / indicateurs / corrélation ─────────────
+            "entonnoir":  ["ORDERS","ORDER"],
+            "conversion": ["ORDERS","ORDER"],
+            "statut":     ["ORDERS","ORDER"],
+            "indicateur": ["ORDERS","CUSTOMERS","PRODUCTS"],
+            "bilan":      ["ORDERDETAIL","ORDER DETAIL","ORDERS"],
+            "corrélation":["ORDERDETAIL","ORDER DETAIL","ORDER DETAILS"],
+            "correlation":["ORDERDETAIL","ORDER DETAIL","ORDER DETAILS"],
         }
         ct=[]
         for kw,pf in BKW.items():
@@ -1959,3 +2325,488 @@ def get_dashboard_generator() -> DashboardGenerator:
     if _dashboard_generator is None:
         _dashboard_generator = DashboardGenerator()
     return _dashboard_generator
+
+
+# ══════════════════════════════════════════════════════════════
+# SPRINT 3 — SUGGESTIONS DE VISUALISATIONS ALTERNATIVES §2.4.3-G
+# ══════════════════════════════════════════════════════════════
+
+# Mapping : type actuel → alternatives intelligentes avec justification
+_ALT_VIZ_MAP: Dict[str, List[Dict]] = {
+    ChartType.BAR: [
+        {"type": ChartType.BAR_H,    "label": "Barres horizontales", "reason": "Meilleur pour les libellés longs"},
+        {"type": ChartType.LINE,     "label": "Courbe",               "reason": "Visualiser la tendance"},
+        {"type": ChartType.TREEMAP,  "label": "Treemap",              "reason": "Voir la hiérarchie proportionnelle"},
+    ],
+    ChartType.BAR_H: [
+        {"type": ChartType.BAR,      "label": "Barres verticales",    "reason": "Vue classique comparaison"},
+        {"type": ChartType.PIE,      "label": "Camembert",            "reason": "Voir les parts du total"},
+        {"type": ChartType.TREEMAP,  "label": "Treemap",              "reason": "Proportions en surface"},
+    ],
+    ChartType.LINE: [
+        {"type": ChartType.AREA,     "label": "Aire",                 "reason": "Accentuer le volume cumulatif"},
+        {"type": ChartType.BAR,      "label": "Barres",               "reason": "Comparer valeur par valeur"},
+        {"type": ChartType.SCATTER,  "label": "Nuage de points",      "reason": "Détecter les corrélations"},
+    ],
+    ChartType.AREA: [
+        {"type": ChartType.LINE,     "label": "Courbe",               "reason": "Vue plus lisible sans remplissage"},
+        {"type": ChartType.BAR,      "label": "Barres",               "reason": "Comparaison discrète par période"},
+        {"type": ChartType.WATERFALL,"label": "Cascade",              "reason": "Montrer les variations cumulées"},
+    ],
+    ChartType.PIE: [
+        {"type": ChartType.DOUGHNUT, "label": "Donut",                "reason": "Variante avec valeur centrale"},
+        {"type": ChartType.BAR_H,    "label": "Barres horizontales",  "reason": "Comparaison précise des valeurs"},
+        {"type": ChartType.TREEMAP,  "label": "Treemap",              "reason": "Hiérarchie des proportions"},
+    ],
+    ChartType.DOUGHNUT: [
+        {"type": ChartType.PIE,      "label": "Camembert",            "reason": "Vue secteurs classique"},
+        {"type": ChartType.BAR,      "label": "Barres",               "reason": "Comparaison précise des valeurs"},
+        {"type": ChartType.TREEMAP,  "label": "Treemap",              "reason": "Proportions en surface"},
+    ],
+    ChartType.SCATTER: [
+        {"type": ChartType.LINE,     "label": "Courbe",               "reason": "Si dimension temporelle détectée"},
+        {"type": ChartType.BUBBLE,   "label": "Bulles",               "reason": "Ajouter une 3ème dimension"},
+        {"type": ChartType.HEATMAP,  "label": "Heatmap",              "reason": "Voir la densité des points"},
+    ],
+    ChartType.HEATMAP: [
+        {"type": ChartType.BAR,      "label": "Barres empilées",      "reason": "Comparaison par catégorie"},
+        {"type": ChartType.SCATTER,  "label": "Nuage de points",      "reason": "Voir la dispersion"},
+        {"type": ChartType.TABLE,    "label": "Tableau",              "reason": "Valeurs exactes lisibles"},
+    ],
+    ChartType.CHOROPLETH: [
+        {"type": ChartType.BUBBLE_MAP,"label": "Carte bulles",        "reason": "Taille proportionnelle par lieu"},
+        {"type": ChartType.BAR_H,    "label": "Classement",           "reason": "Ranking pays/régions"},
+        {"type": ChartType.TABLE,    "label": "Tableau",              "reason": "Valeurs exactes par pays"},
+    ],
+    ChartType.BUBBLE_MAP: [
+        {"type": ChartType.CHOROPLETH,"label": "Carte choroplèthe",   "reason": "Couleur par intensité géo"},
+        {"type": ChartType.BAR_H,    "label": "Classement villes",    "reason": "Comparaison ordonnée"},
+        {"type": ChartType.SCATTER,  "label": "Nuage de points",      "reason": "Relation entre deux métriques"},
+    ],
+    ChartType.TREEMAP: [
+        {"type": ChartType.PIE,      "label": "Camembert",            "reason": "Répartition circulaire"},
+        {"type": ChartType.BAR_H,    "label": "Barres horizontales",  "reason": "Classement linéaire"},
+        {"type": ChartType.FUNNEL,   "label": "Entonnoir",            "reason": "Visualiser la décroissance"},
+    ],
+    ChartType.FUNNEL: [
+        {"type": ChartType.BAR_H,    "label": "Barres horizontales",  "reason": "Comparaison étape par étape"},
+        {"type": ChartType.LINE,     "label": "Courbe",               "reason": "Évolution du taux de conversion"},
+        {"type": ChartType.TABLE,    "label": "Tableau",              "reason": "Chiffres de conversion exacts"},
+    ],
+    ChartType.WATERFALL: [
+        {"type": ChartType.BAR,      "label": "Barres",               "reason": "Vue comparative simple"},
+        {"type": ChartType.LINE,     "label": "Courbe",               "reason": "Tendance de variation"},
+        {"type": ChartType.AREA,     "label": "Aire",                 "reason": "Volume cumulatif visible"},
+    ],
+    ChartType.TABLE: [
+        {"type": ChartType.BAR,      "label": "Barres",               "reason": "Visualiser les valeurs clés"},
+        {"type": ChartType.LINE,     "label": "Courbe",               "reason": "Si données temporelles présentes"},
+        {"type": ChartType.PIE,      "label": "Camembert",            "reason": "Répartition des valeurs"},
+    ],
+    ChartType.SANKEY: [
+        {"type": ChartType.BAR,      "label": "Barres empilées",      "reason": "Flux par source/destination"},
+        {"type": ChartType.TABLE,    "label": "Tableau",              "reason": "Détail des flux exacts"},
+    ],
+    ChartType.KPI_CARD: [
+        {"type": ChartType.GAUGE,    "label": "Jauge",                "reason": "Objectif vs réalisé visuel"},
+        {"type": ChartType.SPARKLINE,"label": "Sparkline",            "reason": "Tendance compacte"},
+    ],
+}
+
+
+def get_alt_viz_suggestions(
+    chart_type: str,
+    rows: List[Dict],
+    columns: List[str],
+    intent: "DashboardIntent",
+    max_suggestions: int = 3,
+) -> List[Dict]:
+    """
+    Retourne les suggestions de visualisations alternatives contextualisées.
+    Filtre intelligemment selon les données disponibles.
+
+    Returns:
+        List de {type, label, reason, icon} — max max_suggestions items
+    """
+    base_alts = _ALT_VIZ_MAP.get(chart_type, [])
+    if not base_alts:
+        return []
+
+    from decimal import Decimal as _Dec
+    n_rows = len(rows)
+    n_num = sum(1 for c in columns if rows and isinstance(rows[0].get(c), (int, float, _Dec)))
+    n_cat = len(columns) - n_num
+    has_time = intent.is_trend or bool(intent.time_field)
+    has_geo  = intent.is_geo or bool(intent.geo_field)
+
+    # Filtrage contextuel — certaines alts ne sont pertinentes que dans certains cas
+    CONTEXT_FILTERS: Dict[str, callable] = {
+        ChartType.LINE:      lambda: has_time or n_rows >= 5,
+        ChartType.SCATTER:   lambda: n_num >= 2,
+        ChartType.HEATMAP:   lambda: n_cat >= 2 and n_rows >= 10,
+        ChartType.BUBBLE:    lambda: n_num >= 2,
+        ChartType.CHOROPLETH:lambda: has_geo,
+        ChartType.BUBBLE_MAP:lambda: has_geo,
+        ChartType.SANKEY:    lambda: n_cat >= 2 and n_num >= 1,
+        ChartType.FUNNEL:    lambda: n_rows <= 10,
+        ChartType.WATERFALL: lambda: has_time or n_rows <= 12,
+        ChartType.TREEMAP:   lambda: n_rows >= 3,
+        ChartType.PIE:       lambda: 2 <= n_rows <= 10,
+        ChartType.DOUGHNUT:  lambda: 2 <= n_rows <= 10,
+        ChartType.SPARKLINE: lambda: n_rows >= 4,
+        ChartType.GAUGE:     lambda: n_rows == 1 or n_num == 1,
+    }
+
+    # Icônes SVG mini par type (inline, stroke)
+    _MINI_SVG: Dict[str, str] = {
+        "bar":           '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1" y="7" width="3" height="6"/><rect x="5.5" y="4" width="3" height="9"/><rect x="10" y="1" width="3" height="12"/></svg>',
+        "bar_horizontal":'<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1" y="1"  width="6" height="3"/><rect x="1" y="5.5" width="10" height="3"/><rect x="1" y="10" width="8" height="3"/></svg>',
+        "line":          '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><polyline points="1,12 4,7 7,9 10,4 13,2"/></svg>',
+        "area":          '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><polyline points="1,13 4,8 7,10 10,5 13,2"/><path d="M1,13 L1,13 4,8 7,10 10,5 13,2 13,13 Z" opacity=".25" fill="currentColor" stroke="none"/></svg>',
+        "pie":           '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="6"/><line x1="7" y1="7" x2="7" y2="1"/><line x1="7" y1="7" x2="12.2" y2="9"/></svg>',
+        "doughnut":      '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="6"/><circle cx="7" cy="7" r="3"/></svg>',
+        "scatter":       '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="3" cy="10" r="1.2"/><circle cx="7" cy="5" r="1.2"/><circle cx="11" cy="8" r="1.2"/><circle cx="5" cy="8" r="1.2"/><circle cx="9" cy="3" r="1.2"/></svg>',
+        "treemap":       '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1" y="1" width="7" height="7"/><rect x="9" y="1" width="4" height="3"/><rect x="9" y="5" width="4" height="3"/><rect x="1" y="9" width="3" height="4"/><rect x="5" y="9" width="8" height="4"/></svg>',
+        "heatmap":       '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1" y="1" width="3" height="3"/><rect x="5" y="1" width="3" height="3" opacity=".5"/><rect x="9" y="1" width="4" height="3" opacity=".2"/><rect x="1" y="5" width="3" height="3" opacity=".7"/><rect x="5" y="5" width="3" height="3"/><rect x="9" y="5" width="4" height="3" opacity=".4"/><rect x="1" y="9" width="3" height="4" opacity=".3"/><rect x="5" y="9" width="3" height="4" opacity=".8"/><rect x="9" y="9" width="4" height="4" opacity=".6"/></svg>',
+        "choropleth":    '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><ellipse cx="7" cy="7" rx="6" ry="6"/><path d="M2 7 Q5 5 7 7 Q9 9 12 7"/><path d="M4 4 Q6 5 7 4 Q8 3 10 4"/><path d="M4 10 Q6 9 7 10 Q8 11 10 10"/></svg>',
+        "bubble_map":    '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><ellipse cx="7" cy="7" rx="6" ry="6"/><circle cx="4" cy="7" r="1.5"/><circle cx="9" cy="5" r="2.2"/><circle cx="7" cy="10" r="1"/></svg>',
+        "funnel":        '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M1 2 H13 L9.5 7 L9.5 12 L4.5 12 L4.5 7 Z"/></svg>',
+        "waterfall":     '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1" y="6" width="2" height="5"/><rect x="4" y="4" width="2" height="3"/><rect x="7" y="7" width="2" height="2"/><rect x="10" y="5" width="2" height="4"/><polyline points="1,6 3,6 3,4 5,4 5,7 7,7 7,5 9,5 9,9 11,9" stroke-dasharray="1.5 1"/></svg>',
+        "sankey":        '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M1 3 C5 3 5 6 9 6 C12 6 12 6 13 6" stroke-width="2.5" opacity=".5"/><path d="M1 8 C5 8 5 6 9 6 C12 6 12 6 13 7" stroke-width="1.5" opacity=".5"/><path d="M1 11 C5 11 5 8 9 8 C12 8 12 8 13 9" stroke-width="1" opacity=".5"/></svg>',
+        "table":         '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1" y="1" width="12" height="12" rx="1.5"/><line x1="1" y1="5" x2="13" y2="5"/><line x1="1" y1="9" x2="13" y2="9"/><line x1="5" y1="5" x2="5" y2="13"/></svg>',
+        "gauge":         '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 11 A6 6 0 0 1 12 11"/><line x1="7" y1="11" x2="4" y2="6" stroke-width="1.8"/><circle cx="7" cy="11" r="1.2"/></svg>',
+        "bubble":        '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="4" cy="10" r="2"/><circle cx="9" cy="7"  r="3"/><circle cx="7" cy="3"  r="1.5"/></svg>',
+        "sparkline":     '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><polyline points="1,11 3,8 5,10 7,6 9,8 11,4 13,5"/></svg>',
+        "kpi_card":      '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1" y="3" width="12" height="8" rx="1.5"/><line x1="4" y1="7" x2="10" y2="7"/><line x1="4" y1="9" x2="7" y2="9"/></svg>',
+    }
+
+    result = []
+    for alt in base_alts:
+        t = alt["type"]
+        # Vérifie si cette alternative est pertinente pour les données actuelles
+        filter_fn = CONTEXT_FILTERS.get(t)
+        if filter_fn and not filter_fn():
+            continue
+        result.append({
+            "type":   t,
+            "label":  alt["label"],
+            "reason": alt["reason"],
+            "icon":   _MINI_SVG.get(t, ""),
+        })
+        if len(result) >= max_suggestions:
+            break
+
+    return result
+
+
+# ══════════════════════════════════════════════════════════════
+# SPRINT 3 — HEATMAP GÉOGRAPHIQUE §2.4.3-B.4
+# Type dédié : GEO_HEATMAP — densité par pays/région
+# ══════════════════════════════════════════════════════════════
+
+# Ajout de la constante GEO_HEATMAP dans la classe existante
+ChartType.GEO_HEATMAP = "geo_heatmap"
+
+
+def build_geo_heatmap_data(
+    rows: List[Dict],
+    columns: List[str],
+) -> Optional[Dict]:
+    """
+    Construit les données pour une heatmap géographique (densité par pays/région).
+    Retourne None si pas de colonnes géographiques détectées.
+
+    Format retourné :
+        {
+            "type": "geo_heatmap",
+            "data": [{"country": "France", "value": 45.0}, ...],
+            "geo_col": "ShipCountry",
+            "val_col": "nb_lignes",
+            "colorscale": "YlOrRd",
+            "title": "Densité par pays",
+        }
+    """
+    GEO_HINTS    = ["country","pays","countryname","shipcountry","nation","cntr"]
+    METRIC_HINTS = ["amount","total","revenue","montant","freight","price","qty","quantity","nb","count","value"]
+    ID_PATTERNS  = ["_id","id_","rowid","productid","orderid","customerid"]
+
+    from decimal import Decimal as _Dec
+
+    cat_cols = [c for c in columns if not (rows and isinstance(rows[0].get(c), (int, float, _Dec)))]
+    num_cols = [c for c in columns if rows and isinstance(rows[0].get(c), (int, float, _Dec))
+                and not any(p in c.lower() for p in ID_PATTERNS)]
+
+    geo_col = next((c for c in cat_cols if any(h in c.lower() for h in GEO_HINTS)), None)
+    if not geo_col:
+        return None
+
+    val_col = next((c for c in num_cols if any(h in c.lower() for h in METRIC_HINTS)), None)
+    if not val_col and num_cols:
+        val_col = num_cols[0]
+
+    # Agrégation par pays
+    agg: Dict[str, float] = {}
+    for r in rows:
+        country = str(r.get(geo_col, "") or "").strip()
+        if not country or country.lower() in ("none","null",""):
+            continue
+        val = float(r.get(val_col, 1) or 1) if val_col else 1.0
+        agg[country] = agg.get(country, 0.0) + val
+
+    if not agg:
+        return None
+
+    geo_data = [{"country": k, "value": round(v, 2)} for k, v in sorted(agg.items(), key=lambda x: -x[1])]
+
+    return {
+        "type":       "geo_heatmap",
+        "data":       geo_data[:80],
+        "geo_col":    geo_col,
+        "val_col":    val_col or "count",
+        "colorscale": "YlOrRd",   # Jaune → Orange → Rouge (chaleur)
+        "title":      (val_col or "nb").replace("_", " ").title() + " par pays",
+        "total":      sum(agg.values()),
+    }
+
+
+# ══════════════════════════════════════════════════════════════
+# SPRINT 3 — RECOMMANDATIONS CONTEXTUELLES §2.4.3-G.1
+# Suggestions intelligentes après génération du dashboard
+# ══════════════════════════════════════════════════════════════
+
+@dataclass
+class DashboardRecommendation:
+    """Une recommandation contextuelle pour enrichir le dashboard."""
+    id:       str
+    icon_tag: str          # tag SVG inline (ex: "[BOLT]")
+    label:    str          # Texte court affiché
+    question: str          # Question NL à envoyer si clic
+    category: str          # "drill", "compare", "enrich", "export", "template"
+    priority: int = 0      # Plus élevé = affiché en premier
+
+
+class ContextualRecommender:
+    """
+    Génère des recommandations contextuelles basées sur :
+    - Le type de dashboard généré
+    - L'intent détecté (tendance, composition, géo…)
+    - Les widgets présents
+    - Les insights détectés
+    """
+
+    def recommend(
+        self,
+        spec: "DashboardSpec",
+        intent: "DashboardIntent",
+        max_recs: int = 4,
+    ) -> List[DashboardRecommendation]:
+        recs: List[DashboardRecommendation] = []
+        q_lower = spec.question.lower()
+
+        # ── 1. Drill-down temporel ────────────────────────────
+        chart_types = {w.chart_type for w in spec.widgets}
+        if ChartType.LINE in chart_types or ChartType.AREA in chart_types:
+            recs.append(DashboardRecommendation(
+                id="drill_temporal",
+                icon_tag="[TREND_UP]",
+                label="Drill-down par trimestre",
+                question=f"évolution trimestrielle {spec.question}",
+                category="drill",
+                priority=90,
+            ))
+
+        # ── 2. Comparaison géographique ───────────────────────
+        if ChartType.CHOROPLETH in chart_types or ChartType.BUBBLE_MAP in chart_types:
+            recs.append(DashboardRecommendation(
+                id="geo_heatmap",
+                icon_tag="[BOLT]",
+                label="Carte de chaleur (densité)",
+                question=f"carte densité {spec.question}",
+                category="enrich",
+                priority=85,
+            ))
+            recs.append(DashboardRecommendation(
+                id="geo_top",
+                icon_tag="[UP]",
+                label="Top 10 pays/régions",
+                question=f"top 10 pays par {spec.question}",
+                category="drill",
+                priority=80,
+            ))
+
+        # ── 3. Comparaison N vs N-1 ───────────────────────────
+        if intent.is_trend:
+            recs.append(DashboardRecommendation(
+                id="compare_yn1",
+                icon_tag="[TREND_UP]",
+                label="Comparer avec N-1",
+                question=f"comparaison {spec.question} année précédente",
+                category="compare",
+                priority=88,
+            ))
+
+        # ── 4. Répartition complémentaire ─────────────────────
+        if intent.is_top_n or ChartType.BAR_H in chart_types or ChartType.BAR in chart_types:
+            recs.append(DashboardRecommendation(
+                id="composition",
+                icon_tag="[BOLT]",
+                label="Répartition en camembert",
+                question=f"répartition {spec.question}",
+                category="enrich",
+                priority=70,
+            ))
+
+        # ── 5. Dashboard complet métier ───────────────────────
+        is_sales = any(k in q_lower for k in ["vente","ca","chiffre","commande","client","revenu"])
+        is_finance = any(k in q_lower for k in ["tresorerie","trésorerie","solde","bancaire","financement","budget"])
+        is_stock = any(k in q_lower for k in ["stock","produit","article","logistique","entrepot"])
+        is_hr = any(k in q_lower for k in ["salarié","employé","effectif","rh","salaire","conge"])
+
+        if is_sales:
+            recs.append(DashboardRecommendation(
+                id="tpl_sales",
+                icon_tag="[UP]",
+                label="Dashboard Ventes complet",
+                question="dashboard ventes complet top clients évolution CA répartition produits",
+                category="template",
+                priority=75,
+            ))
+        if is_finance:
+            recs.append(DashboardRecommendation(
+                id="tpl_finance",
+                icon_tag="[BOLT]",
+                label="Dashboard Finance complet",
+                question="dashboard finance trésorerie solde flux mouvements bancaires",
+                category="template",
+                priority=75,
+            ))
+        if is_stock:
+            recs.append(DashboardRecommendation(
+                id="tpl_stock",
+                icon_tag="[UP]",
+                label="Dashboard Stocks complet",
+                question="dashboard stocks niveaux réapprovisionnement produits critiques",
+                category="template",
+                priority=75,
+            ))
+
+        # ── 6. Anomalies → demande de détails ─────────────────
+        down_insights = [i for i in spec.insights if "[DOWN]" in i or "TREND_DOWN" in i]
+        if down_insights:
+            recs.append(DashboardRecommendation(
+                id="anomaly_drill",
+                icon_tag="[DOWN]",
+                label="Analyser les baisses détectées",
+                question=f"détail anomalies baisses {spec.question}",
+                category="drill",
+                priority=95,  # Priorité maximale si anomalie
+            ))
+
+        # ── 7. Export suggéré pour rapport ───────────────────
+        if len(spec.widgets) >= 3:
+            recs.append(DashboardRecommendation(
+                id="export_pptx",
+                icon_tag="[BOLT]",
+                label="Exporter en PowerPoint",
+                question="",  # action directe, pas une question NL
+                category="export",
+                priority=60,
+            ))
+
+        # ── 8. Suggestion de filtre temporel ─────────────────
+        if not intent.is_trend and len(spec.widgets) >= 1:
+            recs.append(DashboardRecommendation(
+                id="add_time",
+                icon_tag="[TREND_UP]",
+                label="Ajouter dimension temporelle",
+                question=f"évolution mensuelle {spec.question}",
+                category="enrich",
+                priority=65,
+            ))
+
+        # Dédoublonnage et tri
+        seen = set()
+        unique_recs = []
+        for r in sorted(recs, key=lambda x: -x.priority):
+            if r.id not in seen:
+                seen.add(r.id)
+                unique_recs.append(r)
+
+        return unique_recs[:max_recs]
+
+    def to_dict(self, rec: DashboardRecommendation) -> Dict:
+        return {
+            "id":       rec.id,
+            "icon_tag": rec.icon_tag,
+            "label":    rec.label,
+            "question": rec.question,
+            "category": rec.category,
+            "priority": rec.priority,
+        }
+
+
+# ── Singleton recommender ──────────────────────────────────────
+_contextual_recommender: Optional[ContextualRecommender] = None
+
+def get_contextual_recommender() -> ContextualRecommender:
+    global _contextual_recommender
+    if _contextual_recommender is None:
+        _contextual_recommender = ContextualRecommender()
+    return _contextual_recommender
+
+
+# ══════════════════════════════════════════════════════════════
+# EXTENSION DashboardDesigner — intègre alt_viz + recommendations
+# ══════════════════════════════════════════════════════════════
+
+def enrich_spec_sprint3(
+    spec: "DashboardSpec",
+    intent: "DashboardIntent",
+) -> "DashboardSpec":
+    """
+    Post-traitement Sprint 3 sur un DashboardSpec existant :
+    1. Ajoute alt_viz à chaque widget
+    2. Génère les recommandations contextuelles globales
+    3. Construit la geo_heatmap si applicable
+
+    Appelé depuis DashboardGenerator.generate() après design().
+    """
+    recommender = get_contextual_recommender()
+
+    # 1. Alt viz par widget
+    for w in spec.widgets:
+        if w.chart_type == ChartType.KPI_CARD:
+            # Les KPI cards n'ont pas d'alternatives de viz
+            w.options["alt_viz"] = []
+            continue
+        rows = []
+        cols = []
+        # Reconstruire rows/cols depuis widget data si possible
+        wd = w.data or {}
+        if "rows" in wd and "headers" in wd:
+            # TABLE widget
+            rows = [{c: r[i] for i, c in enumerate(wd["headers"])} for r in wd.get("rows", [])]
+            cols = wd.get("headers", [])
+        elif "data" in wd and isinstance(wd["data"], list) and wd["data"] and isinstance(wd["data"][0], dict):
+            # Choropleth / bubble_map
+            rows = wd["data"]
+            cols = list(rows[0].keys()) if rows else []
+        elif "labels" in wd and "datasets" in wd:
+            # Standard chart
+            labels = wd.get("labels", [])
+            datasets_data = wd.get("datasets", [])
+            if datasets_data and labels:
+                first_ds = datasets_data[0]
+                col_name = first_ds.get("label", "value")
+                rows = [{"label": l, col_name: d} for l, d in zip(labels, first_ds.get("data", []))]
+                cols = ["label", col_name]
+
+        alts = get_alt_viz_suggestions(w.chart_type, rows, cols, intent)
+        w.options["alt_viz"] = alts
+
+    # 2. Recommandations contextuelles globales
+    recs = recommender.recommend(spec, intent)
+    spec.options = getattr(spec, "options", {}) or {}
+    spec.options["recommendations"] = [recommender.to_dict(r) for r in recs]
+
+    return spec
