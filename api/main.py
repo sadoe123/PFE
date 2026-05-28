@@ -51,7 +51,7 @@ from .cdc_reindexer          import CDCReindexer
 from .metadata_enricher      import MetadataEnricher
 from .graphql_relation_saver import GraphQLRelationSaver, HATEOASLinkExtractor
 from .cdc_db_triggers        import PostgreSQLWALCDC, SQLServerCDC
-from .nlu_engine             import get_nlu_pipeline, get_context, clear_context, Intent, ContextManager, ConversationTurn
+from .nlu_engine             import get_nlu_pipeline, get_context, clear_context, Intent, ContextManager, ConversationTurn, retrain_fasttext_with_feedback
 from .query_engine           import SQLGenerator, UniversalQueryPlanner
 from .ambiguity_resolver     import AmbiguityResolver
 try:
@@ -178,6 +178,63 @@ async def lifespan(app: FastAPI):
             logger.info("✅ Migration dimension_hierarchy OK")
         except Exception as e:
             logger.warning(f"Migration dimension_hierarchy (non-bloquant): {e}")
+
+        # ── Migration : table cdc_subscriber_log ─────────────────────
+        try:
+            pool = await get_pg_pool()
+            async with pool.acquire() as conn:
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS cdc_subscriber_log (
+                        id                  SERIAL PRIMARY KEY,
+                        source_id           UUID NOT NULL,
+                        version             INTEGER NOT NULL,
+                        change_count        INTEGER DEFAULT 0,
+                        cache_invalidated   BOOLEAN DEFAULT FALSE,
+                        reindex_triggered   BOOLEAN DEFAULT FALSE,
+                        processed_at        TIMESTAMPTZ DEFAULT NOW(),
+                        UNIQUE (source_id, version)
+                    )
+                """)
+                await conn.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_cdc_subscriber_source
+                    ON cdc_subscriber_log(source_id, processed_at DESC)
+                """)
+            logger.info("✅ Migration cdc_subscriber_log OK")
+        except Exception as e:
+            logger.warning(f"Migration cdc_subscriber_log (non-bloquant): {e}")
+
+        # ── Migration : table chat_feedback ──────────────────────────
+        try:
+            pool = await get_pg_pool()
+            async with pool.acquire() as conn:
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS chat_feedback (
+                        id              SERIAL PRIMARY KEY,
+                        conversation_id TEXT,
+                        source_id       UUID,
+                        message_id      TEXT,
+                        question        TEXT,
+                        answer          TEXT,
+                        intent          TEXT,
+                        confidence      FLOAT,
+                        nlu_method      TEXT,
+                        feedback_type   TEXT NOT NULL,  -- 'like' ou 'dislike'
+                        used_for_training BOOLEAN DEFAULT FALSE,
+                        created_at      TIMESTAMPTZ DEFAULT NOW()
+                    )
+                """)
+                await conn.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_chat_feedback_source
+                    ON chat_feedback(source_id, feedback_type, created_at DESC)
+                """)
+                await conn.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_chat_feedback_training
+                    ON chat_feedback(used_for_training, feedback_type)
+                """)
+            logger.info("✅ Migration chat_feedback OK")
+        except Exception as e:
+            logger.warning(f"Migration chat_feedback (non-bloquant): {e}")
+
     except Exception as e:
         logger.error(f"❌ PostgreSQL erreur: {e}")
     try:
@@ -225,7 +282,168 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"⚠️  WAL CDC non disponible: {e}")
 
+    # ── Reprise automatique des descriptions LLM ────────────────────
+    # Si des sources ont des tables sans description après un redémarrage,
+    # relancer automatiquement le générateur en arrière-plan
+    async def _auto_resume_descriptions():
+        await asyncio.sleep(30)  # Attendre 30s que tout soit initialisé
+        try:
+            pool = await get_pg_pool()
+            async with pool.acquire() as conn:
+                sources_to_enrich = await conn.fetch("""
+                    SELECT ds.id, ds.name, ds.connector_type, COUNT(*) as undesc_count
+                    FROM data_sources ds
+                    JOIN source_entities se ON se.source_id = ds.id
+                    WHERE ds.status = 'active'
+                      AND se.is_visible = TRUE
+                      AND (se.description IS NULL OR se.description = ''
+                           OR se.description NOT LIKE '[LLM]%')
+                    GROUP BY ds.id, ds.name, ds.connector_type
+                    HAVING COUNT(*) > 10
+                    ORDER BY undesc_count DESC
+                """)
+
+            if sources_to_enrich:
+                logger.info(f"[DescGen Auto] {len(sources_to_enrich)} sources à enrichir au démarrage")
+                from .llm_description_generator import run_description_generation_bg
+                for src in sources_to_enrich:
+                    src_type = src['connector_type'] if src['connector_type'] else 'unknown'
+                    logger.info(f"[DescGen Auto] Reprise: {src['name']} ({src['id']})")
+                    asyncio.create_task(run_description_generation_bg(
+                        source_id   = src['id'],
+                        source_name = src['name'],
+                        source_type = src_type,
+                        pg_pool     = pool,
+                        limit       = 2000,
+                    ))
+            else:
+                logger.info("[DescGen Auto] Toutes les sources sont déjà enrichies")
+        except Exception as e:
+            logger.warning(f"[DescGen Auto] Erreur reprise auto (non-bloquant): {e}")
+
+    asyncio.create_task(_auto_resume_descriptions())
+    logger.info("[DescGen Auto] Reprise automatique programmée dans 30s")
+
+    # ── CDC Breaking Change Subscriber ──────────────────────────────
+    # Thread séparé avec redis sync — listen() bloque l'event loop asyncio
+    _cdc_thread = None
+    _cdc_stop   = False
+    _loop_ref   = asyncio.get_event_loop()
+
+    def _cdc_thread_fn():
+        """Thread dédié Pub/Sub — redis sync, pas asyncio."""
+        import os, redis as _redis_sync, json as _json, logging as _log
+        _tlog = _log.getLogger(__name__)
+
+        REDIS_HOST = os.environ.get("REDIS_HOST", "onepilot_redis")
+        REDIS_PORT = int(os.environ.get("REDIS_PORT", "6379"))
+
+        while not _cdc_stop:
+            _r = None
+            try:
+                _r  = _redis_sync.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+                _ps = _r.pubsub()
+                _ps.psubscribe("cdc:breaking:*")
+                _tlog.info("[CDC Thread] Subscriber démarré (redis sync)")
+
+                for msg in _ps.listen():
+                    if _cdc_stop:
+                        break
+                    if msg.get("type") not in ("pmessage", "message"):
+                        continue
+                    try:
+                        data          = _json.loads(msg["data"])
+                        source_id_str = data.get("source_id", "")
+                        version       = data.get("version", 0)
+                        changes       = data.get("changes", [])
+                        count         = data.get("count", 0)
+                        if not source_id_str:
+                            continue
+
+                        _tlog.warning(
+                            f"[CDC Subscriber] ⚠️  Breaking change reçu — "
+                            f"source={source_id_str} v{version} ({count} changements)"
+                        )
+
+                        # Délègue les actions async à l'event loop principal
+                        async def _handle(sid=source_id_str, ver=version, chg=changes, cnt=count):
+                            try:
+                                from uuid import UUID as _UUID
+                                _redis = await get_redis()
+                                _pool  = await get_pg_pool()
+
+                                # 1. Invalide cache Redis
+                                dash_k = await _redis.keys(f"onepilot:dashboard:{sid}:*")
+                                step_k = await _redis.keys("onepilot:step:*")
+                                prof_k = await _redis.keys(f"onepilot:profile:{sid}:*")
+                                all_k  = dash_k + step_k + prof_k
+                                if all_k:
+                                    await _redis.delete(*all_k)
+                                _tlog.info(
+                                    f"[CDC Subscriber] {len(all_k)} clés cache "
+                                    f"invalidées pour source {sid}"
+                                )
+
+                                # 2. Réindexation MeiliSearch
+                                from .cdc_reindexer import CDCReindexer
+                                reindexer = CDCReindexer(_pool, _redis)
+                                res = await reindexer.reindex_after_breaking_change(
+                                    source_id=_UUID(sid), version=ver, changes=chg
+                                )
+                                _tlog.info(
+                                    f"[CDC Subscriber] Réindexation — "
+                                    f"deleted={res.get('deleted',0)}, "
+                                    f"reindexed={res.get('reindexed',0)}"
+                                )
+
+                                # 3. Log en base
+                                async with _pool.acquire() as _conn:
+                                    await _conn.execute("""
+                                        INSERT INTO cdc_subscriber_log
+                                            (source_id, version, change_count,
+                                             cache_invalidated, reindex_triggered, processed_at)
+                                        VALUES ($1,$2,$3,TRUE,TRUE,NOW())
+                                        ON CONFLICT (source_id, version) DO UPDATE
+                                        SET cache_invalidated=TRUE, reindex_triggered=TRUE,
+                                            processed_at=NOW()
+                                    """, _UUID(sid), ver, cnt)
+                            except Exception as _ex:
+                                _tlog.error(f"[CDC Subscriber] Handle error: {_ex}")
+
+                        asyncio.run_coroutine_threadsafe(_handle(), _loop_ref)
+
+                    except Exception as _me:
+                        _tlog.warning(f"[CDC Thread] Message error: {_me}")
+
+            except Exception as _e:
+                if not _cdc_stop:
+                    _tlog.warning(f"[CDC Thread] Reconnexion dans 5s ({_e})")
+                    import time; time.sleep(5)
+            finally:
+                try:
+                    if _r: _r.close()
+                except Exception:
+                    pass
+
+    try:
+        import threading
+        _cdc_thread = threading.Thread(
+            target=_cdc_thread_fn, daemon=True, name="cdc-subscriber"
+        )
+        _cdc_thread.start()
+        logger.info("✅ CDC Breaking Change Subscriber programmé")
+    except Exception as e:
+        logger.warning(f"⚠️  CDC Subscriber non démarré: {e}")
+
+
+    await asyncio.sleep(0.2)  # Laisse les tasks démarrer
     yield
+
+    # ── Arrêt CDC Subscriber (thread) ───────────────────────────────
+    _cdc_stop = True
+    if _cdc_thread and _cdc_thread.is_alive():
+        _cdc_thread.join(timeout=2.0)
+        logger.info("[CDC Thread] Arrêté")
 
     # ── Arrêt WAL listener ────────────────────────────────────────────
     if _wal_task:
@@ -348,7 +566,7 @@ async def get_connector_types():
             "description": "Connexion via protocole HTTP ou ERP",
             "icon": "globe",
             "types": [
-                {"id": "rest",        "label": "REST API",            "icon": "🔗", "default_port": None},
+                {"id": "rest",        "label": "REST API",            "icon": "FK", "default_port": None},
                 {"id": "odata",       "label": "OData",               "icon": "⚡", "default_port": None},
                 {"id": "graphql",     "label": "GraphQL",             "icon": "◈",  "default_port": None},
                 {"id": "soap",        "label": "SOAP / WSDL",         "icon": "📮", "default_port": None},
@@ -1741,7 +1959,7 @@ async def chat_endpoint(req: ChatRequest):
         return {"answer": answer}
     except Exception as e:
         logger.error(f"Chat error: {e}")
-        return {"answer": f"❌ Erreur: {str(e)}"}
+        return {"answer": f"Erreur: {str(e)}"}
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1832,6 +2050,25 @@ async def get_conversations(limit: int = 200, offset: int = 0):
         logger.error(f"Get conversations error: {e}")
         return {"conversations": []}
 
+
+
+@app.get("/conversations/pinned", tags=["Conversations"])
+async def get_pinned_conversations(user_id: str = "admin"):
+    """Retourne la liste des conv_ids épinglées pour un utilisateur."""
+    try:
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT conv_id::text, pinned_at
+                FROM pinned_conversations
+                WHERE user_id = $1
+                ORDER BY pinned_at DESC
+            """, user_id)
+        return {"pinned": [{"conv_id": str(r["conv_id"]), "pinned_at": r["pinned_at"].isoformat()} for r in rows]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/conversations/{conv_id}")
 async def get_conversation(conv_id: str):
     """Récupérer une conversation spécifique"""
@@ -1895,7 +2132,19 @@ async def _fix_slots(slots, question: str, schema: dict, known_entities: list,
 
     # ── Résolution sémantique : mots métier → vraies tables via MeiliSearch ──
     # Bloqué pour SHOW_DASHBOARD (routing propre dans dashboard_engine)
-    if not slots.table_names and source_id_str and slots.intent != Intent.SHOW_DASHBOARD:
+    # Bloqué si la question sera gérée par AgentRAG (matching flou SXA_DIRECT_SQL)
+    # Sinon _fix_slots résout "affiche-moi" → TH_SECFR (faux positif sémantique)
+    _AGENT_PREFIXES = (
+        "montre-moi", "affiche-moi", "donne-moi", "montrer les", "afficher les",
+        "quelles sont les", "quels sont les", "liste les", "lister les",
+        "taux de change", "cours de change", "cours marché", "forex",
+        "intégration bancaire", "flux de trésorerie", "journal des flux",
+        "solde bancaire", "si bancaire", "rapprochement bancaire",
+        "groupe de sociétés", "liste les sociétés", "liste les banques",
+    )
+    _is_agent_question = any(q_low.startswith(p) or p in q_low for p in _AGENT_PREFIXES)
+
+    if not slots.table_names and source_id_str and slots.intent != Intent.SHOW_DASHBOARD and not _is_agent_question:
         # ── Tables prioritaires SXA pour questions financières ────────────────
         _SXA_PRIORITY = {
             "solde": "Dernière integration bancaire",
@@ -2117,11 +2366,11 @@ async def _build_chat_answer(source_id_str: str, question: str) -> str:
     try:
         source_id = UUID(source_id_str)
     except (ValueError, AttributeError):
-        return "❌ ID source invalide."
+        return "ID source invalide."
 
     source = await get_source(source_id)
     if not source:
-        return "❌ Source introuvable."
+        return "Source introuvable."
 
     name         = source.name
     entity_count = source.entity_count or 0
@@ -2157,6 +2406,9 @@ async def _build_chat_answer(source_id_str: str, question: str) -> str:
     except Exception as e:
         logger.warning(f"[Chat] Schema fetch error: {e}")
 
+    # Fix : filtrer les tables infra du schema ET de known_entities
+    _INFRA_KE = ("QRTZ_","qrtz_","sys","SYS","dt_","DT_","MSreplication","sysdiagram","__")
+    schema = {k: v for k, v in schema.items() if not any(k.startswith(p) for p in _INFRA_KE)}
     known_entities = list(schema.keys())
 
     # Ajoute aussi les entités sans champs (vues, etc.) dans known_entities
@@ -2209,7 +2461,21 @@ async def _build_chat_answer(source_id_str: str, question: str) -> str:
         _re.IGNORECASE
     )
     if _DDL.search(question):
-        return "🚫 **Requête refusée** — instruction interdite.\n\n*Seules les questions en langage naturel sont autorisées.*"
+        return "**Requête refusée** — instruction interdite.\n\n*Seules les questions en langage naturel sont autorisées.*"
+
+    # ── Blocage questions hors-périmètre ERP ─────────────────────────
+    _OUT_OF_SCOPE = _re.compile(
+        r"\b(mot de passe|password|météo|meteo|weather"
+        r"|verrou.*système|accord.*accès|option.*accès"
+        r"|accès.*système|login.*admin|admin.*login)\b",
+        _re.IGNORECASE
+    )
+    if _OUT_OF_SCOPE.search(question):
+        return (
+            "❌ **Question hors périmètre** — OnePilot répond uniquement aux questions "
+            f"sur les données de **{name}**.\n\n"
+            "*Exemples : solde bancaire, transactions, financements, comptes...*"
+        )
 
     # ── Détection réponse à une clarification en attente ─────────────
     # Si le contexte a une clarification pendante ET la question est courte
@@ -2467,6 +2733,12 @@ async def _build_chat_answer(source_id_str: str, question: str) -> str:
             "employee":    ["Employees","EMPLOYEE"],
             "categorie":   ["Categories","CATEGORY"],
             "category":    ["Categories","CATEGORY"],
+            # Fix SXA — tables métier manquantes
+            "transaction": ["Transactions bancaires","Transactions"],
+            "journal":     ["Journal"],
+            "financement": ["Ligne de financement","FINANCEMENT_BI"],
+            "amortissement":["Tableaux d'amortissement"],
+            "integration": ["Dernière integration bancaire","SI_Bancaire"],
         }
         if not slots.table_names:
             for kw, candidates in _entity_kw_map.items():
@@ -2493,38 +2765,119 @@ async def _build_chat_answer(source_id_str: str, question: str) -> str:
         else:
             sample = ", ".join(f"`{e.name}`" for e in entities[:6])
             extra  = f"\n\nExemples : {sample}{'…' if entity_count > 6 else ''}" if sample else ""
-            return f"📊 La source **{name}** contient **{entity_count} entités** indexées.{extra}"
+            return f"**{name}** contient **{entity_count} entités** indexées.{extra}"
+
+    # ── Sprint 7C : Routing conceptuel en amont — avant tout pipeline SQL ──
+    # Vérification AVANT LIST_ENTITIES pour éviter que "quels sont les ERP ?"
+    # soit intercepté comme LIST_ENTITIES et retourne la liste des tables SXA.
+    try:
+        from .rag_engine import is_conceptual_question as _is_conceptual_early
+        if _is_conceptual_early(question):
+            logger.info(f"[CRAG] Routing conceptuel précoce → '{question[:60]}'")
+            try:
+                import httpx as _httpx_early
+                _cp = (
+                    f"Tu es un expert ERP. Réponds en français à cette question "
+                    f"de manière concise et informative.\n"
+                    f"Question : {question}\n\n"
+                    f"Réponds directement sans générer de SQL. "
+                    f"Donne une réponse claire en 3-5 phrases."
+                )
+                _cr = _httpx_early.post(
+                    f"{OLLAMA_HOST}/api/generate",
+                    json={"model": OLLAMA_MODEL, "prompt": _cp, "stream": False,
+                          "options": {"temperature": 0.3, "num_predict": 400}},
+                    timeout=30,
+                )
+                if _cr.status_code == 200:
+                    _ans = _cr.json().get("response", "").strip()
+                    if _ans:
+                        return _ans
+            except Exception as _ce_early:
+                logger.warning(f"[CRAG] Réponse conceptuelle précoce échouée : {_ce_early}")
+            return "Cette question est de nature conceptuelle. Précisez si vous souhaitez une requête SQL sur les données SXA."
+    except ImportError:
+        pass
+
+    # ── Sprint8 : Bypass LIST_ENTITIES pour agent ────────────────────
+    # Élargi Sprint 8.5 : couvre tous les préfixes synonymes + nouveaux patterns
+    _bypass_kw = [
+        # Patterns directs SXA_DIRECT_SQL
+        "codes pays", "liste les pays", "codes iso",
+        "liste les devises", "devises disponibles",
+        "taux de change", "cours de change", "cours marché", "forex",
+        "liste les sociétés", "toutes les sociétés",
+        "liste les banques", "toutes les banques",
+        "intégration bancaire", "flux de trésorerie", "journal des flux",
+        "solde bancaire", "si bancaire", "rapprochement bancaire",
+        "groupe de sociétés",
+        # Préfixes synonymes — interceptés avant résolution de table
+        "affiche-moi", "montre-moi", "donne-moi",
+        "afficher les", "montrer les", "affiche les",
+        "quelles sont les", "quels sont les",
+        "liste des", "lister les", "lister des",
+        "utilisateurs bloqués", "utilisateurs avec", "utilisateurs ayant",
+        "comptes actifs", "comptes par",
+        "quelle banque", "quel est le montant", "combien de",
+        "nombre de comptes", "comptes par banque",
+        # Questions complexes
+        "utilisateurs avec", "jointure entre",
+        "liste les utilisateurs", "affiche les utilisateurs",
+    ]
+    if slots and slots.intent == Intent.LIST_ENTITIES and not slots.table_names:
+        if any(kw in question.lower() for kw in _bypass_kw):
+            slots.intent = Intent.GENERATE_SQL
+            goto_sql = True
+            logger.info(f"[Sprint8] LIST_ENTITIES bypasse pour '{question[:50]}'")
 
     if slots and slots.intent == Intent.LIST_ENTITIES and not slots.table_names:
         # Si top_n présent → l'utilisateur veut des données, pas la liste des tables
         if slots.top_n and schema:
             # Redirige vers SQL sur la première table du schéma
-            first_table = list(schema.keys())[0]
+            # Fix : jamais prendre une table infra comme table par défaut
+            _INFRA = ("QRTZ_","qrtz_","sys","SYS","dt_","DT_","MSreplication","sysdiagram","__")
+            # Exclure les tables audit (_A, _FL, _RPT, _LOG, _HIST) et préférer GS_/AA_
+            _AUDIT_SFX = ("_A", "_FL", "_RPT", "_LOG", "_HIST", "_AUD")
+            first_table = next(
+                (t for t in schema.keys()
+                 if not any(t.startswith(p) for p in _INFRA)
+                 and not any(t.endswith(s) for s in _AUDIT_SFX)
+                 and (t.startswith("GS_") or t.startswith("AA_") or t.startswith("CS_"))),
+                next(
+                    (t for t in schema.keys()
+                     if not any(t.startswith(p) for p in _INFRA)
+                     and not any(t.endswith(s) for s in _AUDIT_SFX)),
+                    next(
+                        (t for t in schema.keys() if not any(t.startswith(p) for p in _INFRA)),
+                        list(schema.keys())[0] if schema else "table"
+                    )
+                )
+            )
             slots.table_names = [first_table]
             slots.intent = Intent.GENERATE_SQL
             # Continue vers le pipeline SQL ci-dessous
         else:
             if not entities:
-                return f"⚠️ Aucune entité synchronisée pour **{name}**.\n\nCliquez sur **↻ Sync**."
+                return f"Aucune entité synchronisée pour **{name}**.\n\nCliquez sur **↻ Sync**."
             rows = "\n".join(f"{i+1}. `{e.name}` — {e.field_count or 0} champs" for i, e in enumerate(entities[:10]))
             more = f"\n\n*… et {entity_count - 10} autres entités.*" if entity_count > 10 else ""
-            return f"📋 Entités de **{name}** :\n\n{rows}{more}"
+            return f"Entités de **{name}** :\n\n{rows}{more}"
 
     if slots and slots.intent == Intent.GET_RELATIONS:
         if not relations:
-            return f"🔗 Aucune relation détectée pour **{name}**.\n\n💡 Lancez la découverte depuis **Relations → ↻ Relancer**."
+            return f"Aucune relation détectée pour **{name}**.\n\nLancez la découverte depuis **Relations → ↻ Relancer**."
         rows = "\n".join(
             f"- `{r.get('source_entity','?')}.{r.get('source_field','?')}` → "
             f"`{r.get('target_entity','?')}.{r.get('target_field','?')}` "
             f"*({r.get('detection_method','?')}, {round((r.get('confidence') or 1)*100)}%)*"
             for r in relations
         )
-        return f"🔗 Relations détectées pour **{name}** :\n\n{rows}\n\n💡 Voir onglet **Relations**."
+        return f"Relations détectées pour **{name}** :\n\n{rows}\n\nVoir onglet **Relations**."
 
     if slots and slots.intent == Intent.DESCRIBE_ENTITY:
         host_info = f"`{source.host}:{source.port}`" if source.host else "—"
         return (
-            f"📊 **{name}**\n\n"
+            f"**{name}**\n\n"
             f"- **Type** : {source.connector_type}\n"
             f"- **Hôte** : {host_info}\n"
             f"- **Base** : `{source.database_name or source.base_url or '—'}`\n"
@@ -2554,15 +2907,15 @@ async def _build_chat_answer(source_id_str: str, question: str) -> str:
                     if pk_flag and not fk_flag:
                         where_key = "ef.is_primary_key = TRUE"
                         title = "clés primaires"
-                        icon = "🔑"
+                        icon = "PK"
                     elif fk_flag and not pk_flag:
                         where_key = "ef.is_foreign_key = TRUE AND ef.is_primary_key = FALSE"
                         title = "clés étrangères"
-                        icon = "🔗"
+                        icon = "FK"
                     else:
                         where_key = "(ef.is_primary_key = TRUE OR ef.is_foreign_key = TRUE)"
                         title = "clés (PK + FK)"
-                        icon = "🔑"
+                        icon = "PK"
 
                     pk_rows = await conn_lf.fetch(f"""
                         SELECT se.name AS table_name, ef.name AS field_name,
@@ -2588,13 +2941,13 @@ async def _build_chat_answer(source_id_str: str, question: str) -> str:
 
                     rows_txt = "\n".join(
                         f"- `{r['table_name']}`.`{r['field_name']}` ({r['data_type']}) "
-                        f"{'🔑 PK' if r['is_primary_key'] and not r['is_foreign_key'] else '🔗 FK' if r['is_foreign_key'] and not r['is_primary_key'] else '🔑🔗 PK+FK'}"
+                        f"{'PK' if r['is_primary_key'] and not r['is_foreign_key'] else 'FK' if r['is_foreign_key'] and not r['is_primary_key'] else 'PK+FK'}"
                         for r in pk_rows[:30]
                     )
                     more = f"\n\n*… et {total_count - 30} autres.*" if total_count > 30 else ""
                     return f"{icon} **{title.capitalize()} dans {name}** ({total_count} trouvées) :\n\n{rows_txt}{more}"
                 else:
-                    return f"ℹ️ Aucune {title} détectée dans **{name}**. Les métadonnées de clés dépendent du connecteur source."
+                    return f"Aucune {title} détectée dans **{name}**. Les métadonnées de clés dépendent du connecteur source."
             except Exception as e_lf:
                 logger.warning(f"[Chat] PK query error: {e_lf}")
 
@@ -2603,14 +2956,14 @@ async def _build_chat_answer(source_id_str: str, question: str) -> str:
             flds  = e.fields[:15] if e.fields else []
             rows  = "\n".join(
                 f"- `{f.name}` ({f.data_type})"
-                f"{'  🔑 PK' if f.is_primary_key else ''}{'  🔗 FK' if f.is_foreign_key else ''}"
+                f"{' PK' if f.is_primary_key else ''}{' FK' if f.is_foreign_key else ''}"
                 for f in flds
             )
             pk_count = sum(1 for f in flds if f.is_primary_key)
             fk_count = sum(1 for f in flds if f.is_foreign_key)
             meta = f" — {pk_count} PK, {fk_count} FK" if (pk_count or fk_count) else ""
-            return f"📋 **Champs de `{e.name}`**{meta} :\n\n{rows}"
-        return "⚠️ Aucune entité chargée. Lancez une synchronisation d'abord."
+            return f"**Champs de `{e.name}`**{meta} :\n\n{rows}"
+        return "Aucune entité chargée. Lancez une synchronisation d'abord."
 
     # ── Dashboard intent → génération automatique ────────────
     if slots and slots.intent == Intent.SHOW_DASHBOARD:
@@ -2632,11 +2985,11 @@ async def _build_chat_answer(source_id_str: str, question: str) -> str:
             return f"```dashboard\n{json_module.dumps(spec_dict, default=str)}\n```"
         except Exception as e:
             logger.error(f"[Chat/Dashboard] {e}")
-            return f"❌ Erreur génération dashboard : {e}"
+            return f"Erreur génération dashboard : {e}"
 
     if slots and slots.intent in (Intent.GREETING, Intent.HELP):
         return (
-            f"👋 Bonjour ! Je suis **OnePilot**, votre assistant données.\n\n"
+            f"Bonjour, je suis **OnePilot**, votre assistant données.\n\n"
             f"Source active : **{name}** ({entity_count} entités)\n\n"
             f"**Exemples de questions :**\n"
             f"- *Total des ventes par client*\n"
@@ -2681,7 +3034,7 @@ Donne une réponse concise (5-10 lignes max), pratique et orientée métier."""
                     answer = data.get("response", "").strip()
                     if answer:
                         model_label = "Mistral 7B" if "mistral" in llm_model else "Qwen2.5-Coder 3B"
-                        return f"🤖 **OnePilot IA** *(via {model_label})*\n\n{answer}"
+                        return f"*LLM — via {model_label}*\n\n{answer}"
         except Exception as _e:
             import traceback
             logger.warning(f"[LLM Explain] {_e}\n{traceback.format_exc()}")
@@ -2690,7 +3043,7 @@ Donne une réponse concise (5-10 lignes max), pratique et orientée métier."""
 
     # ── Intents SQL : pipeline complet ───────────────────────────────
     if not schema:
-        return f"⚠️ Aucun schéma disponible pour **{name}**. Lancez une synchronisation d'abord."
+        return f"Aucun schéma disponible pour **{name}**. Lancez une synchronisation d'abord."
 
     # Vérification ambiguïtés bloquantes
     if slots and not goto_sql:
@@ -2727,7 +3080,7 @@ Donne une réponse concise (5-10 lignes max), pratique et orientée métier."""
         }
     except Exception as e:
         logger.warning(f"[Chat] SQLGenerator error: {e}")
-        return f"❌ Erreur génération SQL : {e}"
+        return f"Erreur génération SQL : {e}"
 
     sql        = result.get("sql", "")
     validation = result.get("validation", {})
@@ -2750,41 +3103,256 @@ Donne une réponse concise (5-10 lignes max), pratique et orientée métier."""
         except Exception:
             pass
 
+    # ── Sprint 7A : LLM+RAG si SQLGenerator donne mauvais résultat ─────
+    score_val = validation.get("score", 1.0)
+
+    # Mots-clés qui nécessitent le vrai schéma RAG (SXA financier)
+    _financial_kw = [
+        "solde", "trésorerie", "tresorerie", "bancaire", "banque",
+        "montant", "clôture", "cloture", "devise", "financement",
+        "compte", "virement", "flux", "balance", "sum", "somme",
+        # Fix : mots SXA manquants
+        "transaction", "journal", "ligne", "société", "societe",
+        "groupe", "integration", "closingbalance", "amortissement",
+    ]
+    _needs_rag = any(kw in question.lower() for kw in _financial_kw)
+
+    # ── Force LLM+RAG pour questions interceptées par list_entities/count_entities ──
+    _force_rag_kw = [
+        "ont accès", "ont acces", "accès à", "acces a", "droits d", "permissions",
+        "utilisateurs", "utilisateur", "liste les utilisateurs",
+        "codes pays", "liste les pays", "codes iso",
+        "jointure", "relation entre",
+    ]
+    if any(kw in question.lower() for kw in _force_rag_kw):
+        _needs_rag = True
+
+    # ── Sprint8 : Agent direct pour questions connues ─────────────────
+    _direct_kw = ["codes pays","liste les pays","codes iso","liste les devises",
+                  "devises disponibles","utilisateurs avec","jointure entre",
+                  "liste les utilisateurs","affiche les utilisateurs"]
+    if any(kw in question.lower() for kw in _direct_kw):
+        try:
+            from .agentic_rag import run_agentic_rag as _run_ag
+            _pg = await get_pg_pool()
+            _sr = await _pg.fetchrow(
+                "SELECT connector_type,host,port,database_name,username,base_url FROM data_sources WHERE id=$1",
+                UUID(source_id))
+            if _sr:
+                _sd = dict(_sr); _sd["id"]=source_id; _sd["password"]=""
+                try:
+                    async with _pg.acquire() as _c:
+                        _s = await _c.fetchrow(
+                            "SELECT secret_value FROM connection_secrets WHERE source_id=$1 AND secret_key='password'",
+                            UUID(source_id))
+                        if _s: _sd["password"]=_s["secret_value"]
+                except Exception: pass
+                _ar = await _run_ag(question=question,source_id=UUID(source_id),pg_pool=_pg,source_dict=_sd,dialect=dialect)
+                if _ar.success and _ar.sql:
+                    logger.info(f"[Sprint8] Agent direct OK — {_ar.method}")
+                    return _ar.sql
+        except Exception as _e:
+            logger.warning(f"[Sprint8] Agent direct echec: {_e}")
+
+    _use_llm_rag = (
+        not sql
+        or score_val < 0.7
+        or complexity in ("cte", "advanced", "window")
+        or _needs_rag
+    )
+
+    # ── Sprint 8 : Agentic RAG — activé pour questions complexes ──────────
+    AGENTIC_RAG_ENABLED = True
+    _q_lower = question.lower()
+
+    # Mots-clés multi-entités — déclenchent l'agent indépendamment du SQLGenerator
+    _multi_entity_kw = [
+        "avec leur", "avec sa", "avec son", "et leur", "et sa", "et son",
+        "et les", "avec les", "ainsi que",
+        "ont accès", "ont acces", "accès à", "acces a",
+        "jointure", "relation entre",
+        "par compte", "par devise",
+        "montant total", "total des virements", "total par",
+        "virement", "paiement",
+        "employé", "employe", "personnel",
+    ]
+    _is_multi_entity = any(kw in _q_lower for kw in _multi_entity_kw)
+
+    _use_agentic = (
+        AGENTIC_RAG_ENABLED
+        and (
+            # Cas 1 : questions complexes via pipeline LLM
+            (_use_llm_rag and complexity in ("cte", "advanced", "window", "join", "aggregate"))
+            # Cas 2 : questions multi-entités — toujours actif
+            or _is_multi_entity
+        )
+    )
+
+    # ── Sprint 8 : Agentic RAG ────────────────────────────────────────────
+    if _use_agentic:
+        try:
+            from .agentic_rag import run_agentic_rag, agent_result_to_dict
+            _pool_agent = await get_pg_pool()
+            # Construire source_dict pour ConnectorFactory
+            _src_dict = {
+                "id":             source_id_str,
+                "connector_type": source.connector_type.value if hasattr(source.connector_type, "value") else str(source.connector_type),
+                "host":           source.host,
+                "port":           source.port,
+                "database_name":  source.database_name,
+                "username":       source.username,
+                "base_url":       source.base_url,
+            }
+            # Récupérer le mot de passe depuis les secrets
+            try:
+                async with _pool_agent.acquire() as _conn_sec:
+                    _sec = await _conn_sec.fetchrow(
+                        "SELECT secret_value FROM connection_secrets WHERE source_id=$1 AND secret_key='password'",
+                        source_id
+                    )
+                    if _sec:
+                        _src_dict["password"] = _sec["secret_value"]
+            except Exception:
+                _src_dict["password"] = ""
+
+            _agent_result = await run_agentic_rag(
+                question    = question,
+                source_id   = source_id,
+                pg_pool     = _pool_agent,
+                source_dict = _src_dict,
+                dialect     = dialect,
+            )
+            if _agent_result.success and _agent_result.sql:
+                sql         = _agent_result.sql
+                explanation = f"Agentic RAG ({_agent_result.iterations} itérations)"
+                complexity  = "agentic_rag"
+                if _agent_result.warnings:
+                    warnings.extend(_agent_result.warnings)
+                logger.info(
+                    f"[AgentRAG] Succès — {_agent_result.iterations} itérations "
+                    f"| {_agent_result.duration_ms}ms"
+                )
+                # Bypass du pipeline LLM standard si on a un bon résultat
+                if _agent_result.result is not None:
+                    _use_llm_rag = False
+        except Exception as _ae:
+            logger.warning(f"[AgentRAG] Échec, fallback vers LLM+RAG : {_ae}")
+
+    if _use_llm_rag:
+        try:
+            from .llm_engine import generate_sql_with_llm
+            _pool_rag = await get_pg_pool()
+            llm_result = await generate_sql_with_llm(
+                question    = question,
+                schema      = schema,
+                dialect     = dialect,
+                table_names = slots.table_names if slots else None,
+                pg_pool     = _pool_rag,
+                source_id   = source_id_str,
+            )
+
+            # ── Sprint 7C : Routing question conceptuelle ─────────────────────
+            if llm_result.get("is_conceptual"):
+                logger.info(f"[CRAG] Question conceptuelle → réponse LLM texte")
+                # Laisser tomber vers le LLM explain normal (intent llm_explain)
+                # en forçant la réponse via Ollama en texte libre
+                try:
+                    import httpx as _httpx
+                    _conceptual_prompt = (
+                        f"Tu es un expert ERP. Réponds en français à cette question de manière concise et informative.\n"
+                        f"Question : {question}\n\n"
+                        f"Réponds directement sans générer de SQL. Donne une réponse claire en 2-4 phrases."
+                    )
+                    _r = _httpx.post(
+                        f"{OLLAMA_HOST}/api/generate",
+                        json={"model": OLLAMA_MODEL, "prompt": _conceptual_prompt, "stream": False,
+                              "options": {"temperature": 0.3, "num_predict": 300}},
+                        timeout=30,
+                    )
+                    if _r.status_code == 200:
+                        return _r.json().get("response", "").strip()
+                except Exception as _ce:
+                    logger.warning(f"[CRAG] Réponse conceptuelle échouée : {_ce}")
+                return f"Cette question est de nature conceptuelle. Précisez si vous souhaitez une requête SQL spécifique."
+
+            if llm_result.get("sql"):
+                sql         = llm_result["sql"]
+                explanation = "LLM+RAG"
+                complexity  = "llm_rag"
+                # Ajouter warnings colonnes invalides
+                col_warnings = llm_result.get("warnings", [])
+                if col_warnings:
+                    warnings.extend(col_warnings)
+                # ── Sauvegarde SQL pour correction interactive ────────────
+                if sql:
+                    try:
+                        _sv_pool = await get_pg_pool()
+                        async with _sv_pool.acquire() as _sv_conn:
+                            # Update la ligne existante
+                            _upd = await _sv_conn.execute("""
+                                UPDATE nlu_query_log
+                                SET    sql_generated = $1
+                                WHERE  id = (
+                                    SELECT id FROM nlu_query_log
+                                    WHERE  source_id = $2
+                                      AND  question  = $3
+                                    ORDER  BY created_at DESC
+                                    LIMIT  1
+                                )
+                            """, sql, UUID(source_id), question)
+                            # Si aucune ligne → INSERT
+                            if _upd == "UPDATE 0":
+                                await _sv_conn.execute("""
+                                    INSERT INTO nlu_query_log
+                                        (source_id, question, intent, confidence,
+                                         sql_generated, created_at)
+                                    VALUES ($1,$2,$3,$4,$5,NOW())
+                                """, UUID(source_id), question,
+                                   slots.intent if slots else "generate_aggregate",
+                                   float(slots.confidence) if slots and slots.confidence else 0.9,
+                                   sql)
+                        logger.info(f"[Chat] sql_generated sauvegardé — {len(sql)} chars")
+                    except Exception as _sv_err:
+                        logger.warning(f"[Chat] sql save error: {_sv_err}")
+        except Exception as _e:
+            logger.warning(f"[Chat] LLM+RAG échoué : {_e}")
+
     # ── Réponse si SQL invalide (injection / DDL) ─────────────────────
     if not validation.get("valid", True):
         errs = "\n".join(f"- {e}" for e in validation.get("errors", []))
         return (
-            f"🚫 **Requête refusée** — validation échouée :\n\n{errs}\n\n"
+            f"**Requête refusée** — validation échouée :\n\n{errs}\n\n"
             f"*Seules les requêtes SELECT sont autorisées.*"
         )
 
     # ── Réponse avec SQL généré ───────────────────────────────────────
     if not sql:
-        return f"⚠️ Impossible de générer une requête SQL pour cette question.\n\nEssayez de préciser la table ou l'action souhaitée."
+        return f"Impossible de générer une requête SQL pour cette question.\n\nEssayez de préciser la table ou l'action souhaitée."
 
     # Badge complexité
     complexity_badge = {
-        "window":   "🪟 Window function",
-        "having":   "🔍 HAVING",
-        "cte":      "📦 CTE",
-        "advanced": "⚡ Avancé (CTE + Window)",
+        "window":   "Window",
+        "having":   "HAVING",
+        "cte":      "CTE",
+        "advanced": "Avancé",
         "simple":   "",
         "moderate": "",
+        "llm_rag": "LLM+RAG",
     }.get(complexity, "")
 
     # Warnings
     warn_text = ""
     if warnings:
-        warn_text = "\n\n⚠️ " + " | ".join(warnings[:2])
+        warn_text = "\n\n" + " | ".join(warnings[:2])
 
     # Score validation
     score = validation.get("score", 1.0)
-    score_badge = f" ✅ score={score}" if score >= 0.9 else f" ⚠️ score={score}"
+    score_badge = f" score={score}" if score >= 0.9 else f" score={score}"
 
     badge_line = f"\n*{complexity_badge}{score_badge} — {ms}ms*" if complexity_badge else f"\n*{score_badge} — {ms}ms*"
 
     return (
-        f"🔧 **{explanation}**\n\n"
+        f"**{explanation}**\n\n"
         f"```sql\n{sql}\n```"
         f"{warn_text}"
         f"{badge_line}"
@@ -2831,6 +3399,73 @@ async def delete_conversation(conv_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.patch("/conversations/{conv_id}")
+async def patch_conversation(conv_id: str, body: dict):
+    """Renommer une conversation"""
+    title = body.get("title", "").strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="Title required")
+    try:
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            try:
+                uuid_val = UUID(conv_id)
+            except ValueError:
+                uuid_val = None
+            if uuid_val:
+                result = await conn.execute(
+                    "UPDATE conversations SET title=$1, updated_at=NOW() WHERE id=$2 OR id::text=$3",
+                    title, uuid_val, conv_id
+                )
+            else:
+                result = await conn.execute(
+                    "UPDATE conversations SET title=$1, updated_at=NOW() WHERE id::text=$2",
+                    title, conv_id
+                )
+            if result == "UPDATE 0":
+                raise HTTPException(status_code=404, detail="Conversation not found")
+        return {"success": True, "title": title}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Patch conversation error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+# ── Épinglage de conversations §UI ────────────────────────────────────────────
+
+@app.post("/conversations/{conv_id}/pin", tags=["Conversations"])
+async def pin_conversation(conv_id: str, user_id: str = "admin"):
+    """Épingle une conversation (Option A — direct, sans dashboard requis)."""
+    try:
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            await conn.execute("""
+                INSERT INTO pinned_conversations (conv_id, user_id)
+                VALUES ($1::uuid, $2)
+                ON CONFLICT (conv_id, user_id) DO NOTHING
+            """, conv_id, user_id)
+        return {"success": True, "conv_id": conv_id, "pinned": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/conversations/{conv_id}/pin", status_code=200, tags=["Conversations"])
+async def unpin_conversation(conv_id: str, user_id: str = "admin"):
+    """Désépingle une conversation."""
+    try:
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            result = await conn.execute("""
+                DELETE FROM pinned_conversations
+                WHERE conv_id = $1::uuid AND user_id = $2
+            """, conv_id, user_id)
+        return {"success": True, "conv_id": conv_id, "pinned": False}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.delete("/dashboard/conv/{conv_id}/delete", status_code=204, tags=["Dashboard"])
 async def delete_conv_dashboards(conv_id: str):
     """Supprimer tous les dashboards d'une conversation"""
@@ -2846,30 +3481,882 @@ async def delete_conv_dashboards(conv_id: str):
 
 @app.post("/chat/stream")
 async def chat_stream(req: ChatRequest):
-    """Stream SSE mot par mot avec la vraie réponse contextuelle."""
+    """
+    Vrai streaming SSE — pipeline complet token par token.
+    Sprint Point 2 — Phase 1: NLU+préparation, Phase 2: LLM tokens, Phase 3: SQL final.
+
+    Format événements SSE :
+      data: {"type":"thinking", "content":"🔍 Analyse…"}
+      data: {"type":"token",    "content":"SELECT"}
+      data: {"type":"sql",      "content":"SELECT TOP 100 …", "method":"llm+rag"}
+      data: {"type":"dashboard","spec":{…}}
+      data: {"type":"done",     "duration_ms":3200}
+      data: [DONE]
+    """
     from fastapi.responses import StreamingResponse
-    try:
-        source_id = req.source_id
-        question = req.question
-        if not source_id or not question:
-            raise HTTPException(status_code=400, detail="Missing source_id or question")
+    import time as _time
 
-        answer = await _build_chat_answer(source_id, question)
+    source_id_str = req.source_id
+    question      = req.question
 
-        async def generate():
+    if not source_id_str or not question:
+        raise HTTPException(status_code=400, detail="Missing source_id or question")
+
+    async def _sse(obj: dict) -> str:
+        """Sérialise un dict en ligne SSE."""
+        return "data: " + json_module.dumps(obj, default=str) + "\n\n"
+
+    async def _stream_pipeline():
+        import re as _re
+        import unicodedata as _ucd
+        t0 = _time.time()
+
+        # ── Vérification DDL sécurité ──────────────────────────────────
+        _DDL = _re.compile(r"\b(DROP|INSERT|UPDATE|DELETE|TRUNCATE|ALTER|CREATE|EXEC|EXECUTE)\b", _re.IGNORECASE)
+        if _DDL.search(question):
+            yield await _sse({"type": "token", "content": "**Requête refusée** — instruction interdite.\n\n*Seules les questions en langage naturel sont autorisées.*"})
+            yield await _sse({"type": "done", "duration_ms": 0})
+            yield "data: [DONE]\n\n"
+            return
+
+        # ── Phase 1 : NLU + préparation schéma ────────────────────────
+        yield await _sse({"type": "thinking", "content": "nlu_analysis"})
+
+        try:
+            source_id = UUID(source_id_str)
+        except (ValueError, AttributeError):
+            yield await _sse({"type": "token", "content": "ID source invalide."})
+            yield await _sse({"type": "done", "duration_ms": 0})
+            yield "data: [DONE]\n\n"
+            return
+
+        source = await get_source(source_id)
+        if not source:
+            yield await _sse({"type": "token", "content": "Source introuvable."})
+            yield await _sse({"type": "done", "duration_ms": 0})
+            yield "data: [DONE]\n\n"
+            return
+
+        # Charge le schéma
+        schema: dict = {}
+        try:
+            pool = await get_pg_pool()
+            async with pool.acquire() as conn:
+                rows = await conn.fetch("""
+                    SELECT se.name AS table_name, ef.name AS field_name
+                    FROM source_entities se
+                    JOIN entity_fields ef ON ef.entity_id = se.id
+                    WHERE se.source_id = $1 AND se.is_visible = TRUE
+                    ORDER BY se.name, ef.position LIMIT 20000
+                """, source_id)
+            for r in rows:
+                schema.setdefault(r["table_name"], []).append(r["field_name"])
+        except Exception as _e:
+            logger.warning(f"[Stream] Schema fetch error: {_e}")
+
+        # Dialecte SQL
+        dialect_map = {
+            "mssql": "mssql", "sage_100": "mssql", "sage_x3": "mssql",
+            "mysql": "mysql", "postgresql": "postgresql", "sqlite": "sqlite",
+        }
+        dialect = dialect_map.get(
+            source.connector_type.value if hasattr(source.connector_type, "value")
+            else str(source.connector_type), "mssql"
+        )
+
+        # ── Détection intents non-SQL : fallback vers _build_chat_answer ─
+        # Pour greeting, list_entities, list_fields, dashboard, get_relations etc.
+        # on délègue au pipeline complet (pas de streaming token, mais cohérence)
+        try:
+            nlu = get_nlu_pipeline()
+            context_nlu = get_context(source_id_str)
+            known_entities = list(schema.keys())
+            slots = nlu.process(question, context_nlu, known_entities)
+        except Exception as _e:
+            logger.warning(f"[Stream] NLU error: {_e}")
+            slots = None
+
+        # ── CORRECTION SQL INTERACTIVE — Sprint 13 ───────────────────────
+        # Détecte si l'utilisateur veut corriger le dernier SQL généré
+        _CORRECTION_PHRASES = [
+            "c'est faux", "c'est pas bon", "c'est incorrect", "c'est mauvais",
+            "corrige", "corriger", "correction", "il manque", "manque un",
+            "manque les", "ajoute un", "ajoute la", "ajoute le", "ajoute les",
+            "remplace", "change la", "change le", "change les", "modifie",
+            "enlève", "enleve", "supprime le filtre", "mauvaise colonne",
+            "mauvaise table", "erreur dans", "le sql est", "ca marche pas",
+            "ça marche pas", "wrong", "fix", "incorrect", "missing bracket",
+            "crochet", "crochets", "brackets", "pas le bon", "pas correct",
+            "faut corriger", "il faut", "reessaie", "réessaie", "retry",
+        ]
+        # Garde-fou : vérifier que la question contient VRAIMENT un mot-clé de correction
+        # FastText peut confondre certaines questions normales avec correct_sql
+        _has_correction_keyword = any(phrase in question.lower() for phrase in _CORRECTION_PHRASES)
+        _is_correction = _has_correction_keyword  # On n'utilise QUE les mots-clés, pas l'intent FastText
+        # Note : intent FastText désactivé pour correct_sql car trop de faux positifs
+
+        if _is_correction:
+            yield await _sse({"type": "thinking", "content": "🔧 Correction SQL en cours…"})
+            try:
+                # Récupérer le dernier SQL de cette conversation
+                _corr_pool = await get_pg_pool()
+                _last_sql = None
+                _last_question = None
+                async with _corr_pool.acquire() as _corr_conn:
+                    # conversation_id non disponible dans ChatRequest → fallback source_id
+                    _conv_key = source_id_str
+                    _last_row = await _corr_conn.fetchrow("""
+                        SELECT question, sql_generated
+                        FROM   nlu_query_log
+                        WHERE  source_id = $1::uuid
+                          AND  sql_generated   IS NOT NULL
+                          AND  sql_generated   != ''
+                        ORDER  BY created_at DESC
+                        LIMIT  1
+                    """, UUID(_conv_key))
+                    if _last_row:
+                        _last_sql      = _last_row["sql_generated"]
+                        _last_question = _last_row["question"]
+
+                if not _last_sql:
+                    _msg = "Je n'ai pas de SQL précédent à corriger dans cette conversation. Posez d'abord une question pour générer un SQL."
+                    for _w in _msg.split(" "):
+                        yield await _sse({"type": "token", "content": _w + " "})
+                        await asyncio.sleep(0.015)
+                    yield await _sse({"type": "done", "duration_ms": 0})
+                    yield "data: [DONE]\n\n"
+                    return
+
+                # Prompt de correction
+                import httpx as _hx_corr
+                OLLAMA_HOST  = os.environ.get("OLLAMA_HOST",  "http://host.docker.internal:11434")
+                OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5-coder:3b")
+                _corr_prompt = f"""Tu es un expert SQL Server (MSSQL). 
+L'utilisateur veut corriger ce SQL.
+
+SQL actuel:
+{_last_sql}
+
+Demande de correction: "{question}"
+
+Règles STRICTES:
+- Retourne UNIQUEMENT le SQL corrigé, sans explication, sans markdown
+- Conserve la structure du SQL original
+- Applique EXACTEMENT la correction demandée
+- Pour les noms de colonnes avec espaces: utilise [crochets]
+- Pour SXA: utilise uniquement les vues: [Comptes], [Transactions bancaires], [SI_Trésorerie], [FINANCEMENT_BI], [Journal], [Dernière integration bancaire]
+- Ne change que ce qui est demandé, garde le reste identique
+
+SQL corrigé:"""
+
+                _corr_resp = _hx_corr.post(
+                    f"{OLLAMA_HOST}/api/generate",
+                    json={
+                        "model":  OLLAMA_MODEL,
+                        "prompt": _corr_prompt,
+                        "stream": False,
+                        "options": {"temperature": 0.05, "num_predict": 400},
+                    },
+                    timeout=45,
+                )
+                _corrected_sql = ""
+                if _corr_resp.status_code == 200:
+                    _raw = _corr_resp.json().get("response", "").strip()
+                    # Nettoyer le SQL
+                    import re as _re_corr
+                    _raw = _re_corr.sub(r"```(?:sql|SQL)?\s*", "", _raw)
+                    _raw = _re_corr.sub(r"```", "", _raw)
+                    _corrected_sql = _raw.strip()
+
+                if _corrected_sql:
+                    # Sauvegarder le SQL corrigé dans nlu_query_log
+                    async with _corr_pool.acquire() as _corr_conn2:
+                        await _corr_conn2.execute("""
+                            INSERT INTO nlu_query_log
+                                (conversation_id, question, intent, confidence,
+                                 sql_generated, created_at)
+                            VALUES ($1, $2, 'correct_sql', 0.99, $3, NOW())
+                            ON CONFLICT DO NOTHING
+                        """, source_id_str,
+                           f"[CORRECTION] {question[:200]}",
+                           _corrected_sql)
+
+                    yield await _sse({"type": "sql", "content": _corrected_sql, "method": "correction"})
+                    _confirm = "✅ SQL corrigé. C'est mieux comme ça ?"
+                    for _w in _confirm.split(" "):
+                        yield await _sse({"type": "token", "content": _w + " "})
+                        await asyncio.sleep(0.02)
+                else:
+                    _err = "⚠️ Je n'ai pas pu appliquer la correction. Décrivez plus précisément : par exemple 'ajoute [crochets] autour de montant avec signe'."
+                    for _w in _err.split(" "):
+                        yield await _sse({"type": "token", "content": _w + " "})
+                        await asyncio.sleep(0.015)
+
+            except Exception as _corr_err:
+                logger.error(f"[Correction] Erreur: {_corr_err}")
+                _msg = f"Erreur lors de la correction : {str(_corr_err)[:100]}"
+                yield await _sse({"type": "token", "content": _msg})
+
+            ms = int((_time.time() - t0) * 1000)
+            yield await _sse({"type": "done", "duration_ms": ms})
+            yield "data: [DONE]\n\n"
+            return
+
+        # ── FIN CORRECTION SQL ────────────────────────────────────────────────
+
+        _NON_SQL_INTENTS = {
+            "greeting", "help", "list_entities", "list_fields",
+            "describe_entity", "get_relations",
+            "show_dashboard", "llm_explain",
+        }
+        # Si intent non-SQL ET pas de mots-clés financiers/complexes → délègue à _build_chat_answer
+        _financial_kw_early = [
+            # Finance / trésorerie
+            "solde", "trésorerie", "tresorerie", "bancaire", "banque",
+            "montant", "clôture", "cloture", "devise", "financement",
+            "compte", "virement", "flux", "balance", "somme",
+            "mois dernier", "mois precedent", "trimestre", "annee derniere",
+            "superieur", "inferieur", "moyenne", "chiffre",
+            # Requêtes structurées qui nécessitent RAG
+            "paramètre", "parametre", "paramètres", "parametres",
+            "catégorie", "categorie", "catégories", "categories",
+            "champ", "champs", "règle", "regle", "règles",
+            "liste", "affiche", "montre", "donne", "quels", "quelles",
+            "structure", "données de", "données du", "données des",
+            # Agent RAG — forcer bypass list_entities
+            "codes pays", "codes iso", "liste les pays",
+            "liste les devises", "devises disponibles",
+            "utilisateurs avec", "jointure entre",
+            # Transactions avec filtres numériques — forcer generate_sql_stream
+            "transaction", "supérieur", "superieur", "inférieur", "inferieur",
+            "depasse", "dépasse", "plus de", "moins de", "superieure", "inferieure",
+            "50000", "100000", "10000", "encaissement", "decaissement",
+        ]
+        _force_llm_stream = any(kw in question.lower() for kw in _financial_kw_early)
+        if slots and slots.intent in _NON_SQL_INTENTS and not _force_llm_stream:
+            yield await _sse({"type": "thinking", "content": "preparing"})
+            try:
+                answer = await _build_chat_answer(source_id_str, question)
+            except Exception as _e:
+                answer = f"Erreur : {_e}"
+            # Stream la réponse mot par mot (délai minimal)
             words = answer.split(" ")
             for i, word in enumerate(words):
                 token = word + (" " if i < len(words) - 1 else "")
-                yield "data: " + json_module.dumps({"token": token}) + "\n\n"
-                await asyncio.sleep(0.02)
+                yield await _sse({"type": "token", "content": token})
+                await asyncio.sleep(0.015)
+            ms = int((_time.time() - t0) * 1000)
+            yield await _sse({"type": "done", "duration_ms": ms})
             yield "data: [DONE]\n\n"
+            return
 
-        return StreamingResponse(generate(), media_type="text/event-stream")
-    except HTTPException:
-        raise
+        # ── Détection requête complexe → LLM streaming ────────────────
+        from .llm_engine import is_complex_query, generate_sql_stream
+
+        table_names_hint = slots.table_names if slots else None
+        _financial_kw = [
+            "solde", "trésorerie", "tresorerie", "bancaire", "banque",
+            "montant", "clôture", "cloture", "devise", "financement",
+            "compte", "virement", "flux", "balance", "somme",
+            "codes pays", "codes iso", "liste les pays",
+            "liste les devises", "devises disponibles",
+            "utilisateurs avec", "affiche les utilisateurs",
+            "jointure entre", "liste les utilisateurs",
+            # Sprint 8.5 — synonymes et nouveaux patterns
+            "taux de change", "cours de change", "cours marché", "forex",
+            "affiche-moi", "montre-moi", "donne-moi",
+            "afficher les", "montrer les",
+            "quels sont les", "quelles sont les",
+            "liste les sociétés", "liste les banques",
+            "intégration bancaire", "flux de trésorerie",
+            "solde bancaire", "si bancaire", "pays",
+            "liste des", "lister les",
+            "utilisateurs bloqués", "utilisateurs avec", "utilisateurs ayant",
+            "comptes actifs", "comptes par",
+            "quelle banque", "quel est le montant", "combien de",
+            "nombre de comptes", "comptes par banque",
+        "quelle banque", "quel est le montant", "combien de",
+        "nombre de comptes", "comptes par banque",
+        ]
+        _needs_llm = (
+            is_complex_query(question, table_names_hint)
+            or any(kw in question.lower() for kw in _financial_kw)
+        )
+
+        if _needs_llm and schema:
+            # ── Sprint 8 : Agentic RAG dans /chat/stream ─────────────
+            _q_lower_stream = question.lower()
+            _agent_kw_stream = [
+                "avec leur", "avec sa", "et leur", "avec les",
+                "ont accès", "accès à", "jointure",
+                "par compte", "par devise",
+                "montant total", "total des virements", "virement", "paiement",
+                "employé", "employe", "personnel", "utilisateur", "utilisateurs",
+                "liste les comptes", "comptes avec",
+                "financement", "financements", "amortissement",
+                "solde de trésorerie", "solde trésorerie",
+                "total des transactions", "transactions par banque",
+                # Devises / pays
+                "liste les devises", "devises disponibles", "codes pays",
+                "liste les pays", "codes iso", "jointure entre",
+                "montre les devises", "affiche les devises", "quelles devises",
+                "montre les pays", "affiche les pays", "quels pays",
+                # Cours / taux
+                "taux de change", "cours de change", "cours marché", "forex",
+                # Sociétés / banques
+                "liste les sociétés", "toutes les sociétés", "liste les banques",
+                "toutes les banques", "groupe de sociétés",
+                # Trésorerie / flux
+                "intégration bancaire", "flux de trésorerie", "journal des flux",
+                "solde bancaire", "si bancaire", "rapprochement bancaire",
+                # Variantes synonymes fréquentes
+                "montre-moi", "affiche-moi", "donne-moi", "montrer les",
+                "afficher les", "quelles sont les", "quels sont les",
+                "liste des", "lister les", "lister des",
+                "utilisateurs bloqués", "utilisateurs avec", "utilisateurs ayant",
+                "comptes actifs", "comptes par",
+            "quelle banque", "quel est le montant", "combien de",
+            "nombre de comptes", "comptes par banque",
+                "quelle banque", "quel est le montant", "combien de",
+                "nombre de comptes", "comptes par banque",
+        "quelle banque", "quel est le montant", "combien de",
+        "nombre de comptes", "comptes par banque",
+            # ── Sprint 9 fix : questions composées compare/vs ───────────────────
+            "compare ", "vs ", " vs ", "versus",
+            # ── Sprint 8.6 fix : questions filtrées dynamiques ────────────────
+            "transactions tnd", "transactions eur", "transactions usd",
+            "supérieures à", "supérieure à", "inférieures à", "inférieure à",
+            "banque postale", "la banque postale",
+            "par devise en", "par devise",
+            "en 2024", "en 2023", "en 2022", "en 2025",
+            "maturité dépasse", "maturité supérieure",
+            "accès à plus",
+            ]
+            # Sprint 8.6 : routing élargi — toute question non-triviale va vers AgentRAG
+            # Le matching flou dans agentic_rag.py gère les variantes lexicales
+            # ── Exclure les questions dashboard du pipeline AgentRAG ─────────
+            # Les questions "dashboard ..." doivent aller vers dashboard_engine
+            # via le bloc show_dashboard, pas vers l'Orchestrateur
+            _is_dashboard_question = (
+                _q_lower_stream.startswith("dashboard ") or
+                _q_lower_stream.startswith("génère un dashboard") or
+                _q_lower_stream.startswith("genere un dashboard") or
+                _q_lower_stream.startswith("crée un dashboard") or
+                _q_lower_stream.startswith("create dashboard") or
+                " dashboard " in _q_lower_stream
+            )
+            # ── PRIORITÉ ABSOLUE : Pattern Direct SQL connu → bypass CRAG+LLM ─
+            # Intercepte AVANT _is_complex_question et AVANT _use_agent_stream
+            # Ex: "encaissements par banque", "flux trésorerie par banque", etc.
+            if not _is_dashboard_question:
+                try:
+                    from .agentic_rag import _find_direct_sql, _tool_execute_sql
+                    _matched_pat, _direct_sql_early, _match_score_early = _find_direct_sql(question)
+                    if _matched_pat and _direct_sql_early:
+                        logger.info(f"[DirectSQL Early] Pattern='{_matched_pat}' score={_match_score_early:.2f}")
+                        _src_dict_early = {
+                            "id": source_id_str,
+                            "connector_type": source.connector_type.value if hasattr(source.connector_type, "value") else str(source.connector_type),
+                            "host": source.host, "port": source.port,
+                            "database_name": source.database_name,
+                            "username": source.username, "base_url": source.base_url, "password": "",
+                        }
+                        try:
+                            async with (await get_pg_pool()).acquire() as _cs_early:
+                                _sec_early = await _cs_early.fetchrow(
+                                    "SELECT secret_value FROM connection_secrets WHERE source_id=$1 AND secret_key='password'",
+                                    source_id
+                                )
+                                if _sec_early:
+                                    _src_dict_early["password"] = _sec_early["secret_value"]
+                        except Exception:
+                            pass
+                        import time as _time_early
+                        _exec_early = await _tool_execute_sql(_direct_sql_early, _src_dict_early, dialect)
+                        if _exec_early.get("success") or _exec_early.get("row_count", 0) == 0:
+                            yield await _sse({"type": "sql", "content": _direct_sql_early, "method": "direct_sql_early"})
+                            # ── Sauvegarder pour correction interactive ───────
+                            try:
+                                _sv_pool = await get_pg_pool()
+                                async with _sv_pool.acquire() as _sv_conn:
+                                    await _sv_conn.execute("""
+                                        UPDATE nlu_query_log
+                                        SET    sql_generated = $1
+                                        WHERE  source_id     = $2
+                                          AND  question      = $3
+                                          AND  sql_generated IS NULL
+                                    """, _direct_sql_early, UUID(source_id_str), question)
+                                    _chk = await _sv_conn.fetchval("""
+                                        SELECT COUNT(*) FROM nlu_query_log
+                                        WHERE source_id=$1 AND question=$2 AND sql_generated=$3
+                                    """, UUID(source_id_str), question, _direct_sql_early)
+                                    if not _chk:
+                                        await _sv_conn.execute("""
+                                            INSERT INTO nlu_query_log
+                                                (source_id, question, intent, confidence,
+                                                 sql_generated, created_at)
+                                            VALUES ($1,$2,$3,$4,$5,NOW())
+                                            ON CONFLICT DO NOTHING
+                                        """, UUID(source_id_str), question,
+                                           "direct_sql", 1.0, _direct_sql_early)
+                            except Exception as _sv_err:
+                                logger.debug(f"[DirectSQL] save error: {_sv_err}")
+                            ms = int((_time.time() - t0) * 1000)
+                            yield await _sse({"type": "done", "duration_ms": ms})
+                            yield "data: [DONE]\n\n"
+                            return
+                except Exception as _de:
+                    logger.debug(f"[DirectSQL Early] Ignoré: {_de}")
+
+            # ── Sprint 10 : questions complexes → toujours via Orchestrateur ──
+            # _is_complex_question() détecte multi-dims, agrégations croisées
+            # Ces questions doivent passer par l'Agent Precision, pas par CRAG direct
+            from .orchestrator import _is_complex_question as _orch_is_complex
+            _is_complex_q = _orch_is_complex(_q_lower_stream)
+
+            _use_agent_stream = (
+                not _is_dashboard_question and
+                (_is_complex_q or any(kw in _q_lower_stream for kw in _agent_kw_stream))
+            )
+
+            if _use_agent_stream:
+                # ── Sprint 9 : Orchestrateur Multi-Agent ─────────────────────
+                logger.info(f"[Orchestrator] Démarrage dans /chat/stream — question='{question[:60]}'")
+                try:
+                    from .orchestrator import run_orchestrator, orchestrator_result_to_dict
+                    _pool_agent = await get_pg_pool()
+                    _src_dict_stream = {
+                        "id":             source_id_str,
+                        "connector_type": source.connector_type.value if hasattr(source.connector_type, "value") else str(source.connector_type),
+                        "host":           source.host,
+                        "port":           source.port,
+                        "database_name":  source.database_name,
+                        "username":       source.username,
+                        "base_url":       source.base_url,
+                        "password":       "",
+                    }
+                    try:
+                        async with _pool_agent.acquire() as _cs:
+                            _sec = await _cs.fetchrow(
+                                "SELECT secret_value FROM connection_secrets WHERE source_id=$1 AND secret_key='password'",
+                                source_id
+                            )
+                            if _sec:
+                                _src_dict_stream["password"] = _sec["secret_value"]
+                    except Exception:
+                        pass
+
+                    yield await _sse({"type": "thinking", "content": "🤖 Orchestrateur Multi-Agent — analyse en cours…"})
+                    _orch_res = await run_orchestrator(
+                        question=question, source_id=source_id,
+                        pg_pool=_pool_agent, source_dict=_src_dict_stream, dialect=dialect,
+                    )
+                    if _orch_res.success and _orch_res.sql:
+                        logger.info(
+                            f"[Orchestrator] Succès stream — "                            f"{_orch_res.iterations} itérations | "                            f"agent={_orch_res.agent_type.value} | "                            f"méthode={_orch_res.method}"
+                        )
+                        # Si multi-query : envoyer tous les SQLs
+                        if _orch_res.sqls and len(_orch_res.sqls) > 1:
+                            yield await _sse({
+                                "type": "sql",
+                                "content": _orch_res.sql,
+                                "method": _orch_res.method,
+                                "sqls": _orch_res.sqls,
+                                "sub_queries": [
+                                    {"text": sq.text, "sql": sq.sql, "success": sq.success}
+                                    for sq in _orch_res.sub_queries
+                                ],
+                            })
+                        else:
+                            yield await _sse({"type": "sql", "content": _orch_res.sql, "method": _orch_res.method})
+                        if _orch_res.warnings:
+                            for w in _orch_res.warnings:
+                                yield await _sse({"type": "warning", "content": w})
+                        # ── Sauvegarde SQL pour correction interactive ────────
+                        if _orch_res.sql:
+                            try:
+                                _sv2 = await get_pg_pool()
+                                async with _sv2.acquire() as _sv2c:
+                                    await _sv2c.execute("""
+                                        UPDATE nlu_query_log
+                                        SET    sql_generated = $1
+                                        WHERE  source_id=$2 AND question=$3
+                                          AND  sql_generated IS NULL
+                                    """, _orch_res.sql, UUID(source_id_str), question)
+                                    _chk2 = await _sv2c.fetchval(
+                                        "SELECT COUNT(*) FROM nlu_query_log WHERE source_id=$1 AND question=$2 AND sql_generated=$3",
+                                        UUID(source_id_str), question, _orch_res.sql)
+                                    if not _chk2:
+                                        await _sv2c.execute("""
+                                            INSERT INTO nlu_query_log
+                                                (source_id,question,intent,confidence,sql_generated,created_at)
+                                            VALUES ($1,$2,$3,$4,$5,NOW()) ON CONFLICT DO NOTHING
+                                        """, UUID(source_id_str), question,
+                                           _orch_res.method, 1.0, _orch_res.sql)
+                            except Exception as _sv2e:
+                                logger.debug(f"[Orch] sql save error: {_sv2e}")
+                        ms = int((_time.time() - t0) * 1000)
+                        yield await _sse({"type": "done", "duration_ms": ms})
+                        yield "data: [DONE]\n\n"
+                        return
+                    else:
+                        logger.info(f"[AgentRAG] Pas de résultat — fallback LLM")
+                except Exception as _ae:
+                    logger.warning(f"[AgentRAG] Échec stream, fallback LLM : {_ae}", exc_info=True)
+
+            # ── Sprint 9 fix : intercepter show_dashboard AVANT generate_sql_stream ──
+            if slots and slots.intent == Intent.SHOW_DASHBOARD:
+                try:
+                    from .dashboard_engine import get_dashboard_generator
+                    logger.info(f"[Chat/Dashboard] Génération dashboard — question='{question[:60]}'")
+                    generator = get_dashboard_generator()
+                    spec = await generator.generate(
+                        question          = question,
+                        slots             = slots,
+                        schema            = schema,
+                        source_id         = source_id_str,
+                        pg_pool           = await get_pg_pool(),
+                        redis             = await get_redis(),
+                        connector_factory = ConnectorFactory,
+                    )
+                    spec_dict = spec.to_dict()
+                    n_widgets = len(spec_dict.get("widgets", []))
+                    logger.info(f"[Chat/Dashboard] {n_widgets} widgets générés")
+                    import json as _json_db
+                    dashboard_json = _json_db.dumps(spec_dict, default=str)
+                    yield await _sse({"type": "sql", "content": f"```dashboard\n{dashboard_json}\n```", "method": "dashboard_engine"})
+                    ms = int((_time.time() - t0) * 1000)
+                    yield await _sse({"type": "done", "duration_ms": ms})
+                    yield "data: [DONE]\n\n"
+                    return
+                except Exception as _de:
+                    logger.error(f"[Chat/Dashboard] Erreur: {_de}", exc_info=True)
+                    yield await _sse({"type": "token", "content": f"Erreur génération dashboard : {_de}"})
+                    yield await _sse({"type": "done", "duration_ms": 0})
+                    yield "data: [DONE]\n\n"
+                    return
+
+            # ── Phase 2 : Streaming LLM ──────────────────────────────
+            # Stratégie : on affiche les tokens bruts du LLM en temps réel
+            # SAUF les tokens markdown (```sql, ```) qui polluent l'affichage.
+            # ── Sprint 13 : A/B Testing — tirage 50/50 Prompt A vs Prompt B ──
+            import random as _random
+            _ab_variant = "B" if _random.random() < 0.5 else "A"
+            _ab_t0 = _time.time()
+            _ab_few_shot = []
+            if _ab_variant == "B":
+                try:
+                    from .llm_engine import _get_few_shot_examples
+                    _ab_pool = await get_pg_pool()
+                    _ab_few_shot = await _get_few_shot_examples(_ab_pool, source_id_str, limit=5)
+                    logger.info(f"[AB] Variant B — {len(_ab_few_shot)} few-shot exemples chargés")
+                except Exception as _abe:
+                    logger.debug(f"[AB] Few-shot fetch error: {_abe}")
+                    _ab_variant = "A"  # fallback A si erreur
+            else:
+                logger.info("[AB] Variant A — prompt baseline")
+
+            # Le SQL final nettoyé (type:sql) remplace tout à la fin.
+            pool = await get_pg_pool()
+            collected_sql = None
+            method = "llm"
+            raw_token_buf = []   # accumule pour vérifier si c'est un bloc markdown
+            in_code_block = False
+            skip_next_lang = False
+
+            async for event in generate_sql_stream(
+                question    = question,
+                schema      = schema,
+                dialect     = dialect,
+                table_names = table_names_hint,
+                pg_pool     = pool,
+                source_id   = source_id_str,
+                ab_variant  = _ab_variant,
+                few_shot_examples = _ab_few_shot,
+            ):
+                etype = event.get("type")
+                if etype == "thinking":
+                    yield await _sse(event)
+                elif etype == "conceptual":
+                    # ── Sprint 7C : Routing → réponse texte LLM ──────────────
+                    try:
+                        import httpx as _hx
+                        _cp = (
+                            f"Tu es un expert ERP et systèmes d'information. "
+                            f"Réponds en français à cette question de manière concise.\n"
+                            f"Question : {event.get('content', question)}\n\n"
+                            f"Réponds directement sans générer de SQL. 2-4 phrases maximum."
+                        )
+                        _cr = _hx.post(
+                            f"{OLLAMA_HOST}/api/generate",
+                            json={"model": OLLAMA_MODEL, "prompt": _cp, "stream": False,
+                                  "options": {"temperature": 0.3, "num_predict": 300}},
+                            timeout=30,
+                        )
+                        _ans = _cr.json().get("response", "").strip() if _cr.status_code == 200 else "Question conceptuelle non supportée."
+                    except Exception:
+                        _ans = "Cette question est de nature conceptuelle. Précisez si vous souhaitez une requête SQL."
+                    words = _ans.split(" ")
+                    for i, word in enumerate(words):
+                        yield await _sse({"type": "token", "content": word + (" " if i < len(words)-1 else "")})
+                        await asyncio.sleep(0.015)
+                    ms = int((_time.time() - t0) * 1000)
+                    yield await _sse({"type": "done", "duration_ms": ms})
+                    yield "data: [DONE]\n\n"
+                    return
+                elif etype == "token":
+                    tok = event.get("content", "")
+                    raw_token_buf.append(tok)
+                    # Filtre les tokens markdown parasites
+                    tok_stripped = tok.strip()
+                    if tok_stripped == "```":
+                        in_code_block = not in_code_block
+                        if in_code_block:
+                            skip_next_lang = True  # prochaine ligne = "sql"
+                        continue
+                    if skip_next_lang and tok_stripped.lower() in ("sql", ""):
+                        skip_next_lang = False
+                        continue
+                    skip_next_lang = False
+                    # Envoie le token au client
+                    yield await _sse({"type": "token", "content": tok})
+                elif etype == "sql":
+                    collected_sql = event.get("content", "")
+                    method  = event.get("method", "llm")
+                elif etype == "error":
+                    # LLM indisponible → fallback vers _build_chat_answer
+                    yield await _sse({"type": "thinking", "content": "llm_offline"})
+                    answer = await _build_chat_answer(source_id_str, question)
+                    words = answer.split(" ")
+                    for i, word in enumerate(words):
+                        yield await _sse({"type": "token", "content": word + (" " if i < len(words)-1 else "")})
+                        await asyncio.sleep(0.015)
+                    ms = int((_time.time() - t0) * 1000)
+                    yield await _sse({"type": "done", "duration_ms": ms})
+                    yield "data: [DONE]\n\n"
+                    return
+                elif etype == "done":
+                    pass  # On envoie notre propre done après
+
+            # SQL final — on remplace tout ce qui a été affiché par le SQL propre
+            ms = int((_time.time() - t0) * 1000)
+            if collected_sql:
+                badge = "LLM+RAG" if "rag" in (method or "") else "LLM"
+                # Efface les tokens bruts et affiche le SQL nettoyé final
+                yield await _sse({"type": "replace", "content": f"```sql\n{collected_sql}\n```"})
+
+            # ── Sprint 13 : Enregistrement résultat A/B ──────────────────────
+            try:
+                _ab_valid = bool(collected_sql and len(collected_sql) > 10)
+                _ab_score = float(_ab_valid)
+                _ab_duration = int((_time.time() - _ab_t0) * 1000)
+                _ab_pg = await get_pg_pool()
+                async with _ab_pg.acquire() as _ab_conn:
+                    await _ab_conn.execute("""
+                        INSERT INTO ab_test_results
+                            (question, source_id, prompt_variant, sql_generated,
+                             sql_valid, score, duration_ms, few_shot_count, created_at)
+                        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
+                    """,
+                        question[:500],
+                        UUID(source_id_str) if source_id_str else None,
+                        _ab_variant,
+                        collected_sql,
+                        _ab_valid,
+                        _ab_score,
+                        _ab_duration,
+                        len(_ab_few_shot),
+                    )
+                logger.info(f"[AB] Variant={_ab_variant} valid={_ab_valid} score={_ab_score} duration={_ab_duration}ms")
+            except Exception as _ab_err:
+                logger.debug(f"[AB] Enregistrement ignoré: {_ab_err}")
+
+            # ── Sauvegarde sql_generated dans nlu_query_log pour la correction ─
+            if collected_sql:
+                try:
+                    _save_pool = await get_pg_pool()
+                    async with _save_pool.acquire() as _save_conn:
+                        # Mise à jour de la ligne la plus récente pour cette question
+                        _rows_updated = await _save_conn.execute("""
+                            UPDATE nlu_query_log
+                            SET    sql_generated = $1
+                            WHERE  id = (
+                                SELECT id FROM nlu_query_log
+                                WHERE  source_id = $2
+                                  AND  question  = $3
+                                ORDER  BY created_at DESC
+                                LIMIT  1
+                            )
+                        """, collected_sql, UUID(source_id_str), question)
+                        # Si aucune ligne → INSERT direct
+                        if _rows_updated == "UPDATE 0":
+                            await _save_conn.execute("""
+                                INSERT INTO nlu_query_log
+                                    (source_id, question, intent, confidence,
+                                     sql_generated, created_at)
+                                VALUES ($1, $2, $3, $4, $5, NOW())
+                            """, UUID(source_id_str), question,
+                               slots.intent if slots else "generate_aggregate",
+                               float(slots.confidence) if slots and slots.confidence else 0.9,
+                               collected_sql)
+                    logger.info(f"[Stream] sql_generated sauvegardé — {len(collected_sql)} chars")
+                except Exception as _save_err:
+                    logger.warning(f"[Stream] sql_generated save error: {_save_err}")
+
+            yield await _sse({"type": "done", "duration_ms": ms})
+            yield "data: [DONE]\n\n"
+            return
+
+        # ── Phase 2 alt : Template SQLGenerator (requête simple) ──────
+        yield await _sse({"type": "thinking", "content": "sql_template"})
+        try:
+            answer = await _build_chat_answer(source_id_str, question)
+        except Exception as _e:
+            answer = f"Erreur : {_e}"
+
+        # ── Extraire et sauvegarder le SQL depuis la réponse ─────────────
+        try:
+            import re as _re_sql_save
+            _sql_match = _re_sql_save.search(r'```sql\s*([\s\S]+?)\s*```', answer)
+            if _sql_match:
+                _extracted_sql = _sql_match.group(1).strip()
+                _sv3_pool = await get_pg_pool()
+                async with _sv3_pool.acquire() as _sv3_conn:
+                    _upd3 = await _sv3_conn.execute("""
+                        UPDATE nlu_query_log
+                        SET    sql_generated = $1
+                        WHERE  id = (
+                            SELECT id FROM nlu_query_log
+                            WHERE  source_id = $2 AND question = $3
+                            ORDER  BY created_at DESC LIMIT 1
+                        )
+                    """, _extracted_sql, UUID(source_id_str), question)
+                    if _upd3 == "UPDATE 0":
+                        await _sv3_conn.execute("""
+                            INSERT INTO nlu_query_log
+                                (source_id, question, intent, confidence,
+                                 sql_generated, created_at)
+                            VALUES ($1,$2,$3,$4,$5,NOW())
+                        """, UUID(source_id_str), question,
+                           slots.intent if slots else "generate_aggregate",
+                           float(slots.confidence) if slots and slots.confidence else 0.9,
+                           _extracted_sql)
+                logger.info(f"[Phase2] sql_generated sauvegardé — {len(_extracted_sql)} chars")
+        except Exception as _sv3e:
+            logger.debug(f"[Phase2] sql save error: {_sv3e}")
+
+        # Stream la réponse template mot par mot
+        words = answer.split(" ")
+        for i, word in enumerate(words):
+            yield await _sse({"type": "token", "content": word + (" " if i < len(words)-1 else "")})
+            await asyncio.sleep(0.012)
+
+        ms = int((_time.time() - t0) * 1000)
+        yield await _sse({"type": "done", "duration_ms": ms})
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        _stream_pipeline(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control":  "no-cache",
+            "X-Accel-Buffering": "no",  # Désactive le buffering Nginx
+        },
+    )
+
+# ══════════════════════════════════════════════════════════════
+# A/B TESTING — Sprint 13
+# ══════════════════════════════════════════════════════════════
+
+@app.get("/ab-testing/stats", tags=["AB Testing"])
+async def ab_testing_stats(source_id: Optional[str] = None, days: int = 30):
+    """
+    Statistiques A/B testing des prompts LLM.
+    Compare Prompt A (baseline) vs Prompt B (few-shot enrichi).
+    """
+    pool = await get_pg_pool()
+    try:
+        async with pool.acquire() as conn:
+            # Stats globales par variant
+            rows = await conn.fetch("""
+                SELECT
+                    prompt_variant,
+                    COUNT(*)                                            AS total_tests,
+                    COUNT(*) FILTER (WHERE sql_valid = TRUE)           AS valid_sql,
+                    COUNT(*) FILTER (WHERE has_results = TRUE)         AS has_results,
+                    ROUND(AVG(score)::NUMERIC, 3)                      AS avg_score,
+                    ROUND(AVG(duration_ms)::NUMERIC, 0)                AS avg_duration_ms,
+                    ROUND((COUNT(*) FILTER (WHERE sql_valid = TRUE)::FLOAT
+                          / NULLIF(COUNT(*),0)*100)::NUMERIC, 1)       AS valid_pct,
+                    AVG(few_shot_count)                                AS avg_few_shot
+                FROM ab_test_results
+                WHERE created_at >= NOW() - ($1 || ' days')::INTERVAL
+                  AND ($2::UUID IS NULL OR source_id = $2::UUID)
+                GROUP BY prompt_variant
+                ORDER BY prompt_variant
+            """, str(days), source_id)
+
+            # Total général
+            total = await conn.fetchval(
+                "SELECT COUNT(*) FROM ab_test_results WHERE created_at >= NOW() - ($1 || ' days')::INTERVAL",
+                str(days)
+            )
+
+            # Évolution quotidienne
+            daily = await conn.fetch("""
+                SELECT
+                    DATE(created_at)  AS day,
+                    prompt_variant,
+                    COUNT(*)          AS tests,
+                    ROUND(AVG(score)::NUMERIC, 2) AS avg_score
+                FROM ab_test_results
+                WHERE created_at >= NOW() - ($1 || ' days')::INTERVAL
+                GROUP BY DATE(created_at), prompt_variant
+                ORDER BY day DESC
+                LIMIT 60
+            """, str(days))
+
+        stats = {}
+        for r in rows:
+            stats[r["prompt_variant"]] = {
+                "total_tests":    r["total_tests"],
+                "valid_sql":      r["valid_sql"],
+                "has_results":    r["has_results"],
+                "avg_score":      float(r["avg_score"] or 0),
+                "avg_duration_ms": float(r["avg_duration_ms"] or 0),
+                "valid_pct":      float(r["valid_pct"] or 0),
+                "avg_few_shot":   float(r["avg_few_shot"] or 0),
+            }
+
+        # Déterminer le gagnant actuel
+        winner = None
+        if "A" in stats and "B" in stats:
+            winner = "B" if stats["B"]["avg_score"] > stats["A"]["avg_score"] else "A"
+        elif stats:
+            winner = list(stats.keys())[0]
+
+        return {
+            "period_days":  days,
+            "total_tests":  total,
+            "by_variant":   stats,
+            "current_winner": winner,
+            "daily_evolution": [
+                {
+                    "day":          str(r["day"]),
+                    "variant":      r["prompt_variant"],
+                    "tests":        r["tests"],
+                    "avg_score":    float(r["avg_score"] or 0),
+                }
+                for r in daily
+            ],
+            "recommendation": (
+                f"Prompt {winner} est plus performant — continuer à l'utiliser."
+                if winner else "Pas assez de données pour recommander un variant."
+            ),
+        }
     except Exception as e:
-        logger.error(f"Chat stream error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(500, str(e))
+
 
 # ══════════════════════════════════════════════════════════════
 # LLM ENGINE — §2.3.3
@@ -2947,11 +4434,14 @@ async def llm_generate_sql(req: LLMSQLRequest):
         schema = {}
         for r in rows:
             schema.setdefault(r["name"], []).append(r["field"])
-        result = generate_sql_with_llm(
+        # Sprint 7A : passage de pg_pool et source_id pour le RAG
+        result = await generate_sql_with_llm(
             question    = req.question,
             schema      = schema,
             dialect     = "mssql",
             table_names = None,
+            pg_pool     = pool,
+            source_id   = req.source_id,
         )
         return result
     except Exception as e:
@@ -4009,7 +5499,71 @@ async def cdc_detect(source_id: UUID):
         raise HTTPException(500, str(e))
 
 
-# ── 2. Historique des versions (git log) ─────────────────────
+# ── 1b. Reset baseline CDC ────────────────────────────────────
+
+@app.post("/sources/{source_id}/cdc/reset-baseline", tags=["CDC"])
+async def cdc_reset_baseline(source_id: UUID):
+    """
+    Réinitialise la baseline CDC pour une source.
+    - Supprime tout l'historique des versions.
+    - Crée un nouveau v1 propre à partir du schéma actuel.
+    - Utile quand la source a été restaurée depuis un .bak ou réimportée.
+    """
+    pool  = await get_pg_pool()
+    redis = await get_redis()
+    cdc   = CDCEngine(pool, redis)
+
+    try:
+        current_schema = await cdc.snapshot_schema(source_id)
+        if not current_schema:
+            raise HTTPException(400, "Aucune entité trouvée — faites une synchro d'abord.")
+
+        from .cdc_engine import compute_schema_fingerprint
+        import json
+        fp      = compute_schema_fingerprint(current_schema)
+        summary = {"added": 0, "dropped": 0, "modified": 0, "total": 0}
+
+        # Supprime l'historique (tags en premier pour respecter les FK)
+        await pool.execute("DELETE FROM schema_version_tags WHERE source_id = $1", source_id)
+        await pool.execute("DELETE FROM schema_versions      WHERE source_id = $1", source_id)
+
+        # Nettoie Redis
+        try:
+            keys = await redis.keys(f"cdc:*{source_id}*")
+            if keys:
+                await redis.delete(*keys)
+        except Exception:
+            pass
+
+        # Insère le nouveau v1 propre
+        await pool.execute("""
+            INSERT INTO schema_versions (
+                source_id, version_number, fingerprint,
+                schema_snapshot, changes_delta, has_breaking_changes,
+                change_summary, created_at
+            ) VALUES ($1, 1, $2, $3, $4, FALSE, $5, NOW())
+        """,
+            source_id,
+            fp,
+            json.dumps(current_schema, default=str),
+            json.dumps([]),
+            json.dumps(summary),
+        )
+
+        logger.info(f"[CDC] reset-baseline source {source_id} → v1 propre ({len(current_schema)} entités)")
+        return {
+            "status":      "reset",
+            "new_version": 1,
+            "fingerprint": fp,
+            "entities":    len(current_schema),
+            "message":     "Baseline réinitialisée. v1 = état actuel de la source.",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[CDC] reset-baseline error: {e}", exc_info=True)
+        raise HTTPException(500, str(e))
 
 @app.get("/sources/{source_id}/versions", tags=["CDC"])
 async def schema_log(
@@ -4137,6 +5691,415 @@ async def cdc_notifications(
         "count":     len(notifs),
         "notifications": notifs,
     }
+
+
+# ── 7b. Subscriber status ─────────────────────────────────────
+
+@app.get("/sources/{source_id}/cdc/subscriber-log", tags=["CDC"])
+async def cdc_subscriber_log(
+    source_id: UUID,
+    limit: int = Query(20, ge=1, le=100),
+):
+    """
+    Retourne l'historique des traitements CDC automatiques :
+    - Invalidations de cache déclenchées
+    - Réindexations MeiliSearch effectuées
+    - Version et nombre de changements traités
+    Utile pour vérifier que le subscriber fonctionne correctement.
+    """
+    pool = await get_pg_pool()
+    try:
+        rows = await pool.fetch("""
+            SELECT
+                source_id, version, change_count,
+                cache_invalidated, reindex_triggered, processed_at
+            FROM cdc_subscriber_log
+            WHERE source_id = $1
+            ORDER BY processed_at DESC
+            LIMIT $2
+        """, source_id, limit)
+        return {
+            "source_id": str(source_id),
+            "count": len(rows),
+            "events": [
+                {
+                    "version":           r["version"],
+                    "change_count":      r["change_count"],
+                    "cache_invalidated": r["cache_invalidated"],
+                    "reindex_triggered": r["reindex_triggered"],
+                    "processed_at":      r["processed_at"].isoformat(),
+                }
+                for r in rows
+            ],
+        }
+    except Exception as e:
+        return {"source_id": str(source_id), "count": 0, "events": [], "note": str(e)}
+
+
+@app.post("/sources/{source_id}/cdc/trigger-invalidation", tags=["CDC"])
+async def cdc_trigger_invalidation(source_id: UUID):
+    """
+    Déclenche manuellement l'invalidation du cache et la réindexation
+    pour une source donnée. Utile pour tester le pipeline CDC sans attendre
+    un vrai breaking change.
+    """
+    redis = await get_redis()
+    pool  = await get_pg_pool()
+
+    # Récupère la dernière version
+    last_version = await pool.fetchval("""
+        SELECT COALESCE(MAX(version_number), 0)
+        FROM schema_versions WHERE source_id = $1
+    """, source_id)
+
+    # Invalide le cache Redis
+    cache_count = 0
+    try:
+        dash_keys = await redis.keys(f"onepilot:dashboard:{source_id}:*")
+        step_keys = await redis.keys("onepilot:step:*")
+        prof_keys = await redis.keys(f"onepilot:profile:{source_id}:*")
+        all_keys  = dash_keys + step_keys + prof_keys
+        if all_keys:
+            await redis.delete(*all_keys)
+            cache_count = len(all_keys)
+    except Exception as e:
+        logger.warning(f"[CDC Trigger] Cache error: {e}")
+
+    # Déclenche réindexation
+    reindex_result = {}
+    try:
+        from .cdc_reindexer import CDCReindexer
+        reindexer = CDCReindexer(pool, redis)
+        reindex_result = await reindexer.full_reindex(source_id)
+    except Exception as e:
+        reindex_result = {"error": str(e)}
+
+    return {
+        "source_id":        str(source_id),
+        "version":          last_version,
+        "cache_invalidated": cache_count,
+        "reindex":           reindex_result,
+        "status":            "ok",
+    }
+
+
+
+# ══════════════════════════════════════════════════════════════
+# FEEDBACK LOOP — Sprint 12
+# ══════════════════════════════════════════════════════════════
+
+async def _auto_retrain_fasttext_bg():
+    """
+    Réentraîne FastText automatiquement en arrière-plan.
+    Acquiert son propre pool — évite le bug pool fermé avant exécution.
+    """
+    try:
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            feedback_rows = await conn.fetch("""
+                SELECT question, intent
+                FROM   chat_feedback
+                WHERE  feedback_type     = 'like'
+                  AND  used_for_training = FALSE
+                  AND  question          != ''
+                ORDER  BY created_at ASC
+                LIMIT  500
+            """)
+
+        if not feedback_rows:
+            logger.info("[AutoRetrain] Aucun exemple disponible — abandon")
+            return
+
+        examples = [(r["question"], r["intent"]) for r in feedback_rows]
+        result   = retrain_fasttext_with_feedback(examples)
+
+        if result["status"] != "error":
+            questions = [r["question"] for r in feedback_rows]
+            async with pool.acquire() as conn:
+                await conn.execute("""
+                    UPDATE chat_feedback
+                    SET    used_for_training = TRUE
+                    WHERE  feedback_type     = 'like'
+                      AND  used_for_training = FALSE
+                      AND  question          = ANY()
+                """, questions)
+            logger.info(
+                f"[AutoRetrain] ✅ FastText réentraîné automatiquement — "
+                f"+{result['examples_added']} exemples, total={result['total_examples']}"
+            )
+        else:
+            logger.error(f"[AutoRetrain] ❌ Erreur retrain: {result['message']}")
+
+    except Exception as e:
+        logger.error(f"[AutoRetrain] Exception non gérée: {e}")
+
+
+@app.post("/feedback", tags=["Feedback"])
+async def submit_chat_feedback(req: dict):
+    """
+    Enregistre le feedback utilisateur (👍/👎) depuis le chat.
+    Appelé automatiquement par chat.html quand l'utilisateur clique
+    sur like/dislike.
+
+    Body: {
+        conversation_id, source_id, message_id,
+        feedback_type: "like"|"dislike",
+        answer: str (texte de la réponse)
+    }
+    """
+    pool = await get_pg_pool()
+
+    conversation_id = req.get("conversation_id", "")
+    source_id_str   = req.get("source_id", "")
+    message_id      = req.get("message_id", "")
+    feedback_type   = req.get("feedback_type", "")
+    answer          = req.get("answer", "")[:500]
+    # Question envoyée directement depuis chat.html
+    question_direct = req.get("question", "")
+
+    if feedback_type not in ("like", "dislike"):
+        raise HTTPException(400, "feedback_type doit être 'like' ou 'dislike'")
+
+    # Récupère question + intent depuis nlu_query_log
+    # Si question déjà fournie par le client, on l'utilise directement
+    question   = question_direct
+    intent     = ""
+    confidence = 0.0
+    try:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow("""
+                SELECT question, intent, confidence
+                FROM   nlu_query_log
+                WHERE  conversation_id = $1
+                ORDER  BY created_at DESC
+                LIMIT  1
+            """, conversation_id)
+            if row:
+                if not question:
+                    question = row["question"] or ""
+                intent     = str(row["intent"] or "")
+                confidence = float(row["confidence"] or 0)
+    except Exception as e:
+        logger.warning(f"[Feedback] nlu_query_log lookup error: {e}")
+
+    # Enregistre le feedback
+    try:
+        async with pool.acquire() as conn:
+            await conn.execute("""
+                INSERT INTO chat_feedback
+                    (conversation_id, source_id, message_id,
+                     question, answer, intent, confidence,
+                     feedback_type, created_at)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
+            """,
+                conversation_id,
+                UUID(source_id_str) if source_id_str else None,
+                message_id,
+                question,
+                answer,
+                intent,
+                confidence,
+                feedback_type,
+            )
+    except Exception as e:
+        logger.error(f"[Feedback] Insert error: {e}")
+        raise HTTPException(500, f"Erreur enregistrement feedback: {e}")
+
+    # Comptage des likes non encore utilisés pour training
+    like_count = 0
+    try:
+        async with pool.acquire() as conn:
+            like_count = await conn.fetchval("""
+                SELECT COUNT(*) FROM chat_feedback
+                WHERE  feedback_type     = 'like'
+                  AND  used_for_training = FALSE
+                  AND  question          != ''
+            """)
+    except Exception:
+        pass
+
+    logger.info(
+        f"[Feedback] {feedback_type} enregistré — "
+        f"question='{question[:40]}' intent={intent} "
+        f"(likes non traités: {like_count})"
+    )
+
+    # ── Retrain automatique — seuil 10 likes non traités ─────────────
+    auto_retrained = False
+    if feedback_type == "like" and like_count >= 10:
+        logger.info("[Feedback] Seuil 10 likes atteint → retrain FastText automatique")
+        asyncio.create_task(_auto_retrain_fasttext_bg())
+        auto_retrained = True
+
+    return {
+        "status":                 "ok",
+        "feedback_type":          feedback_type,
+        "likes_pending":          like_count,
+        "retrain_suggested":      like_count >= 10,
+        "auto_retrain_triggered": auto_retrained,
+    }
+
+
+@app.get("/feedback/stats", tags=["Feedback"])
+async def feedback_stats():
+    """
+    Statistiques du feedback collecté.
+    Retourne le nombre de likes/dislikes, les intents les plus corrigés,
+    et si un réentraînement est recommandé.
+    """
+    pool = await get_pg_pool()
+    try:
+        async with pool.acquire() as conn:
+            total = await conn.fetchrow("""
+                SELECT
+                    COUNT(*) FILTER (WHERE feedback_type='like')    AS likes,
+                    COUNT(*) FILTER (WHERE feedback_type='dislike') AS dislikes,
+                    COUNT(*) FILTER (WHERE feedback_type='like'
+                                      AND used_for_training=FALSE
+                                      AND question != ''
+                                      )           AS likes_pending
+                FROM chat_feedback
+            """)
+
+            by_intent = await conn.fetch("""
+                SELECT intent,
+                       COUNT(*) FILTER (WHERE feedback_type='like')    AS likes,
+                       COUNT(*) FILTER (WHERE feedback_type='dislike') AS dislikes
+                FROM   chat_feedback
+                WHERE  intent != ''
+                GROUP  BY intent
+                ORDER  BY dislikes DESC
+                LIMIT  10
+            """)
+
+        return {
+            "total_likes":        total["likes"],
+            "total_dislikes":     total["dislikes"],
+            "likes_pending":      total["likes_pending"],
+            "retrain_suggested":  total["likes_pending"] >= 10,
+            "by_intent": [
+                {
+                    "intent":   r["intent"],
+                    "likes":    r["likes"],
+                    "dislikes": r["dislikes"],
+                }
+                for r in by_intent
+            ],
+        }
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@app.post("/feedback/retrain-fasttext", tags=["Feedback"])
+async def retrain_fasttext_endpoint():
+    """
+    Réentraîne FastText avec les questions validées (👍).
+    Ajoute les questions likées au dataset d'entraînement
+    et recharge le modèle en mémoire immédiatement (hot reload).
+
+    Déclencher manuellement ou automatiquement quand likes_pending >= 10.
+    """
+    pool = await get_pg_pool()
+
+    # Récupère les questions likées non encore utilisées
+    try:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT question, intent
+                FROM   chat_feedback
+                WHERE  feedback_type     = 'like'
+                  AND  used_for_training = FALSE
+                  AND  question          != ''
+                ORDER  BY created_at ASC
+                LIMIT  500
+            """)
+    except Exception as e:
+        raise HTTPException(500, f"Erreur lecture feedback: {e}")
+
+    if not rows:
+        return {
+            "status":  "nothing_to_train",
+            "message": "Aucun feedback 👍 disponible pour l'entraînement",
+        }
+
+    examples = [(r["question"], r["intent"]) for r in rows]
+
+    # Réentraîne FastText
+    result = retrain_fasttext_with_feedback(examples)
+
+    if result["status"] == "error":
+        raise HTTPException(500, result["message"])
+
+    # Marque les exemples comme utilisés
+    try:
+        async with pool.acquire() as conn:
+            questions = [r["question"] for r in rows]
+            await conn.execute("""
+                UPDATE chat_feedback
+                SET    used_for_training = TRUE
+                WHERE  feedback_type     = 'like'
+                  AND  used_for_training = FALSE
+                  AND  question          = ANY($1)
+            """, questions)
+    except Exception as e:
+        logger.warning(f"[Feedback Retrain] Mark used error: {e}")
+
+    logger.info(
+        f"[Feedback Retrain] ✅ FastText réentraîné — "
+        f"+{result['examples_added']} exemples, "
+        f"total={result['total_examples']}"
+    )
+
+    return {
+        "status":          "retrained",
+        "examples_added":  result["examples_added"],
+        "total_examples":  result["total_examples"],
+        "model_reloaded":  result["model_reloaded"],
+        "message":         f"FastText réentraîné avec {result['examples_added']} nouveaux exemples",
+    }
+
+
+@app.get("/feedback/history", tags=["Feedback"])
+async def feedback_history(
+    limit: int = Query(50, ge=1, le=200),
+    feedback_type: Optional[str] = Query(None),
+):
+    """Historique des feedbacks collectés."""
+    pool = await get_pg_pool()
+    try:
+        async with pool.acquire() as conn:
+            where = "WHERE 1=1"
+            params = [limit]
+            if feedback_type in ("like", "dislike"):
+                where += " AND feedback_type = $2"
+                params.append(feedback_type)
+
+            rows = await conn.fetch(f"""
+                SELECT conversation_id, source_id, message_id,
+                       question, intent, confidence, feedback_type,
+                       used_for_training, created_at
+                FROM   chat_feedback
+                {where}
+                ORDER  BY created_at DESC
+                LIMIT  $1
+            """, *params)
+
+        return {
+            "count": len(rows),
+            "feedbacks": [
+                {
+                    "question":          r["question"],
+                    "intent":            r["intent"],
+                    "confidence":        r["confidence"],
+                    "feedback_type":     r["feedback_type"],
+                    "used_for_training": r["used_for_training"],
+                    "created_at":        r["created_at"].isoformat(),
+                }
+                for r in rows
+            ],
+        }
+    except Exception as e:
+        raise HTTPException(500, str(e))
 
 
 # ── 8. Impact analysis ────────────────────────────────────────
@@ -4429,6 +6392,69 @@ async def save_descriptions(source_id: UUID, body: dict):
     return {"success": True, "saved": count}
 
 
+@app.post("/sources/{source_id}/generate-descriptions", status_code=202, tags=["Metadata"])
+async def generate_llm_descriptions(
+    source_id: UUID,
+    background_tasks: BackgroundTasks,
+    limit: int = 500,
+):
+    """Génère automatiquement des descriptions métier LLM pour les tables de la source."""
+    pool = await get_pg_pool()
+    async with pool.acquire() as conn:
+        src = await conn.fetchrow(
+            "SELECT id, name, connector_type FROM data_sources WHERE id = $1", source_id
+        )
+    if not src:
+        raise HTTPException(404, f"Source {source_id} introuvable")
+
+    from .llm_description_generator import run_description_generation_bg
+    src_type = src["connector_type"] or "unknown"
+
+    background_tasks.add_task(
+        run_description_generation_bg,
+        source_id   = source_id,
+        source_name = src["name"],
+        source_type = src_type,
+        pg_pool     = pool,
+        limit       = limit,
+    )
+    logger.info(f"[DescGen] Tâche lancée pour {src['name']} ({limit} tables max)")
+    return {
+        "source_id":  str(source_id),
+        "source":     src["name"],
+        "status":     "started",
+        "message":    f"Génération descriptions LLM lancée — jusqu\'à {limit} tables",
+        "check_progress": f"GET /sources/{source_id}/description-stats",
+    }
+
+
+@app.get("/sources/{source_id}/description-stats", tags=["Metadata"])
+async def get_description_stats(source_id: UUID):
+    """Retourne les statistiques d\'enrichissement des descriptions LLM."""
+    pool = await get_pg_pool()
+    async with pool.acquire() as conn:
+        stats = await conn.fetchrow("""
+            SELECT
+                COUNT(*) AS total,
+                COUNT(*) FILTER (WHERE description LIKE '[LLM]%') AS with_llm_desc,
+                COUNT(*) FILTER (WHERE description IS NULL OR description = '') AS without_desc,
+                COUNT(*) FILTER (WHERE description IS NOT NULL AND description != ''
+                                  AND description NOT LIKE '[LLM]%') AS with_manual_desc
+            FROM source_entities
+            WHERE source_id = $1 AND is_visible = TRUE
+        """, source_id)
+    return {
+        "source_id":        str(source_id),
+        "total_entities":   stats["total"],
+        "llm_described":    stats["with_llm_desc"],
+        "manual_described": stats["with_manual_desc"],
+        "undescribed":      stats["without_desc"],
+        "coverage_pct":     round(
+            (stats["with_llm_desc"] + stats["with_manual_desc"]) / max(stats["total"], 1) * 100, 1
+        ),
+    }
+
+
 @app.post("/sources/{source_id}/enrichment/cardinality", tags=["Metadata"])
 async def save_cardinality(source_id: UUID, body: dict):
     """
@@ -4559,6 +6585,197 @@ async def get_relations_by_method(source_id: UUID):
         ],
     }
 
+
+
+
+# ══════════════════════════════════════════════════════════════
+# §2.2.2A — IMPORT VUES SQL (view_parser.py)
+# ══════════════════════════════════════════════════════════════
+
+class ViewImportRequest(BaseModel):
+    views: List[Dict] = Field(
+        ...,
+        description="Liste de vues : [{name: str, definition: str}]",
+        example=[{"name": "Comptes", "definition": "CREATE VIEW Comptes AS SELECT ..."}]
+    )
+
+@app.post("/sources/{source_id}/views/import", tags=["Relations"])
+async def import_views_paste(source_id: UUID, req: ViewImportRequest):
+    """
+    Importe les jointures extraites depuis les définitions SQL des vues.
+    Les relations sont sauvegardées dans entity_relations (method=view_join).
+    
+    Utilisation : coller les résultats de :
+        SELECT v.name, m.definition FROM sys.views v
+        JOIN sys.sql_modules m ON v.object_id = m.object_id
+    """
+    try:
+        from .view_parser import import_views_from_paste
+        result = await import_views_from_paste(source_id, req.views)
+        return result
+    except Exception as e:
+        logger.error(f"[Views] Import error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/sources/{source_id}/views/import-from-db", tags=["Relations"])
+async def import_views_from_db_endpoint(source_id: UUID):
+    """
+    Connecte directement à la base source et importe automatiquement
+    toutes les vues SQL et leurs jointures.
+    """
+    try:
+        from .view_parser import import_views_from_db
+        result = await import_views_from_db(source_id)
+        return result
+    except Exception as e:
+        logger.error(f"[Views] Auto-import error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/sources/{source_id}/views/stats", tags=["Relations"])
+async def get_views_stats(source_id: UUID):
+    """
+    Retourne les statistiques des jointures extraites depuis les vues SQL.
+    """
+    try:
+        from .view_parser import get_view_relations_stats
+        return await get_view_relations_stats(source_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+# ══════════════════════════════════════════════════════════════
+# §Sprint 8 — AGENTIC RAG ENDPOINT
+# ══════════════════════════════════════════════════════════════
+
+class AgentQueryRequest(BaseModel):
+    question:  str      = Field(..., description="Question en langage naturel")
+    source_id: str      = Field(..., description="UUID de la source de données")
+    dialect:   str      = Field("mssql", description="Dialecte SQL")
+    verbose:   bool     = Field(False, description="Inclure les étapes de raisonnement")
+
+
+@app.post("/orchestrator/query", tags=["Agent"])
+async def orchestrator_query(req: AgentQueryRequest):
+    """
+    Sprint 9 — Orchestrateur Multi-Agent RAG.
+    Route vers DirectSQL, MultiQuery ou ReAct+ selon la question.
+    Supporte les questions composées (ET / VS) avec exécution parallèle.
+    """
+    try:
+        from uuid import UUID as _UUID
+        from .orchestrator import run_orchestrator, orchestrator_result_to_dict
+
+        source_id = _UUID(req.source_id)
+        pool      = await get_pg_pool()
+
+        async with pool.acquire() as conn:
+            src_row = await conn.fetchrow(
+                """SELECT id, name, connector_type, host, port,
+                          database_name, username, base_url
+                   FROM data_sources WHERE id = $1""",
+                source_id
+            )
+            if not src_row:
+                raise HTTPException(status_code=404, detail="Source introuvable")
+            sec = await conn.fetchrow(
+                "SELECT secret_value FROM connection_secrets WHERE source_id=$1 AND secret_key='password'",
+                source_id
+            )
+
+        source_dict = dict(src_row)
+        source_dict["password"] = sec["secret_value"] if sec else ""
+
+        result = await run_orchestrator(
+            question    = req.question,
+            source_id   = source_id,
+            pg_pool     = pool,
+            source_dict = source_dict,
+            dialect     = req.dialect,
+        )
+
+        return orchestrator_result_to_dict(result)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[OrchestratorQuery] Erreur : {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/agent/query", tags=["Agent"])
+async def agent_query(req: AgentQueryRequest):
+    """
+    Sprint 8 — Agentic RAG (legacy).
+    Utilisé en fallback ou pour les tests unitaires.
+    Pour le benchmark Sprint 9, utiliser /orchestrator/query.
+    """
+    try:
+        from uuid import UUID as _UUID
+        from .agentic_rag import run_agentic_rag, agent_result_to_dict
+
+        source_id = _UUID(req.source_id)
+        pool      = await get_pg_pool()
+
+        # Récupérer la source
+        async with pool.acquire() as conn:
+            src_row = await conn.fetchrow(
+                """SELECT id, name, connector_type, host, port,
+                          database_name, username, base_url
+                   FROM data_sources WHERE id = $1""",
+                source_id
+            )
+            if not src_row:
+                raise HTTPException(status_code=404, detail="Source introuvable")
+
+            sec = await conn.fetchrow(
+                "SELECT secret_value FROM connection_secrets WHERE source_id=$1 AND secret_key='password'",
+                source_id
+            )
+
+        source_dict = dict(src_row)
+        source_dict["password"] = sec["secret_value"] if sec else ""
+
+        result = await run_agentic_rag(
+            question    = req.question,
+            source_id   = source_id,
+            pg_pool     = pool,
+            source_dict = source_dict,
+            dialect     = req.dialect,
+        )
+
+        data = agent_result_to_dict(result)
+        if not req.verbose:
+            data.pop("steps", None)
+
+        return data
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[AgentRAG] Endpoint error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/agent/status", tags=["Agent"])
+async def agent_status():
+    """Statut et configuration du Sprint 8 Agentic RAG."""
+    return {
+        "sprint":          "Sprint 8 — Agentic RAG",
+        "enabled":         True,
+        "max_iterations":  5,
+        "max_sql_retries": 3,
+        "tools": [
+            "search_schema (RAG 7C)",
+            "search_views (vues SXA)",
+            "get_table_columns",
+            "execute_sql (ConnectorFactory)",
+            "validate_result",
+        ],
+        "supported_sources": ["mssql", "postgresql", "odata", "file_csv", "rest", "graphql"],
+    }
 
 # ══════════════════════════════════════════════════════════════
 # §2.2.5 — CDC DB TRIGGERS (WAL + MSSQL CDC)

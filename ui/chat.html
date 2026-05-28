@@ -19,7 +19,7 @@
   --orange:#ff7a35;--red:#ff3663;--yellow:#ffbf40;--purple:#8b6eff;
   --font-mono:"JetBrains Mono",monospace;--font-sans:"Inter",-apple-system,BlinkMacSystemFont,sans-serif;
   --r:7px;--r-lg:14px;--r-sm:4px;
-  --sb-w:248px;--header-h:52px;--dp-w:360px;
+  --sb-w:275px;--header-h:52px;--dp-w:360px;
   --shadow:0 12px 40px rgba(0,0,0,.7);
   --tr:all .26s cubic-bezier(.4,0,.2,1);
 }
@@ -63,18 +63,26 @@ html,body{height:100%;background:var(--bg-0);color:var(--text-0);font-family:var
 /* ════ HEADER ════ */
 .hdr{height:var(--header-h);display:flex;align-items:center;gap:11px;padding:0 18px;background:var(--bg-1);border-bottom:1px solid var(--border);position:relative;z-index:30;flex-shrink:0;}
 .hdr::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent 0%,var(--accent) 35%,var(--accent2) 65%,transparent 100%);opacity:.22;}
-.logo-a{display:flex;align-items:center;gap:9px;padding:4px 8px;border-radius:var(--r);cursor:pointer;text-decoration:none;transition:.14s;}
+.logo-a{display:flex;align-items:center;gap:9px;padding:4px 8px;border-radius:var(--r);cursor:pointer;text-decoration:none;transition:.14s;min-width:52px;}
 .logo-a:hover{background:var(--bg-3);}
 .logo-img{width:28px;height:28px;object-fit:contain;filter:drop-shadow(0 0 8px rgba(0,200,245,.5));}
-.logo-n{font-family:var(--font-mono);font-size:13px;font-weight:600;letter-spacing:.08em;color:var(--text-0);}
-.logo-c{font-size:9px;font-weight:700;letter-spacing:.18em;color:var(--accent);background:var(--accent-glow);padding:2px 7px;border-radius:8px;border:1px solid rgba(0,200,245,.22);text-transform:uppercase;}
+.logo-n{font-family:var(--font-mono);font-size:13px;font-weight:600;letter-spacing:.08em;color:var(--text-0);transition:opacity .2s;}
+/* Quand sidebar fermée → logo centré comme les icônes rail */
+.sb.closed ~ .hdr .logo-a, html:has(.sb.closed) .logo-a{padding:4px;justify-content:center;min-width:52px;}
+.sb.closed ~ .hdr .logo-n, html:has(.sb.closed) .logo-n{display:none;}
+/* Titre toujours à gauche */
+.conv-title-wrap{position:static!important;left:auto!important;}
+.logo-c{font-size:9px;font-weight:700;letter-spacing:.18em;color:var(--accent);background:var(--accent-glow);padding:2px 7px;border-radius:8px;border:1px solid rgba(0,200,245,.22);text-transform:uppercase;transition:opacity .2s;}
+.sb.closed~* .logo-n,.sb.closed~* .logo-c,
+.body:has(.sb.closed) .logo-n,.body:has(.sb.closed) .logo-c{display:none;}
 .hdiv{width:1px;height:20px;background:var(--border);flex-shrink:0;}
 .hsp{flex:1;}
 .src-pill{display:flex;align-items:center;gap:7px;padding:5px 13px;background:var(--bg-3);border:1px solid var(--border);border-radius:20px;font-size:12px;color:var(--text-1);}
 .src-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 7px var(--green);flex-shrink:0;transition:.3s;}
 .src-dot.off{background:var(--text-3);box-shadow:none;}
 .src-lbl{font-family:var(--font-mono);font-size:11px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.stream-badge{display:none;align-items:center;gap:5px;padding:3px 10px;border-radius:10px;background:rgba(0,217,160,.08);border:1px solid rgba(0,217,160,.2);font-size:11px;font-family:var(--font-mono);color:var(--green);}
+/* Badge génération dans le header après le titre */
+.stream-badge{display:none;align-items:center;gap:5px;padding:3px 10px;border-radius:10px;background:rgba(0,217,160,.08);border:1px solid rgba(0,217,160,.2);font-size:11px;font-family:var(--font-mono);color:var(--green);flex-shrink:0;}
 .stream-badge.on{display:flex;}
 .sp{width:5px;height:5px;border-radius:50%;background:var(--green);animation:sPulse .7s ease-in-out infinite;}
 @keyframes sPulse{0%,100%{opacity:1}50%{opacity:.3}}
@@ -116,31 +124,60 @@ html.light .db-hdr-title{color:#0c1924;}
 
 /* ════ SIDEBAR ════ */
 .sb{width:var(--sb-w);flex-shrink:0;background:var(--bg-1);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;transition:var(--tr);}
-.sb.closed{width:0;border-right:none;}
-.sb-top{padding:12px 10px 10px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:8px;}
-.new-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:7px;padding:9px 14px;background:transparent;border:1px solid var(--border-hi);border-radius:22px;cursor:pointer;font-size:13px;font-weight:500;color:var(--text-0);transition:.14s;font-family:var(--font-sans);}
-.new-btn:hover{background:var(--bg-2);border-color:var(--text-2);}
-.new-btn svg{width:13px;height:13px;flex-shrink:0;}
+.sb.closed{width:52px;border-right:1px solid var(--border);}
+/* ── Rail (sidebar collapsed) ── */
+.sb-rail{display:none;flex-direction:column;align-items:center;gap:2px;padding:10px 6px;flex:1;overflow:hidden;}
+.sb.closed .sb-rail{display:flex;}
+.sb.closed .sb-top,.sb.closed .sb-tpl-section,.sb.closed .sb-fav-section,
+.sb.closed .sb-pinned-section,.sb.closed .sb-section-hdr,.sb.closed .conv-scroll,
+.sb.closed .sb-footer,.sb.closed .sb-discussions-item,
+.sb.closed [style*="height:8px"],.sb.closed [style*="height:4px"],
+.sb.closed [style*="height:1px"]{display:none!important;}
+.rail-btn{width:36px;height:36px;border:none;background:transparent;color:var(--text-2);cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:9px;transition:.13s;flex-shrink:0;position:relative;}
+.rail-btn:hover{background:var(--bg-3);color:var(--text-0);}
+.rail-btn svg{width:17px;height:17px;}
+.rail-btn.rail-new{color:var(--text-0);}
+.rail-divider{width:22px;height:1px;background:var(--border);margin:4px 0;flex-shrink:0;}
+.rail-user{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#040e1a;cursor:pointer;margin-top:auto;flex-shrink:0;transition:.13s;}
+.rail-user:hover{filter:brightness(1.15);}
+.rail-user.adm{background:linear-gradient(135deg,var(--accent),var(--accent2));}
+.rail-user.usr{background:linear-gradient(135deg,var(--green),var(--accent));}
+/* ── Rail popups ── */
+.rail-popup{display:none;position:fixed;left:58px;background:var(--bg-1);border:1px solid var(--border);border-radius:10px;padding:6px;min-width:160px;box-shadow:var(--shadow);z-index:200;}
+.rail-popup.open{display:block;}
+.rail-popup-title{font-size:10px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;padding:4px 8px 6px;}
+.rail-popup-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;cursor:pointer;font-size:12px;color:var(--text-1);transition:.12s;}
+.rail-popup-item:hover{background:var(--bg-3);color:var(--text-0);}
+.rail-popup-item svg{flex-shrink:0;color:var(--text-2);}
+.sb-top{padding:8px 4px 4px;border-bottom:none;display:flex;flex-direction:column;gap:2px;}
+.new-btn{width:100%;display:flex;align-items:center;justify-content:flex-start;gap:9px;padding:7px 10px;background:transparent;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:400;color:var(--text-1);transition:.12s;font-family:var(--font-sans);}
+.new-btn:hover{background:var(--bg-3);color:var(--text-0);}
+.new-btn svg{width:16px;height:16px;flex-shrink:0;color:var(--text-2);}
 .sb-search{position:relative;}
-.sb-search input{width:100%;padding:8px 14px 8px 32px;background:transparent;border:1px solid var(--border-hi);border-radius:22px;font-size:13px;font-family:var(--font-sans);color:var(--text-0);outline:none;transition:.14s;}
-.sb-search input:focus{border-color:var(--text-2);}
-.sb-search input::placeholder{color:var(--text-3);}
-.sb-ico{position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--text-3);pointer-events:none;}
-.sb-ico svg{width:12px;height:12px;}
+.sb-search input{width:100%;padding:7px 10px 7px 36px;background:transparent;border:none;border-radius:8px;font-size:13px;font-family:var(--font-sans);color:var(--text-1);outline:none;transition:.12s;}
+.sb-search input:hover{background:var(--bg-3);}
+.sb-search input:focus{background:var(--bg-3);}
+.sb-search input::placeholder{color:var(--text-2);font-size:13px;}
+.sb-ico{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-2);pointer-events:none;}
+.sb-ico svg{width:16px;height:16px;}
+.sb-discussions-item{display:flex;align-items:center;gap:9px;padding:7px 10px;margin:0 4px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:400;color:var(--text-1);transition:.12s;user-select:none;background:transparent;border:none;outline:none;width:calc(100% - 8px);text-align:left;}
+.sb-discussions-item:hover{background:var(--bg-3);color:var(--text-0);}
+.sb-discussions-item:focus{background:transparent;outline:none;}
+.sb-discussions-item svg{width:16px;height:16px;color:var(--text-2);flex-shrink:0;}
 .sb-lbl{padding:10px 14px 6px;font-family:var(--font-sans);font-size:11px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;color:var(--text-3);display:flex;align-items:center;justify-content:space-between;}
 .sb-ct{background:var(--bg-3);border:1px solid var(--border);border-radius:8px;padding:1px 7px;font-size:9px;color:var(--text-2);}
 .conv-scroll{flex:1;overflow-y:auto;padding:4px 7px 8px;}
 .conv-scroll::-webkit-scrollbar{width:2px;}
 .conv-scroll::-webkit-scrollbar-thumb{background:var(--border-hi);border-radius:1px;}
-.ci{display:flex;align-items:flex-start;gap:9px;padding:10px;border-radius:var(--r);cursor:pointer;color:var(--text-2);border:1px solid transparent;transition:all .13s;margin-bottom:2px;position:relative;}
+.ci{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:var(--r);cursor:pointer;color:var(--text-2);border:1px solid transparent;transition:all .13s;margin-bottom:1px;position:relative;}
 .ci:hover{background:var(--bg-3);color:var(--text-0);border-color:var(--border);}
 .ci.active{background:linear-gradient(135deg,var(--accent-glow),var(--accent2-glow));color:var(--accent);border-color:rgba(0,200,245,.18);}
 .ci.active::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:2.5px;height:52%;background:var(--accent);border-radius:0 2px 2px 0;}
-.ci-wrap{width:30px;height:30px;border-radius:7px;flex-shrink:0;background:var(--bg-3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;margin-top:1px;}
+.ci-wrap{display:none!important;}
 .ci.active .ci-wrap{background:var(--accent-glow);border-color:rgba(0,200,245,.22);}
-.ci-body{flex:1;min-width:0;}
-.ci-title{font-size:12px;font-weight:500;color:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4;margin-bottom:3px;}
-.ci-foot{display:flex;align-items:center;justify-content:space-between;gap:4px;}
+.ci-body{flex:1;min-width:0;display:flex;align-items:center;gap:8px;overflow:hidden;}
+.ci-title{font-size:13px;font-weight:400;color:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4;flex:1;min-width:0;}
+.ci-foot{display:flex;align-items:center;gap:4px;flex-shrink:0;}
 .ci-time{font-family:var(--font-sans);font-size:11px;color:var(--text-3);}
 .ci-src{font-family:var(--font-sans);font-size:10px;color:var(--text-2);background:transparent;border:1px solid var(--border);border-radius:20px;padding:1px 8px;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .ci-del{opacity:0;color:var(--text-3);font-size:14px;flex-shrink:0;cursor:pointer;padding:3px 5px;transition:.12s;line-height:1;border-radius:4px;align-self:flex-start;}
@@ -156,8 +193,29 @@ html.light .db-hdr-title{color:#0c1924;}
 .sb-back:hover{background:var(--bg-3);color:var(--text-0);}
 .sb-back svg{width:12px;height:12px;}
 
-/* ════ WORKSPACE ════ */
-.wrk{flex:1;display:flex;overflow:hidden;min-width:0;}
+.wrk{flex:1;display:flex;overflow:hidden;min-width:0;position:relative;}
+/* ══ PANNEAU DISCUSSIONS ══ */
+.disc-panel{position:absolute;inset:0;background:var(--bg-0);z-index:50;display:flex;flex-direction:column;padding:32px 48px;}
+.disc-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;}
+.disc-hdr-actions{display:flex;align-items:center;gap:10px;}
+.disc-close-btn{width:34px;height:34px;border:none;background:var(--bg-3);border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-2);transition:.13s;}
+.disc-close-btn:hover{background:var(--bg-4);color:var(--text-0);}
+.disc-close-btn svg{width:16px;height:16px;}
+.disc-title{font-size:24px;font-weight:700;color:var(--text-0);letter-spacing:-.02em;}
+.disc-new-btn{padding:8px 18px;background:var(--text-0);color:var(--bg-0);border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font-sans);transition:.14s;}
+.disc-new-btn:hover{opacity:.85;}
+.disc-search-wrap{position:relative;margin-bottom:20px;}
+.disc-search-wrap svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:var(--text-3);pointer-events:none;}
+.disc-search{width:100%;padding:11px 14px 11px 42px;background:var(--bg-2);border:1px solid var(--border);border-radius:10px;font-size:14px;font-family:var(--font-sans);color:var(--text-0);outline:none;transition:.15s;}
+.disc-search:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow);}
+.disc-search::placeholder{color:var(--text-3);}
+.disc-list{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:1px;}
+.disc-item{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-radius:8px;cursor:pointer;transition:.12s;}
+.disc-item:hover{background:var(--bg-2);}
+.disc-item-title{font-size:14px;font-weight:500;color:var(--text-0);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;}
+.disc-item-meta{display:flex;align-items:center;gap:10px;flex-shrink:0;margin-left:16px;}
+.disc-item-time{font-size:12px;color:var(--text-3);}
+.disc-item-src{font-size:11px;color:var(--text-2);}
 
 /* ════ RESIZER ════ */
 .resizer{width:4px;background:var(--border);cursor:col-resize;flex-shrink:0;transition:background .14s;position:relative;z-index:5;}
@@ -207,15 +265,24 @@ html.light .db-hdr-title{color:#0c1924;}
 .dot{width:5px;height:5px;border-radius:50%;background:var(--text-2);animation:dB 1.1s ease-in-out infinite;}
 .dot:nth-child(2){animation-delay:.18s;}.dot:nth-child(3){animation-delay:.36s;}
 @keyframes dB{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
-.bbl-actions{display:flex;gap:4px;margin-top:5px;opacity:0;transition:opacity .14s;}
-.msg-grp:hover .bbl-actions{opacity:1;}
-.bbl-act{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--r-sm);font-size:10.5px;color:var(--text-2);cursor:pointer;font-family:var(--font-mono);transition:.12s;}
-.bbl-act:hover{color:var(--accent);border-color:rgba(0,200,245,.25);background:var(--bg-3);}
-.bbl-act.playing{color:var(--green);border-color:rgba(0,217,160,.25);}
+.bbl-actions{display:flex;flex-direction:row;gap:2px;margin-top:3px;opacity:1;align-items:center;}
+.bbl-act{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;background:transparent;border:none;border-radius:7px;color:var(--text-3);cursor:pointer;transition:.13s;}
+.bbl-act:hover{background:var(--bg-3);color:var(--text-0);}
+.bbl-act svg{width:16px;height:16px;}
+.bbl-act:hover{background:var(--bg-3);color:var(--text-0);}
+.bbl-act svg{width:16px;height:16px;}
+/* ── Bloc code style ChatGPT ── */
+.pre-wrap{border-radius:10px;overflow:hidden;border:1px solid var(--border);margin:4px 0 2px;width:100%;}
+.pre-wrap pre{margin:0;border:none;border-radius:0;background:var(--bg-0);padding:14px 16px;overflow-x:auto;width:100%;box-sizing:border-box;color:var(--text-0);}
+.pre-header{display:flex;align-items:center;justify-content:space-between;padding:6px 12px;background:var(--bg-3);border-bottom:1px solid var(--border);}
+.pre-lang{font-size:11px;font-family:var(--font-mono);color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;}
+.pre-copy-btn{display:flex;align-items:center;justify-content:center;width:26px;height:26px;border:none;background:transparent;border-radius:6px;cursor:pointer;color:var(--text-2);transition:.13s;}
+.pre-copy-btn:hover{background:var(--bg-2);color:var(--text-0);}
+.pre-copy-btn svg{width:13px;height:13px;}
+.bbl-act.playing{color:var(--green);}
 .bbl-act.liked{color:var(--green);} .bbl-act.disliked{color:var(--red);}
-.bbl-act.explain-btn{color:var(--accent);border-color:rgba(0,200,245,.2);}
-.bbl-act.explain-btn:hover{background:rgba(0,200,245,.08);}
-.bbl-act.explain-active{color:var(--accent);border-color:var(--accent);background:rgba(0,200,245,.1);}
+.bbl-act.explain-btn{color:var(--text-3);}
+.bbl-act.explain-active{color:var(--accent);background:rgba(0,200,245,.1);}
 .explain-panel{margin-top:8px;background:var(--bg-1);border:1px solid var(--border-hi);border-radius:8px;padding:12px 14px;font-size:11.5px;font-family:var(--font-mono);color:var(--text-2);line-height:1.6;}
 .explain-panel .ep-title{font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;}
 .explain-panel .ep-section{margin-bottom:10px;}
@@ -333,8 +400,7 @@ html.light .db-rec-btn:hover{border-color:var(--accent);color:var(--accent);}
 .db-templates{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
 .db-tpl{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;background:var(--bg-2);border:1px solid var(--border-hi);border-radius:6px;cursor:pointer;font-size:11px;color:var(--text-2);transition:.12s;}
 .db-tpl:hover{border-color:var(--accent);color:var(--accent);}
-.bbl-act svg{width:10px;height:10px;}
-.bubble pre{background:var(--bg-0);border:1px solid var(--border);border-radius:var(--r-sm);padding:11px 14px;margin:9px 0;overflow-x:auto;font-family:var(--font-mono);font-size:11.5px;line-height:1.6;color:var(--accent);}
+.bubble pre{background:var(--bg-0);border:1px solid var(--border);border-radius:var(--r-sm);padding:11px 14px;margin:9px 0;overflow-x:auto;font-family:var(--font-mono);font-size:11.5px;line-height:1.6;color:var(--text-0);}
 .bubble code{font-family:var(--font-mono);font-size:12px;background:var(--bg-3);padding:1px 6px;border-radius:3px;color:var(--text-1);border:1px solid var(--border);}
 .bubble strong{color:var(--text-0);font-weight:700;}
 .bubble em{color:var(--text-1);}
@@ -591,7 +657,8 @@ html.light .db-rec-btn:hover{border-color:var(--accent);color:var(--accent);}
 
 /* 3. Source dans header */
 .src-pill,.src-lbl{display:none!important;}
-.hdr-src{display:flex;align-items:center;gap:7px;padding:5px 12px;background:var(--bg-3);border:1px solid var(--border);border-radius:20px;cursor:pointer;}
+.hdr-src{display:flex;align-items:center;gap:6px;padding:5px 12px;background:var(--bg-3);border:1px solid var(--border);border-radius:20px;cursor:pointer;transition:.13s;}
+.hdr-src:hover{border-color:var(--text-2);}
 .hdr-src:focus-within{border-color:rgba(0,200,245,.3);}
 .src-dot{width:7px;height:7px;border-radius:50%;background:var(--text-3);flex-shrink:0;transition:.3s;}
 .src-dot.on{background:var(--green);box-shadow:0 0 6px var(--green);}
@@ -840,10 +907,10 @@ kbd, samp, .font-mono {
 
 /* ══ USER MENU DROPDOWN ══ */
 .user-menu{
-  position:absolute;bottom:60px;left:10px;right:10px;
+  position:fixed;bottom:70px;left:10px;width:220px;
   background:var(--bg-2);border:1px solid var(--border);
   border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.3);
-  overflow:hidden;display:none;flex-direction:column;z-index:100;
+  overflow:hidden;display:none;flex-direction:column;z-index:500;
 }
 .user-menu.open{display:flex;}
 .um-item{
@@ -984,7 +1051,6 @@ code, pre, .bubble code, .bubble pre, kbd, .font-mono{
 /* ══ SVG ICONS STYLE ══ */
 .vez-svg{color:var(--accent);flex-shrink:0;}
 .dp-ico{color:var(--text-1);}
-.bbl-act svg{vertical-align:middle;}
 .conv-empty-ico svg{opacity:.3;}
 
 /* ── Dashboard summary bubble ── */
@@ -1001,47 +1067,47 @@ html.light .db-summary-line{background:rgba(0,100,200,.05);border-color:rgba(0,1
 .has-dashboard .db-wrap { width: 100%; margin-left: 0; }
 
 /* ── Templates + Favoris Sidebar ─────────────────────────────── */
-.sb-tpl-section,.sb-fav-section{margin:4px 8px 2px;border-radius:var(--r);overflow:hidden;border:1px solid var(--border);}
-.sb-tpl-header,.sb-fav-header{display:flex;align-items:center;gap:7px;padding:8px 10px;cursor:pointer;font-size:11px;font-weight:700;color:var(--text-2);background:var(--bg-2);transition:.12s;user-select:none;}
+.sb-tpl-section,.sb-fav-section{margin:2px 4px;border-radius:var(--r);overflow:hidden;border:none;background:none;}
+.sb-tpl-header,.sb-fav-header{display:flex;align-items:center;gap:9px;padding:7px 10px;cursor:pointer;font-size:13px;font-weight:400;color:var(--text-1);background:transparent;border:none;border-radius:8px;transition:.12s;user-select:none;}
 .sb-tpl-header:hover,.sb-fav-header:hover{background:var(--bg-3);color:var(--text-0);}
-.sb-tpl-header svg:first-child{width:13px;height:13px;color:var(--accent);flex-shrink:0;}
-.sb-fav-header svg:first-child{width:13px;height:13px;flex-shrink:0;}
+.sb-tpl-header svg:first-child{width:16px;height:16px;color:var(--text-2);flex-shrink:0;}
+.sb-fav-header svg:first-child{width:16px;height:16px;color:var(--text-2);flex-shrink:0;}
 .sb-tpl-header span,.sb-fav-header span{flex:1;}
-.sb-tpl-arrow,.sb-fav-arrow{width:10px;height:10px;transition:.2s;}
+.sb-tpl-arrow,.sb-fav-arrow{width:10px;height:10px;transition:.2s;opacity:.4;}
 .sb-tpl-section.open .sb-tpl-arrow,.sb-fav-section.open .sb-fav-arrow{transform:rotate(180deg);}
-.sb-tpl-cards{display:none;flex-direction:column;gap:1px;background:var(--bg-0);padding:4px;}
+.sb-tpl-cards{display:none;flex-direction:column;gap:0;background:none;padding:0 4px;}
 .sb-tpl-section.open .sb-tpl-cards{display:flex;}
-.sb-tpl-card{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:calc(var(--r) - 2px);cursor:pointer;transition:.12s;background:var(--bg-1);}
-.sb-tpl-card:hover{background:var(--bg-3);transform:translateX(2px);}
-.sb-tpl-card svg{width:14px;height:14px;color:var(--accent);flex-shrink:0;}
-.sb-tpl-name{font-size:11px;font-weight:600;color:var(--text-0);}
+.sb-tpl-card{display:flex;align-items:center;gap:9px;padding:6px 10px;border-radius:8px;cursor:pointer;transition:.12s;background:transparent;}
+.sb-tpl-card:hover{background:var(--bg-3);}
+.sb-tpl-card svg{width:14px;height:14px;color:var(--text-2);flex-shrink:0;}
+.sb-tpl-name{font-size:12px;font-weight:400;color:var(--text-1);}
 .sb-tpl-desc{font-size:9px;color:var(--text-3);margin-top:1px;}
 .db-fav-btn{color:var(--text-3) !important;transition:.15s !important;}
 .db-fav-btn.active svg,.db-fav-btn svg[style*="f5c518"]{fill:#f5c518 !important;stroke:#f5c518 !important;}
 .db-fav-btn:hover svg{stroke:#f5c518;}
-.sb-fav-list{display:none;flex-direction:column;gap:1px;background:var(--bg-0);padding:4px;max-height:180px;overflow-y:auto;}
+.sb-fav-list{display:none;flex-direction:column;gap:0;background:none;padding:0 4px;max-height:180px;overflow-y:auto;}
 .sb-fav-section.open .sb-fav-list{display:flex;}
-.sb-fav-item{display:flex;align-items:center;gap:6px;padding:6px 9px;border-radius:calc(var(--r) - 2px);cursor:pointer;transition:.12s;background:var(--bg-1);}
+.sb-fav-item{display:flex;align-items:center;gap:9px;padding:6px 10px;border-radius:8px;cursor:pointer;transition:.12s;background:transparent;}
 .sb-fav-item:hover{background:var(--bg-3);}
-.sb-fav-item-title{flex:1;font-size:11px;color:var(--text-0);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sb-fav-item-title{flex:1;font-size:12px;font-weight:400;color:var(--text-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .sb-fav-item-del{width:14px;height:14px;color:var(--text-3);cursor:pointer;flex-shrink:0;opacity:.5;}
 .sb-fav-item-del:hover{color:#e06c75;opacity:1;}
-.sb-fav-empty{font-size:10px;color:var(--text-3);padding:8px;text-align:center;}
+.sb-fav-empty{font-size:11px;color:var(--text-3);padding:6px 10px;}
 
 /* ── Templates Sidebar ───────────────────────────────────────── */
-.sb-tpl-section{margin:4px 8px 2px;border-radius:var(--r);overflow:hidden;border:1px solid var(--border);}
-.sb-tpl-header{display:flex;align-items:center;gap:7px;padding:8px 10px;cursor:pointer;font-size:11px;font-weight:700;color:var(--text-2);background:var(--bg-2);transition:.12s;user-select:none;}
+.sb-tpl-section{margin:2px 4px;border-radius:var(--r);overflow:hidden;border:none;background:none;}
+.sb-tpl-header{display:flex;align-items:center;gap:9px;padding:7px 10px;cursor:pointer;font-size:13px;font-weight:400;color:var(--text-1);background:transparent;border:none;border-radius:8px;transition:.12s;user-select:none;}
 .sb-tpl-header:hover{background:var(--bg-3);color:var(--text-0);}
-.sb-tpl-header svg:first-child{width:13px;height:13px;color:var(--accent);flex-shrink:0;}
+.sb-tpl-header svg:first-child{width:16px;height:16px;color:var(--text-2);flex-shrink:0;}
 .sb-tpl-header span{flex:1;}
-.sb-tpl-arrow{width:10px;height:10px;transition:.2s;}
+.sb-tpl-arrow{width:10px;height:10px;transition:.2s;opacity:.4;}
 .sb-tpl-section.open .sb-tpl-arrow{transform:rotate(180deg);}
-.sb-tpl-cards{display:none;flex-direction:column;gap:1px;background:var(--bg-0);padding:4px;}
+.sb-tpl-cards{display:none;flex-direction:column;gap:0;background:none;padding:0 4px;}
 .sb-tpl-section.open .sb-tpl-cards{display:flex;}
-.sb-tpl-card{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:calc(var(--r) - 2px);cursor:pointer;transition:.12s;background:var(--bg-1);}
-.sb-tpl-card:hover{background:var(--bg-3);transform:translateX(2px);}
-.sb-tpl-card svg{width:14px;height:14px;color:var(--accent);flex-shrink:0;}
-.sb-tpl-name{font-size:11px;font-weight:600;color:var(--text-0);}
+.sb-tpl-card{display:flex;align-items:center;gap:9px;padding:6px 10px;border-radius:8px;cursor:pointer;transition:.12px;background:transparent;}
+.sb-tpl-card:hover{background:var(--bg-3);}
+.sb-tpl-card svg{width:14px;height:14px;color:var(--text-2);flex-shrink:0;}
+.sb-tpl-name{font-size:12px;font-weight:400;color:var(--text-1);}
 .sb-tpl-desc{font-size:9px;color:var(--text-3);margin-top:1px;}
 
 /* ══ SHARE MODAL ══ */
@@ -1146,13 +1212,240 @@ html.light .db-summary-line{background:rgba(0,100,200,.05);border-color:rgba(0,1
   .hbtn span { display: none; }
 }
 /* ══ FIN SPRINT 6A ══ */
+
+/* ══ CONVERSATION TITLE IN HEADER ══ */
+.conv-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 340px;
+  flex-shrink: 1;
+  min-width: 0;
+  margin-left: 0;
+  position: absolute;
+  left: calc(var(--sb-w) + 18px);
+  transition: left var(--tr);
+}
+.conv-title-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+  padding: 4px 8px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 380px;
+  transition: .13s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.conv-title-btn:hover { background: var(--bg-3); color: var(--text-0); }
+.conv-title-btn svg { flex-shrink: 0; opacity: .5; }
+.conv-title-btn:hover svg { opacity: 1; }
+.conv-title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 320px; }
+
+/* Modal renommage */
+.rename-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.45);
+  z-index: 9500;
+  align-items: center;
+  justify-content: center;
+}
+.rename-modal.open { display: flex; }
+.rename-box {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 24px;
+  width: 360px;
+  max-width: 95vw;
+  box-shadow: 0 12px 40px rgba(0,0,0,.3);
+}
+.rename-box h4 { font-size: 13px; font-weight: 700; color: var(--text-0); margin: 0 0 12px; }
+.rename-input {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text-0);
+  font-size: 13px;
+  outline: none;
+  box-sizing: border-box;
+  margin-bottom: 12px;
+}
+.rename-input:focus { border-color: var(--accent); }
+.rename-btns { display: flex; gap: 8px; justify-content: flex-end; }
+.rename-cancel { padding: 6px 14px; border-radius: 7px; border: 1px solid var(--border); background: none; color: var(--text-2); font-size: 12px; cursor: pointer; }
+.rename-save { padding: 6px 14px; border-radius: 7px; border: none; background: var(--accent); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; }
+
+@media (max-width: 768px) {
+  .conv-title-wrap { max-width: 140px; }
+  .conv-title-text { max-width: 100px; }
+}
+
+/* ══ CDC VERSIONING PANEL ══ */
+.cdc-panel{display:none;position:fixed;top:0;right:0;width:400px;height:100vh;background:var(--bg-1);border-left:1px solid var(--border);z-index:400;flex-direction:column;box-shadow:-4px 0 20px rgba(0,0,0,.3);}
+.cdc-panel.open{display:flex;}
+.cdc-hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.cdc-hdr h3{font-size:13px;font-weight:700;color:var(--text-0);margin:0;display:flex;align-items:center;gap:8px;}
+.cdc-x{background:none;border:none;color:var(--text-3);cursor:pointer;font-size:16px;padding:2px 6px;border-radius:4px;}
+.cdc-x:hover{background:var(--bg-3);color:var(--text-0);}
+.cdc-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;}
+.cdc-tab{flex:1;padding:8px;font-size:11px;font-weight:600;color:var(--text-3);background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;transition:.13s;}
+.cdc-tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+.cdc-body{flex:1;overflow-y:auto;padding:12px;}
+.cdc-detect-btn{width:100%;padding:9px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:12px;}
+.cdc-detect-btn:hover{opacity:.88;}
+.v-item{background:var(--bg-2);border:1px solid var(--border);border-radius:7px;padding:10px 12px;margin-bottom:7px;cursor:pointer;transition:.13s;}
+.v-item:hover{border-color:var(--accent);}
+.v-item.breaking{border-left:3px solid #e53e3e;}
+.v-num{font-size:12px;font-weight:700;color:var(--accent);}
+.v-meta{font-size:10px;color:var(--text-3);margin-top:2px;}
+.v-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;}
+.v-tag{font-size:9px;background:rgba(0,200,245,.15);color:var(--accent);padding:1px 6px;border-radius:10px;border:1px solid rgba(0,200,245,.3);}
+.v-tag.brk{background:rgba(229,62,62,.15);color:#e53e3e;border-color:rgba(229,62,62,.3);}
+.diff-item{padding:5px 8px;border-radius:5px;margin-bottom:3px;font-size:10px;font-family:var(--font-mono);}
+.diff-add{background:rgba(0,138,80,.15);color:#00c48a;}
+.diff-del{background:rgba(192,48,48,.15);color:#e06060;}
+.diff-mod{background:rgba(212,160,0,.15);color:#d4a000;}
+.cdc-notif{background:var(--bg-2);border:1px solid var(--border);border-radius:7px;padding:8px 10px;margin-bottom:6px;font-size:11px;}
+.cdc-notif.breaking{border-left:3px solid #e53e3e;}
+.cdc-tag-form{display:flex;gap:6px;margin-bottom:12px;}
+.cdc-inp{flex:1;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-2);color:var(--text-0);font-size:11px;}
+.cdc-btn{padding:6px 12px;border-radius:6px;border:none;background:var(--accent);color:#fff;font-size:11px;cursor:pointer;}
+@media(max-width:768px){.cdc-panel{width:100vw;}}
+
+/* ══ CONV TITLE HEADER ══ */
+.sb.closed~* .conv-title-wrap,
+.body:has(.sb.closed) .conv-title-wrap { left: calc(52px + 18px); }
+.conv-title-wrap{display:none;align-items:center;gap:5px;flex-shrink:1;min-width:0;max-width:320px;position:absolute;left:calc(var(--sb-w) + 18px);transition:left var(--tr);}
+.conv-title-btn{background:none;border:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--text-1);padding:4px 8px;border-radius:6px;display:flex;align-items:center;gap:5px;transition:.13s;max-width:100%;overflow:hidden;}
+.conv-title-btn:hover{background:var(--bg-3);color:var(--text-0);}
+.conv-title-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.conv-title-btn svg{flex-shrink:0;opacity:.4;}
+.conv-title-btn:hover svg{opacity:.9;}
+.rename-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9500;align-items:center;justify-content:center;}
+.rename-overlay.open{display:flex;}
+.rename-box{background:var(--bg-1);border:1px solid var(--border);border-radius:10px;padding:20px 24px;width:360px;max-width:95vw;box-shadow:0 12px 40px rgba(0,0,0,.3);}
+.rename-box h4{font-size:13px;font-weight:700;color:var(--text-0);margin:0 0 12px;display:flex;align-items:center;gap:8px;}
+.rename-input{width:100%;padding:8px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg-2);color:var(--text-0);font-size:13px;outline:none;box-sizing:border-box;margin-bottom:12px;}
+.rename-input:focus{border-color:var(--accent);}
+.rename-btns{display:flex;gap:8px;justify-content:flex-end;}
+.rename-cancel{padding:6px 14px;border-radius:7px;border:1px solid var(--border);background:none;color:var(--text-2);font-size:12px;cursor:pointer;}
+.rename-save{padding:6px 14px;border-radius:7px;border:none;background:var(--accent);color:#fff;font-size:12px;font-weight:600;cursor:pointer;}
+.conv-ctx-menu{display:none;position:fixed;background:var(--bg-1);border:1px solid var(--border);border-radius:8px;padding:4px;min-width:180px;z-index:9000;box-shadow:0 8px 24px rgba(0,0,0,.25);}
+.conv-ctx-menu.show{display:block;}
+.ctx-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:6px;font-size:12px;color:var(--text-1);cursor:pointer;transition:.1s;}
+.ctx-item:hover{background:var(--bg-3);}
+.ctx-item.danger{color:#e06060;}
+.ctx-item.danger:hover{background:rgba(224,96,96,.1);}
+.ci{position:relative;}
+.ci-menu-btn{display:none;position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-3);cursor:pointer;padding:3px 5px;border-radius:4px;}
+.ci:hover .ci-menu-btn{display:flex;align-items:center;}
+.ci-menu-btn:hover{background:var(--bg-3);color:var(--text-0);}
+/* ══ CTX MENU + CI MENU BTN ══ */
+.cdc-detect-btn{width:100%;padding:9px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:7px;}
+.cdc-detect-btn:hover{opacity:.88;}
+.v-item{background:var(--bg-2);border:1px solid var(--border);border-radius:7px;padding:10px 12px;margin-bottom:7px;cursor:pointer;transition:.13s;}
+.v-item:hover{border-color:var(--accent);}
+.v-item.breaking{border-left:3px solid #e53e3e;}
+.v-num{font-size:12px;font-weight:700;color:var(--accent);}
+.v-meta{font-size:10px;color:var(--text-3);margin-top:2px;}
+.v-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;}
+.v-tag{font-size:9px;background:rgba(0,200,245,.15);color:var(--accent);padding:1px 6px;border-radius:10px;border:1px solid rgba(0,200,245,.3);}
+.v-tag.brk{background:rgba(229,62,62,.15);color:#e53e3e;border-color:rgba(229,62,62,.3);}
+.diff-item{padding:5px 8px;border-radius:5px;margin-bottom:3px;font-size:10px;font-family:var(--font-mono);}
+.diff-add{background:rgba(0,138,80,.15);color:#00c48a;}
+.diff-del{background:rgba(192,48,48,.15);color:#e06060;}
+.diff-mod{background:rgba(212,160,0,.15);color:#d4a000;}
+.cdc-notif{background:var(--bg-2);border:1px solid var(--border);border-radius:7px;padding:8px 10px;margin-bottom:6px;font-size:11px;}
+.cdc-notif.breaking{border-left:3px solid #e53e3e;}
+.cdc-tag-form{display:flex;gap:6px;margin-bottom:12px;}
+.cdc-inp{flex:1;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-2);color:var(--text-0);font-size:11px;outline:none;}
+.cdc-inp:focus{border-color:var(--accent);}
+.cdc-btn{padding:6px 12px;border-radius:6px;border:none;background:var(--accent);color:#fff;font-size:11px;cursor:pointer;display:flex;align-items:center;gap:5px;}
+@media(max-width:768px){.cdc-panel{width:100vw;}}
+
+/* ── Sidebar 3 sections ─────────────────────────────────── */
+.sb-section-hdr{display:flex;align-items:center;gap:6px;padding:6px 12px 3px;font-size:10px;font-weight:600;color:var(--text-2);text-transform:uppercase;letter-spacing:.05em;}
+.sb-section-ct{margin-left:auto;font-size:10px;font-weight:400;background:var(--bg-3);padding:1px 6px;border-radius:10px;color:var(--text-2);}
+.sb-pinned-section{margin:0;}
+
+
+/* ── User bubble actions ── */
+.bbl-actions.usr-acts { display:flex; justify-content:flex-end; gap:4px; margin:2px 40px 8px 0; opacity:0; transition:opacity .15s; }
+.msg-grp:hover .bbl-actions.usr-acts { opacity:1; }
+
+/* ══ LANGUAGE SWITCHER ══ */
+.lang-btn{position:relative;display:flex;align-items:center;gap:4px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--text-2);font-size:11px;font-family:var(--font-mono);font-weight:600;cursor:pointer;transition:all .15s;letter-spacing:.04em;}
+.lang-btn:hover{background:var(--hover);color:var(--text-1);border-color:var(--accent);}
+.lang-btn svg{opacity:.7;}
+.lang-dropdown{position:absolute;top:calc(100% + 6px);right:0;background:var(--bg-2);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:999;overflow:hidden;min-width:120px;}
+.lang-option{display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:12px;color:var(--text-1);cursor:pointer;transition:background .1s;}
+.lang-option:hover{background:var(--hover);}
+.lang-option.active{color:var(--accent);font-weight:600;}
+.lang-flag{font-size:14px;line-height:1;}
+
 </style>
 </head>
 <body>
 
+<!-- ══ RENAME MODAL ══ -->
+<div class="rename-overlay" id="renameOverlay" onclick="if(event.target===this)closeRenameModal()">
+  <div class="rename-box">
+    <h4><svg viewBox="0 0 14 14" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M9.5 1.5l3 3L4 13H1v-3L9.5 1.5z"/></svg> Renommer</h4>
+    <input class="rename-input" id="renameInput" type="text" maxlength="80" placeholder="Nouveau titre…">
+    <div class="rename-btns">
+      <button class="rename-cancel" onclick="closeRenameModal()">Annuler</button>
+      <button class="rename-save" onclick="saveRename()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+<!-- ══ CONV CONTEXT MENU ══ -->
+<div class="conv-ctx-menu" id="convCtxMenu">
+  <div class="ctx-item" id="ctxFavItem" onclick="ctxToggleFavorite()"><svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polygon points="7,1 8.8,5.2 13.4,5.2 9.8,7.9 11.2,12.2 7,9.5 2.8,12.2 4.2,7.9 0.6,5.2 5.2,5.2"/></svg><span id="ctxFavLabel">Ajouter aux favoris</span></div>
+  <div class="ctx-item" onclick="ctxRename()"><svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M9.5 1.5l3 3L4 13H1v-3L9.5 1.5z"/></svg>Renommer</div>
+  <div style="height:1px;background:var(--border);margin:3px 8px;"></div>
+  <div class="ctx-item danger" onclick="ctxDelete()"><svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><polyline points="2,4 12,4"/><path d="M5 4V2h4v2M5 6v5M9 6v5"/><rect x="3" y="4" width="8" height="9" rx="1"/></svg>Supprimer</div>
+</div>
+<!-- ══ CDC PANEL ══ -->
+<div class="cdc-panel" id="cdcPanel">
+  <div class="cdc-hdr">
+    <h3><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="4.5" cy="3" r="1.8"/><circle cx="4.5" cy="13" r="1.8"/><circle cx="11.5" cy="8" r="1.8"/><line x1="4.5" y1="4.8" x2="4.5" y2="11.2"/><line x1="6.1" y1="7" x2="9.7" y2="5.5"/><line x1="6.1" y1="9" x2="9.7" y2="10.5"/></svg>Versioning CDC</h3>
+    <button style="background:none;border:none;color:var(--text-3);cursor:pointer;padding:4px;border-radius:4px;" onclick="closeCDCPanel()"><svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="2" y1="2" x2="10" y2="10"/><line x1="10" y1="2" x2="2" y2="10"/></svg></button>
+  </div>
+  <div class="cdc-tabs">
+    <button class="cdc-tab active" onclick="cdcTab('history')" id="cdcTabHistory">Historique</button>
+    <button class="cdc-tab" onclick="cdcTab('diff')" id="cdcTabDiff">Diff</button>
+    <button class="cdc-tab" onclick="cdcTab('notifs')" id="cdcTabNotifs">Alertes</button>
+    <button class="cdc-tab" onclick="cdcTab('tags')" id="cdcTabTags">Tags</button>
+  </div>
+  <div class="cdc-body" id="cdcBody"><p style="color:var(--text-3);font-size:11px;text-align:center;margin-top:40px;">Sélectionnez une source.</p></div>
+</div>
+
 <!-- ══ MOBILE SIDEBAR OVERLAY ══ -->
 <div class="sb-mobile-overlay" id="sbMobileOverlay" onclick="closeMobileSidebar()"></div>
 
+<!-- ══ TITLE CTX MENU ══ -->
+<div class="conv-ctx-menu" id="titleCtxMenu">
+  <div class="ctx-item" id="titleFavItem" onclick="titleToggleFavorite()">
+    <svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polygon points="7,1 8.8,5.2 13.4,5.2 9.8,7.9 11.2,12.2 7,9.5 2.8,12.2 4.2,7.9 0.6,5.2 5.2,5.2"/></svg>
+    <span id="titleFavLabel">Ajouter aux favoris</span>
+  </div>
+  <div class="ctx-item" onclick="titleRename()">
+    <svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M9.5 1.5l3 3L4 13H1v-3L9.5 1.5z"/></svg>
+    Renommer
+  </div>
+</div>
 <!-- ══ SHARE MODAL ══ -->
 <div class="share-overlay" id="shareOverlay" onclick="if(event.target===this)closeShareModal()">
   <div class="share-modal">
@@ -1199,8 +1492,8 @@ html.light .db-summary-line{background:rgba(0,100,200,.05);border-color:rgba(0,1
     <div class="lc-h">Connexion</div>
     <div class="lc-sub">Accédez à votre assistant IA ERP</div>
     <div class="lc-roles">
-      <div class="rp sel" id="rp-u" onclick="selRole('user')">👤 Utilisateur</div>
-      <div class="rp" id="rp-a" onclick="selRole('admin')">🛡️ Admin</div>
+      <div class="rp sel" id="rp-u" onclick="selRole('user')"><svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="7" cy="4.5" r="2.5"/><path d="M2 13c0-2.76 2.24-5 5-5s5 2.24 5 5"/></svg> Utilisateur</div>
+      <div class="rp" id="rp-a" onclick="selRole('admin')"><svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 1l1.5 3 3.3.5-2.4 2.3.6 3.3L7 8.5l-3 1.6.6-3.3L2.2 4.5l3.3-.5z"/></svg> Admin</div>
     </div>
     <div class="lc-field">
       <label class="lc-lbl">Identifiant</label>
@@ -1225,7 +1518,14 @@ html.light .db-summary-line{background:rgba(0,100,200,.05);border-color:rgba(0,1
     </a>
     <div class="hdiv"></div>
     <button class="sb-menu-btn" id="sbBtn" onclick="toggleSB()" title="Menu"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="2" y1="5" x2="18" y2="5"/><line x1="2" y1="10" x2="14" y2="10"/><line x1="2" y1="15" x2="18" y2="15"/></svg></button>
-    <div class="stream-badge" id="streamBadge"><div class="sp"></div>Génération…</div>
+    <div class="hdiv" style="opacity:0;width:0;margin:0;padding:0;"></div>
+    <div class="conv-title-wrap" id="convTitleWrap">
+      <button class="conv-title-btn" id="convTitleBtn" onclick="toggleTitleMenu(event)" title="Options">
+        <span class="conv-title-text" id="convTitleText"></span>
+        <svg viewBox="0 0 10 6" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"/></svg>
+      </button>
+      <div class="stream-badge" id="streamBadge"><div class="sp"></div>Génération…</div>
+    </div>
     <div class="hsp"></div>
     <div class="hdr-src">
       <div class="src-dot off" id="srcDot"></div>
@@ -1235,20 +1535,79 @@ html.light .db-summary-line{background:rgba(0,100,200,.05);border-color:rgba(0,1
       </select>
       <svg class="hdr-src-arrow" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><polyline points="1 1 5 5 9 1"/></svg>
     </div>
-    <button id="main-theme-btn" class="tt" onclick="toggleTheme()" title="Changer le thème"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M12.3 10.9A6 6 0 0 1 5.1 3.7a6 6 0 1 0 7.2 7.2z"/></svg><span id="main-theme-label">Dark</span></button>
+    <button class="tt" onclick="exportConvPDF()" title="Exporter en PDF">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 13h2.5a1.5 1.5 0 0 1 0 3H9v-3z"/><line x1="9" y1="17" x2="9" y2="19"/></svg>
+    </button>
+    <div id="langBtnWrap" style="position:relative">
+      <button id="langBtn" class="lang-btn tt" onclick="toggleLangDropdown()" title="Changer la langue">
+        <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 1.5C8 1.5 5.5 5 5.5 8s2.5 6.5 2.5 6.5M8 1.5C8 1.5 10.5 5 10.5 8S8 14.5 8 14.5M1.5 8h13M2 5h12M2 11h12"/></svg>
+        <span class="lang-label">FR</span>
+      </button>
+      <div id="langDropdown" class="lang-dropdown" style="display:none">
+        <div class="lang-option active" data-lang="fr" onclick="applyLang('fr')"><span class="lang-flag">🇫🇷</span>Français</div>
+        <div class="lang-option" data-lang="en" onclick="applyLang('en')"><span class="lang-flag">🇬🇧</span>English</div>
+        <div class="lang-option" data-lang="ar" onclick="applyLang('ar')"><span class="lang-flag">🇹🇳</span>العربية</div>
+      </div>
+    </div>
+    <button id="main-theme-btn" class="tt" onclick="toggleTheme()" title="Changer le thème"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M12.3 10.9A6 6 0 0 1 5.1 3.7a6 6 0 1 0 7.2 7.2z"/></svg></button>
 
   </div>
   <div class="admin-banner" id="adminBanner" style="display:none!important"></div>
   <div class="body">
     <!-- Sidebar -->
     <div class="sb" id="sb">
+      <!-- ── Rail mode (sidebar collapsed) ── -->
+      <div class="sb-rail" id="sbRail">
+        <!-- Nouvelle conversation -->
+        <button class="rail-btn rail-new" onclick="newChat()" title="Nouvelle conversation">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <!-- Rechercher → ouvre sidebar sur le champ recherche -->
+        <button class="rail-btn" onclick="toggleSB();setTimeout(()=>document.querySelector('.sb-search input')?.focus(),300)" title="Rechercher">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="17" y1="17" x2="22" y2="22"/></svg>
+        </button>
+        <!-- Discussions -->
+        <button class="rail-btn" onclick="openDiscPanel()" title="Discussions">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 8h2a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-1l-2 2v-2H9a2 2 0 0 1-2-2v-1"/>
+            <path d="M3 5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H7l-3 3V5z"/>
+          </svg>
+        </button>
+        <!-- Templates → popup flottant -->
+        <button class="rail-btn" onclick="toggleRailPopup('railTplPopup',this)" title="Templates">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        </button>
+        <!-- Favoris → popup flottant -->
+        <button class="rail-btn" onclick="toggleRailPopup('railFavPopup',this)" title="Favoris" style="color:#f5c518;">
+          <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        </button>
+        <div class="rail-divider"></div>
+        <!-- Export PDF -->
+        <button class="rail-btn" onclick="exportConvPDF()" title="Exporter PDF">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+        </button>
+        <!-- Avatar user -->
+        <div class="rail-user usr" id="railUserAv" onclick="toggleUserMenu()" title="Mon compte">U</div>
+      </div>
+      <!-- ── Rail popups ── -->
+      <div class="rail-popup" id="railTplPopup">
+        <div class="rail-popup-title">Templates</div>
+        <div class="rail-popup-item" onclick="runTemplate('sales');closeRailPopups()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg> Ventes</div>
+        <div class="rail-popup-item" onclick="runTemplate('finance');closeRailPopups()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg> Finance</div>
+        <div class="rail-popup-item" onclick="runTemplate('hr');closeRailPopups()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg> RH</div>
+        <div class="rail-popup-item" onclick="runTemplate('logistics');closeRailPopups()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 5v3h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg> Logistique</div>
+      </div>
+      <div class="rail-popup" id="railFavPopup">
+        <div class="rail-popup-title">Favoris</div>
+        <div id="railFavList"><div style="color:var(--text-3);font-size:11px;padding:6px 0;">Aucun favori</div></div>
+      </div>
       <div class="sb-top">
         <button class="new-btn" onclick="newChat()">
-          <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Nouvelle conversation
         </button>
         <div class="sb-search">
-          <span class="sb-ico"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="5" cy="5" r="4"/><line x1="9" y1="9" x2="11" y2="11"/></svg></span>
+          <span class="sb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="17" y1="17" x2="22" y2="22"/></svg></span>
           <input type="text" placeholder="Rechercher…" oninput="filterConvs(this.value)">
         </div>
       </div>
@@ -1275,7 +1634,33 @@ html.light .db-summary-line{background:rgba(0,100,200,.05);border-color:rgba(0,1
           <div class="sb-fav-empty" id="sbFavEmpty">Aucun favori</div>
         </div>
       </div>
-      <div class="sb-lbl">Conversations <span class="sb-ct" id="sbCt">0</span></div>
+      <!-- Discussions -->
+      <div style="height:8px;flex-shrink:0;"></div>
+      <button class="sb-discussions-item" onclick="openDiscPanel()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17 8h2a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-1l-2 2v-2H9a2 2 0 0 1-2-2v-1"/>
+          <path d="M3 5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H7l-3 3V5z"/>
+        </svg>
+        Discussions
+      </button>
+      <div style="height:8px;flex-shrink:0;"></div>
+      <div style="height:1px;background:var(--border);margin:0 10px;flex-shrink:0;"></div>
+      <div style="height:4px;flex-shrink:0;"></div>
+      <!-- Section Épinglées (conversations avec dashboard favori) -->
+      <div class="sb-pinned-section" id="sbPinnedSection" style="display:none;">
+        <div class="sb-section-hdr">
+          <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="var(--accent)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M9.5 1.5l5 5-2 2-1.5-1.5-4 4v2h-2v-2l-4-4-1.5 1.5-2-2 5-5z"/><line x1="3" y1="13" x2="1" y2="15"/></svg>
+          <span>Épinglées</span>
+          <span class="sb-section-ct" id="sbPinnedCt">0</span>
+        </div>
+        <div class="conv-scroll" id="pinnedScroll" style="max-height:150px;border-bottom:0.5px solid var(--border);margin-bottom:4px;"></div>
+      </div>
+      <!-- Section Récentes -->
+      <div class="sb-section-hdr">
+        <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="var(--text-2)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M14 10a2 2 0 01-2 2H5l-3 3V4a2 2 0 012-2h8a2 2 0 012 2z"/></svg>
+        <span>Récentes</span>
+        <span class="sb-section-ct" id="sbCt">0</span>
+      </div>
       <div class="conv-scroll" id="convScroll"></div>
       <div class="sb-footer">
         <div class="sb-user-row" id="uPill" onclick="toggleUserMenu()" title="Menu">
@@ -1285,32 +1670,27 @@ html.light .db-summary-line{background:rgba(0,100,200,.05);border-color:rgba(0,1
             <div class="u-role" id="uRole" style="display:none">—</div>
           </div>
         </div>
-        <!-- Menu dropdown user -->
-        <div class="user-menu" id="userMenu">
-          <a class="um-item" href="/" onclick="closeUserMenu()">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 6.5L8 2l6 4.5"/><path d="M3 6v8h4v-4h2v4h4V6"/></svg>
-            Retour à l'accueil
-          </a>
-          <div class="um-divider"></div>
-          <button class="um-item" onclick="openVoiceMessages();closeUserMenu()">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="1" y="4" width="10" height="8" rx="1"/><path d="M11 6l4-2v8l-4-2"/></svg>
-            Messages vocaux
-            <span id="voiceMsgBadge" style="display:none;background:var(--accent);color:#040e1a;font-size:10px;font-weight:700;border-radius:99px;padding:1px 6px;margin-left:auto;"></span>
-          </button>
-          <button class="um-item" onclick="openVoiceSettings();closeUserMenu()">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41"/></svg>
-            Paramètres voix
-          </button>
-          <div class="um-divider"></div>
-          <button class="um-item um-logout" onclick="logout()">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M10 2h4v12h-4"/><polyline points="7 11 10 8 7 5"/><line x1="1" y1="8" x2="10" y2="8"/></svg>
-            Se déconnecter
-          </button>
-        </div>
       </div>
     </div>
     <!-- Workspace -->
     <div class="wrk" id="wrk">
+      <!-- ══ PANNEAU DISCUSSIONS ══ -->
+      <div class="disc-panel" id="discPanel" style="display:none;">
+        <div class="disc-hdr">
+          <h2 class="disc-title">Discussions</h2>
+          <div class="disc-hdr-actions">
+            <button class="disc-new-btn" onclick="closeDiscPanel();newChat()">Nouvelle conversation</button>
+            <button class="disc-close-btn" onclick="closeDiscPanel()" title="Fermer">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="disc-search-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="17" y1="17" x2="22" y2="22"/></svg>
+          <input class="disc-search" id="discSearch" type="text" placeholder="Rechercher des conversations…" oninput="filterDiscussions(this.value)">
+        </div>
+        <div class="disc-list" id="discList"></div>
+      </div>
       <div class="chat-panel">
         <div class="msgs" id="msgs">
           <div class="msgs-inner" id="msgsInner"></div>
@@ -1326,9 +1706,6 @@ html.light .db-summary-line{background:rgba(0,100,200,.05);border-color:rgba(0,1
                 <textarea class="inp" id="inp" rows="1" placeholder="Poser une question" onkeydown="onKey(event)" oninput="onInp(this)"></textarea>
                 <span class="char-ct" id="charCt"></span>
                 <div class="gpt-actions">
-                  <button class="gpt-act-btn" onclick="exportConv()" title="Exporter">
-                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M17 13v3H3v-3"/><polyline points="6 9 10 13 14 9"/><line x1="10" y1="13" x2="10" y2="3"/></svg>
-                  </button>
                   <button class="gpt-act-btn" id="voBtn" onclick="toggleVoice()" title="Voix">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 2a3 3 0 013 3v7a3 3 0 01-6 0V5a3 3 0 013-3z"/><path d="M5 10a7 7 0 0014 0"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
                   </button>
@@ -1375,7 +1752,7 @@ html.light .db-summary-line{background:rgba(0,100,200,.05);border-color:rgba(0,1
   <div id="voTimer">0:00</div>
   <div style="display:flex;gap:8px;">
     <button class="vo-stop-btn" onclick="stopVoice()">Arrêter</button>
-    <button class="vo-stop-btn" id="voMsgSaveBtn" style="display:none;" onclick="saveVoiceMessage()">💾 Sauvegarder</button>
+    <button class="vo-stop-btn" id="voMsgSaveBtn" style="display:none;" onclick="saveVoiceMessage()"><svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 13H3a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h6.5L13 4.5V12a1 1 0 0 1-1 1z"/><path d="M9 1v3H4V1"/><path d="M4 7h6M4 10h6"/></svg> Sauvegarder</button>
   </div>
 </div>
 <div id="toast"></div>
@@ -1399,7 +1776,7 @@ function doLogin(){
   const u=document.getElementById('liUser').value.trim();
   const p=document.getElementById('liPass').value;
   const ac=ACCTS[u];
-  if(!ac||ac.pass!==p){document.getElementById('liErr').textContent='❌ Identifiant ou mot de passe incorrect';return;}
+  if(!ac||ac.pass!==p){document.getElementById('liErr').textContent='Identifiant ou mot de passe incorrect';return;}
   AUTH={username:u,role:ac.role,label:ac.label};
   localStorage.setItem('op_auth',JSON.stringify(AUTH));
   document.getElementById('liErr').textContent='';
@@ -1423,7 +1800,14 @@ function applyAuth(){
   // Badge admin sur avatar
   const pill=document.getElementById('uPill');
   if(pill)pill.classList.toggle('is-admin',AUTH.role==='admin');
-  // admin badge géré dans sidebar
+  // Sync rail avatar
+  const railAv=document.getElementById('railUserAv');
+  if(railAv){railAv.textContent=AUTH.username.charAt(0).toUpperCase();railAv.className='rail-user '+(AUTH.role==='admin'?'adm':'usr');}
+  // CDC visible admin seulement
+  const cdcItem=document.getElementById('cdcMenuItem');
+  const cdcDiv=document.getElementById('cdcMenuDivider');
+  if(cdcItem)cdcItem.style.display=AUTH.role==='admin'?'flex':'none';
+  if(cdcDiv)cdcDiv.style.display=AUTH.role==='admin'?'block':'none';
 }
 
 // ════ STATE ════
@@ -1474,7 +1858,8 @@ function toggleSB(){
   S.sbOpen=!S.sbOpen;
   document.getElementById('sb').classList.toggle('closed',!S.sbOpen);
   document.getElementById('sbBtn').classList.toggle('on',S.sbOpen);
-}
+  // Logo : texte visible seulement quand sidebar ouverte
+  document.querySelectorAll('.logo-n,.logo-c').forEach(el=>el.style.display=S.sbOpen?'':'none');}
 function toggleDP(){
   S.dpOpen=!S.dpOpen;
   document.getElementById('dp').classList.toggle('closed',!S.dpOpen);
@@ -1501,11 +1886,6 @@ function toggleTheme(){
     });
     // Sync theme button label in merged view + re-render widget grid
     if(typeof _dbmUpdateThemeBtn === 'function') _dbmUpdateThemeBtn();
-    else {
-      // fallback: update main header icon if merged view not open
-      const mainLbl = document.getElementById('main-theme-label');
-      if(mainLbl) mainLbl.textContent = document.documentElement.classList.contains('light') ? 'Dark' : 'Light';
-    }
     // dbmRender handles its own Plotly re-renders internally
     if(typeof dbmRender === 'function' && document.getElementById('db-fullscreen-modal')){
       dbmRender(); // immediate for CSS vars
@@ -1531,7 +1911,7 @@ async function init(){
       const mainBtn = document.getElementById('main-theme-btn');
       if(mainBtn){
         const SVG_SUN = '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><circle cx="8" cy="8" r="3"/><path stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M8 1v2M8 13v2M1 8h2M13 8h2M3.22 3.22l1.42 1.42M11.36 11.36l1.42 1.42M3.22 12.78l1.42-1.42M11.36 4.64l1.42-1.42"/></svg>';
-        mainBtn.innerHTML = SVG_SUN + '<span id="main-theme-label">Dark</span>';
+        mainBtn.innerHTML = SVG_SUN;
       }
     });
   }
@@ -1539,11 +1919,14 @@ async function init(){
   showWelcome();
   await loadSources();
   await loadFavorites();
+  loadPinnedConvs();
   await loadConvs();
   initResizer();
   if(S.sources.length&&!S.srcId){
     S.srcId=S.sources[0].id;
     document.getElementById('srcSel').value=S.srcId;
+    const inpSel=document.getElementById('inpSrcSel');
+    if(inpSel)inpSel.value=S.srcId;
     changeSource(S.srcId,true);
   }
   document.getElementById('inp').focus();
@@ -1553,24 +1936,89 @@ async function loadSources(){
     const d=await api('/sources');
     S.sources=d.sources||d||[];
     const sel=document.getElementById('srcSel');
-    sel.innerHTML='<option value="">— Sélectionner une source —</option>';
-    S.sources.forEach(s=>{const o=document.createElement('option');o.value=s.id;o.textContent=s.name+' ('+s.connector_type+')';sel.appendChild(o);});
+    const inpSel=document.getElementById('inpSrcSel');
+    const opts='<option value="">— Sélectionner une source —</option>'+S.sources.map(s=>`<option value="${s.id}">${s.name} (${s.connector_type})</option>`).join('');
+    sel.innerHTML=opts;
+    if(inpSel)inpSel.innerHTML=opts;
   }catch(e){console.warn('loadSources:',e);}
 }
+
+async function loadPinnedConvs(){
+  try{
+    const r = await fetch(API_BASE+'/conversations/pinned?user_id=admin');
+    if(!r.ok) return;
+    const d = await r.json();
+    _pinnedConvs.clear();
+    (d.pinned||[]).forEach(p => _pinnedConvs.add(p.conv_id));
+    renderConvs();
+  } catch(e){ console.warn('Pinned:', e); }
+}
+
 async function loadConvs(){
-  try{const d=await api('/conversations');S.convs=d.conversations||[];renderConvs();}
+  try{
+    const d=await api('/conversations');
+    S.convs=d.conversations||[];
+    renderConvs();
+    // Charger les dashboards de toutes les conversations pour le menu favoris
+    _loadAllDashboardHistory();
+  }
   catch(e){S.convs=[];renderConvs();}
+}
+
+async function _loadAllDashboardHistory(){
+  // Charge les dashboards de chaque conversation depuis leurs messages
+  // pour que le menu favori fonctionne sur toutes les conversations
+  try{
+    const convIds = S.convs.map(c=>c.id);
+    for(const cid of convIds){
+      if(_dashboardHistory[cid] && _dashboardHistory[cid].length) continue;
+      try{
+        const conv = await api('/conversations/'+cid);
+        if(!conv) continue;
+        const msgs = conv.messages || [];
+        const specs = [];
+        msgs.forEach(msg=>{
+          if(msg.role!=='assistant') return;
+          const content = msg.content || '';
+          // Extrait les specs dashboard du contenu du message
+          const extracted = typeof extractAllDashboardSpecs === 'function'
+            ? extractAllDashboardSpecs(content)
+            : [];
+          extracted.forEach(spec=>{
+            if(spec && spec.dashboard_id && !specs.find(s=>s.dashboard_id===spec.dashboard_id)){
+              specs.push(spec);
+            }
+          });
+        });
+        if(specs.length) _dashboardHistory[cid] = specs;
+      } catch(e){}
+    }
+    renderConvs(); // rafraîchit les étoiles ★ dans la sidebar
+  } catch(e){}
 }
 async function changeSource(id,silent){
   S.srcId=id||'';
   const src=S.sources.find(s=>s.id===id);
   const dot=document.getElementById('srcDot'),lbl=document.getElementById('srcLbl');
+  const inpDot=document.getElementById('inpSrcDot'),inpSel=document.getElementById('inpSrcSel');
   if(src){
-    dot.className='src-dot'+(src.status==='active'||src.status==='connected'?'':' off');
+    const connected=src.status==='active'||src.status==='connected';
+    dot.className='src-dot'+(connected?'':' off');
+    if(inpDot)inpDot.className='src-dot'+(connected?'':' off');
     lbl.textContent=src.name;
+    if(inpSel)inpSel.value=id;
     await loadSrcCtx(id);
     if(!silent){newChat();updateChips(src);}
-  }else{dot.className='src-dot off';lbl.textContent='Aucune source';srcCtx=null;}
+  }else{
+    dot.className='src-dot off';
+    if(inpDot)inpDot.className='src-dot off';
+    lbl.textContent='Aucune source';
+    if(inpSel)inpSel.value='';
+    srcCtx=null;
+  }
+  // sync hdr srcSel
+  const hdrSel=document.getElementById('srcSel');
+  if(hdrSel)hdrSel.value=id||'';
   refreshSend();
 }
 async function loadSrcCtx(id){
@@ -1590,33 +2038,134 @@ function updateChips(src){
 }
 
 // ════ CONVERSATIONS ════
-function renderConvs(q){
-  q=(q||S.searchQ||'').toLowerCase();
-  const sc=document.getElementById('convScroll');
-  let list=S.convs;
-  if(q)list=list.filter(c=>(c.title||'').toLowerCase().includes(q));
-  document.getElementById('sbCt').textContent=list.length;
-  if(!list.length){sc.innerHTML=`<div class="conv-empty"><span class="conv-empty-ico" style="display:flex;justify-content:center;margin-bottom:8px;"><svg width="24" height="24" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M14 10a2 2 0 01-2 2H5l-3 3V4a2 2 0 012-2h8a2 2 0 012 2z"/></svg></span>${q?'Aucun résultat':'Aucune conversation<br>Commencez à chatter !'}</div>`;return;}
-  sc.innerHTML=list.map(c=>{
-    const sn=(S.sources.find(s=>s.id===c.source_id)||{}).name||'';
+function _renderConvItem(c){
+  const sn=(S.sources.find(s=>s.id===c.source_id)||{}).name||'';
     const d=c.updated_at?new Date(c.updated_at):c.created_at?new Date(c.created_at):null;
-    return`<div class="ci${S.convId===c.id?' active':''}" onclick="loadConv('${c.id}')">
+    // Vérifie si cette conversation a un dashboard en favoris
+    // Vérifie favori via _favsByConv (index direct) ou _dashboardHistory
+    const isFavConv = _pinnedConvs.has(c.id);
+    const _starSvg = isFavConv ? '<svg viewBox="0 0 12 12" width="10" height="10" fill="#f5c518" stroke="#f5c518" stroke-width="1" style="flex-shrink:0"><polygon points="6,1 7.5,4.5 11.5,4.5 8.5,7 9.5,11 6,8.5 2.5,11 3.5,7 0.5,4.5 4.5,4.5"/></svg>' : '';
+    const _safeTitle = (c.title||"").replace(/"/g,"&quot;");
+    return`<div class="ci${S.convId===c.id?' active':''}" data-cid="${c.id}" data-ctitle="${_safeTitle}" onclick="loadConv('${c.id}')" oncontextmenu="showConvCtxMenu(event,'${c.id}',this.dataset.ctitle)">
       <div class="ci-body">
-        <div class="ci-title">${esc(c.title||'Sans titre')}</div>
+        <div class="ci-title" style="display:flex;align-items:center;gap:5px;">
+          ${_starSvg}
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c.title||'Sans titre')}</span>
+        </div>
         <div class="ci-foot">
           <span class="ci-time">${d?relTime(d):''}</span>
           ${sn?`<span class="ci-src">${esc(sn)}</span>`:''}
         </div>
       </div>
-      <span class="ci-del" onclick="delConv(event,'${c.id}')" title="Supprimer">×</span>
+      <button class="ci-menu-btn" onclick="event.stopPropagation();const _p=this.closest('[data-cid]');showConvCtxMenu(event,_p.dataset.cid,_p.dataset.ctitle)" title="Options"><svg viewBox="0 0 4 16" width="4" height="14" fill="currentColor"><circle cx="2" cy="2" r="1.5"/><circle cx="2" cy="8" r="1.5"/><circle cx="2" cy="14" r="1.5"/></svg></button>
+    </div>`;
+}
+
+function renderConvs(q){
+  q=(q||S.searchQ||'').toLowerCase();
+  const sc=document.getElementById('convScroll');
+  let list=S.convs;
+  if(q)list=list.filter(c=>(c.title||'').toLowerCase().includes(q));
+  if(!list.length){sc.innerHTML=`<div class="conv-empty"><span class="conv-empty-ico" style="display:flex;justify-content:center;margin-bottom:8px;"><svg width="24" height="24" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M14 10a2 2 0 01-2 2H5l-3 3V4a2 2 0 012-2h8a2 2 0 012 2z"/></svg></span>${q?'Aucun résultat':'Aucune conversation<br>Commencez à chatter !'}</div>`;
+    const ps=document.getElementById('sbPinnedSection'); if(ps) ps.style.display='none'; return;}
+  // Sépare épinglées et normales via _pinnedConvs (Option A)
+  const isPinned=c=>_pinnedConvs.has(c.id);
+  const pinned=list.filter(c=>isPinned(c));
+  const normal=list.filter(c=>!isPinned(c));
+  // Section Épinglées
+  const ps=document.getElementById('sbPinnedSection');
+  const pscroll=document.getElementById('pinnedScroll');
+  const pct=document.getElementById('sbPinnedCt');
+  if(ps&&pscroll){
+    if(pinned.length>0&&!q){
+      ps.style.display='';
+      if(pct) pct.textContent=pinned.length;
+      pscroll.innerHTML=pinned.map(c=>_renderConvItem(c)).join('');
+    } else { ps.style.display='none'; }
+  }
+  // Section Récentes
+  const sbCt=document.getElementById('sbCt');
+  if(sbCt) sbCt.textContent=normal.length;
+  sc.innerHTML=normal.map(c=>_renderConvItem(c)).join('');
+  return;
+  sc.innerHTML=list.map(c=>{
+    const sn=(S.sources.find(s=>s.id===c.source_id)||{}).name||'';
+    const d=c.updated_at?new Date(c.updated_at):c.created_at?new Date(c.created_at):null;
+    // Vérifie si cette conversation a un dashboard en favoris
+    // Vérifie favori via _favsByConv (index direct) ou _dashboardHistory
+    const isFavConv = _pinnedConvs.has(c.id);
+    const _starSvg = isFavConv ? '<svg viewBox="0 0 12 12" width="10" height="10" fill="#f5c518" stroke="#f5c518" stroke-width="1" style="flex-shrink:0"><polygon points="6,1 7.5,4.5 11.5,4.5 8.5,7 9.5,11 6,8.5 2.5,11 3.5,7 0.5,4.5 4.5,4.5"/></svg>' : '';
+    const _safeTitle = (c.title||"").replace(/"/g,"&quot;");
+    return`<div class="ci${S.convId===c.id?' active':''}" data-cid="${c.id}" data-ctitle="${_safeTitle}" onclick="loadConv('${c.id}')" oncontextmenu="showConvCtxMenu(event,'${c.id}',this.dataset.ctitle)">
+      <div class="ci-body">
+        <div class="ci-title" style="display:flex;align-items:center;gap:5px;">
+          ${_starSvg}
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c.title||'Sans titre')}</span>
+        </div>
+        <div class="ci-foot">
+          <span class="ci-time">${d?relTime(d):''}</span>
+          ${sn?`<span class="ci-src">${esc(sn)}</span>`:''}
+        </div>
+      </div>
+      <button class="ci-menu-btn" onclick="event.stopPropagation();const _p=this.closest('[data-cid]');showConvCtxMenu(event,_p.dataset.cid,_p.dataset.ctitle)" title="Options"><svg viewBox="0 0 4 16" width="4" height="14" fill="currentColor"><circle cx="2" cy="2" r="1.5"/><circle cx="2" cy="8" r="1.5"/><circle cx="2" cy="14" r="1.5"/></svg></button>
     </div>`;
   }).join('');
 }
 function filterConvs(q){S.searchQ=q;renderConvs(q);}
-function newChat(){S.convId=null;showWelcome();renderConvs();}
+function newChat(){S.convId=null;updateConvTitle('');showWelcome();renderConvs();}
+
+/* ══ DISCUSSIONS PANEL ══ */
+function openDiscPanel(){
+  const p=document.getElementById('discPanel');
+  if(!p)return;
+  p.style.display='flex';
+  document.getElementById('discSearch').value='';
+  renderDiscussions(S.convs);
+  setTimeout(()=>document.getElementById('discSearch').focus(),80);
+}
+function closeDiscPanel(){
+  const p=document.getElementById('discPanel');
+  if(p)p.style.display='none';
+}
+function filterDiscussions(q){
+  const list=q?S.convs.filter(c=>(c.title||'').toLowerCase().includes(q.toLowerCase())):S.convs;
+  renderDiscussions(list);
+}
+function renderDiscussions(list){
+  const el=document.getElementById('discList');
+  if(!el)return;
+  if(!list||!list.length){el.innerHTML='<div style="text-align:center;color:var(--text-3);padding:40px;font-size:13px;">Aucune conversation</div>';return;}
+  el.innerHTML=list.map(c=>{
+    const t=c.title||'Sans titre';
+    const ago=_timeAgo(c.updated_at||c.created_at);
+    const srcObj=S.sources.find(s=>s.id===c.source_id);
+    const srcName=srcObj?srcObj.name:(c.source_id||'');
+    const src=srcName?`<span class="disc-item-src">${srcName}</span>`:'';
+    return`<div class="disc-item" onclick="discOpenConv('${c.id}')">
+      <span class="disc-item-title">${t}</span>
+      <span class="disc-item-meta"><span class="disc-item-time">${ago}</span>${src}</span>
+    </div>`;
+  }).join('');
+}
+async function discOpenConv(id){
+  closeDiscPanel();
+  await new Promise(r=>setTimeout(r,60));
+  loadConv(id);
+}
+function _timeAgo(iso){
+  if(!iso)return'';
+  const d=new Date(iso),now=new Date(),diff=Math.floor((now-d)/1000);
+  if(diff<60)return'à l\'instant';
+  if(diff<3600)return Math.floor(diff/60)+'m';
+  if(diff<86400)return Math.floor(diff/3600)+'h';
+  if(diff<172800)return'hier';
+  return Math.floor(diff/86400)+'j';
+}
 async function loadConv(id){
   if(S.convId===id)return;
-  S.convId=id;renderConvs();hideWelcome();
+  S.convId=id;
+  const _cv=S.convs.find(c=>c.id===id);
+  updateConvTitle(_cv?_cv.title:'');renderConvs();hideWelcome();
   document.getElementById('msgsInner').innerHTML=`<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:40vh;gap:12px;color:var(--text-3);"><div style="width:20px;height:20px;border:2px solid var(--border-hi);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;"></div><span style="font-family:var(--font-mono);font-size:11px;">Chargement…</span></div>`;
   try{
     const conv=await api('/conversations/'+id);
@@ -1641,7 +2190,7 @@ async function loadConv(id){
     if(msgs.length > 0) restoreDashboard(id);
   }catch(e){
     document.getElementById('msgsInner').innerHTML=`<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:40vh;gap:10px;color:var(--red);"><svg width="28" height="28" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 2L15 14H1L8 2z"/><line x1="8" y1="7" x2="8" y2="10"/><circle cx="8" cy="12" r="0.5" fill="currentColor"/></svg><span style="font-size:12px;font-family:var(--font-mono);">${esc(e.message)}</span></div>`;
-    S.convId=null;renderConvs();toast('❌ '+e.message);
+    S.convId=null;renderConvs();toast(e.message);
   }
 }
 async function delConv(e,id){
@@ -1675,7 +2224,9 @@ async function saveConv(q){
   const isNew = !S.convId;
   if(!S.convId){
     S.convId='conv-'+Date.now();
-    S.convs.unshift({id:S.convId,title:q.substring(0,48),created_at:new Date().toISOString(),updated_at:new Date().toISOString(),source_id:S.srcId});
+    const _autoTitle = q.substring(0,48);
+    S.convs.unshift({id:S.convId,title:_autoTitle,created_at:new Date().toISOString(),updated_at:new Date().toISOString(),source_id:S.srcId});
+    updateConvTitle(_autoTitle);
     renderConvs();
   } else {
     const idx=S.convs.findIndex(cv=>cv.id===S.convId);
@@ -1706,8 +2257,33 @@ function gatherMsgs(){
   const rows=document.querySelectorAll('#msgsInner .msg-row'),out=[];
   rows.forEach(r=>{
     const b=r.querySelector('.bubble');if(!b)return;
-    // Préférer le contenu original sauvegardé (data-raw) qui inclut le JSON dashboard
-    const rawContent = b.dataset.raw || b.innerText || b.textContent;
+    let rawContent = b.dataset.raw || '';
+    // Si data-raw vide (ancienne conversation), reconstruire depuis _dashboardHistory
+    if(!rawContent || rawContent.trim().length < 5){
+      // Chercher un dbcontainer dans le msg-grp parent
+      const grp = r.closest('.msg-grp');
+      if(grp && S.convId && _dashboardHistory[S.convId]){
+        const containers = grp.querySelectorAll('[id^="dbcontainer_"]');
+        if(containers.length){
+          // Trouver les specs correspondantes dans l'historique
+          const specs = [];
+          containers.forEach(ctr=>{
+            // L'ID du db-wrap enfant contient le dashboard_id
+            const dbWrap = ctr.querySelector('[id^="db_"]');
+            if(dbWrap){
+              const did = dbWrap.id.replace(/^db_/,'');
+              const spec = _dashboardHistory[S.convId].find(s=>s.dashboard_id===did);
+              if(spec) specs.push(spec);
+            }
+          });
+          if(specs.length){
+            const dashBlocks = specs.map(s=>'\x60\x60\x60dashboard\n'+JSON.stringify(s)+'\n\x60\x60\x60').join('\n');
+            rawContent = (b.innerText||'').trim() + (rawContent?' ':'\n') + dashBlocks;
+          }
+        }
+      }
+    }
+    if(!rawContent) rawContent = b.innerText || b.textContent || '';
     out.push({role:r.classList.contains('usr')?'user':'bot', content:rawContent});
   });
   return out;
@@ -1719,12 +2295,144 @@ function exportConv(){
   if(!msgs.length){toast('Aucun message à exporter');return;}
   const src=S.sources.find(s=>s.id===S.srcId);
   let txt=`OnePilot — Export conversation\nSource: ${src?src.name:'—'}\nDate: ${new Date().toLocaleString('fr-FR')}\n${'─'.repeat(60)}\n\n`;
-  msgs.forEach(m=>{txt+=(m.role==='user'?'👤 Vous':'🤖 OnePilot')+':\n'+m.content+'\n\n';});
+  msgs.forEach(m=>{txt+=(m.role==='user'?'<svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="7" cy="4.5" r="2.5"/><path d="M2 13c0-2.76 2.24-5 5-5s5 2.24 5 5"/></svg> Vous':'OnePilot')+':\n'+m.content+'\n\n';});
   const a=document.createElement('a');
   a.href='data:text/plain;charset=utf-8,'+encodeURIComponent(txt);
   a.download='onepilot-conversation-'+Date.now()+'.txt';
   a.click();
-  toast('✓ Conversation exportée');
+  toast('<svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 6 5 9 10 3"/></svg> Conversation exportée');
+}
+async function exportConvPDF(){
+  const msgs=gatherMsgs();
+  if(!msgs.length){toast('Aucun message à exporter','info');return;}
+  const src=S.sources.find(s=>s.id===S.srcId);
+  const srcName=src?src.name:'—';
+  const dateStr=new Date().toLocaleString('fr-FR');
+  const convTitle=document.getElementById('convTitleText')?.textContent||'Conversation';
+
+  toast('⏳ Préparation du PDF…','info');
+
+  /* ── Charger html2canvas si besoin ── */
+  await new Promise(resolve=>{
+    if(typeof html2canvas!=='undefined'){resolve();return;}
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+    s.onload=resolve; document.head.appendChild(s);
+  });
+
+  /* ── Helper : capturer un dashboard depuis le DOM ou le re-rendre offscreen ──
+     Priorité 1 : #db_{id} déjà dans le DOM → capturer directement
+     Priorité 2 : re-rendre depuis spec dans un div offscreen → capturer → nettoyer */
+  async function _captureDashboard(spec){
+    const did = spec.dashboard_id;
+    /* Toujours offscreen — évite doublons d'ID, éléments hors viewport, hauteur nulle */
+    const tmpId = '_exp_tmp_' + did + '_' + Date.now();
+    const tmpOuter = document.createElement('div');
+    tmpOuter.id = tmpId;
+    tmpOuter.style.cssText = 'position:fixed;left:-9999px;top:0;width:1100px;min-height:200px;background:#ffffff;z-index:99999;pointer-events:none;visibility:hidden;';
+    document.body.appendChild(tmpOuter);
+    let dataUrl = null;
+    try{
+      renderDashboard(spec, tmpId);
+      await new Promise(r=>setTimeout(r,1200));
+      tmpOuter.style.visibility = 'visible';
+      await new Promise(r=>requestAnimationFrame(()=>setTimeout(r,80)));
+      const wrap = tmpOuter.querySelector('.db-wrap') || tmpOuter;
+      const wW = Math.max(wrap.scrollWidth||wrap.offsetWidth||0, 860);
+      const wH = Math.max(wrap.scrollHeight||wrap.offsetHeight||0, 150);
+      const canvas = await html2canvas(wrap,{
+        backgroundColor:'#ffffff', scale:1.5, useCORS:true, allowTaint:false, logging:false,
+        windowWidth:wW, windowHeight:wH
+      });
+      dataUrl = canvas.toDataURL('image/jpeg',0.88);
+    }catch(e){}
+    try{ document.body.removeChild(tmpOuter); }catch{}
+    return dataUrl;
+  }
+  let html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <style>
+    body{font-family:Arial,sans-serif;max-width:920px;margin:0 auto;padding:32px;color:#1a1a1a;}
+    .hdr{border-bottom:2px solid #0088bb;padding-bottom:16px;margin-bottom:24px;}
+    .hdr h1{font-size:20px;margin:0 0 6px;color:#006699;}
+    .hdr p{font-size:12px;color:#666;margin:2px 0;}
+    .msg{margin-bottom:20px;padding:12px 16px;border-radius:8px;}
+    .msg.user{background:#f0f7ff;border-left:3px solid #0088bb;}
+    .msg.bot{background:#f9f9f9;border-left:3px solid #ddd;}
+    .msg-role{font-size:11px;font-weight:700;color:#888;text-transform:uppercase;margin-bottom:6px;}
+    .msg-content{font-size:13px;line-height:1.6;white-space:pre-wrap;}
+    .db-label{margin:10px 0 4px;padding:6px 12px;background:#e8f3ff;border-left:3px solid #0088bb;border-radius:4px;font-size:12px;font-weight:600;color:#006699;}
+    .db-img{width:100%;max-width:880px;border-radius:6px;margin:4px 0 12px;border:1px solid #dde;display:block;}
+    .db-kpi-row{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 12px;}
+    .db-kpi{flex:1;min-width:140px;padding:10px 14px;background:#fff;border:1px solid #cce;border-radius:6px;font-size:12px;}
+    .db-kpi b{display:block;font-size:18px;color:#006699;margin-bottom:2px;}
+    .footer{margin-top:32px;padding-top:12px;border-top:1px solid #ddd;font-size:10px;color:#aaa;text-align:center;}
+    @media print{.db-img,.db-kpi-row{page-break-inside:avoid;}}
+  </style></head><body>
+  <div class="hdr">
+    <h1>OnePilot — ${convTitle}</h1>
+    <p>Source : ${srcName}</p>
+    <p>Exporté le ${dateStr}</p>
+  </div>`;
+
+  for(const m of msgs){
+    const role = m.role==='user'?'Vous':'OnePilot';
+    const cls  = m.role==='user'?'user':'bot';
+    let rawContent = m.content||'';
+    const dbSpecs = extractAllDashboardSpecs(rawContent);
+    let dashHtml  = '';
+    if(dbSpecs.length){
+      for(const spec of dbSpecs){
+        const dtitle  = spec.title||'Dashboard';
+        const widgets = spec.widgets||[];
+        const dataUrl = await _captureDashboard(spec);
+        if(dataUrl){
+          dashHtml += `<div class="db-label">\u{1F4CA} ${dtitle}</div><img class="db-img" src="${dataUrl}" alt="${dtitle}">`;
+        } else {
+          const kpis   = widgets.filter(w=>w.chart_type==='kpi_card');
+          const charts = widgets.filter(w=>w.chart_type!=='kpi_card');
+          let fb = `<div class="db-label">\u{1F4CA} ${dtitle} — ${widgets.length} widget(s)</div>`;
+          if(kpis.length){
+            fb += `<div class="db-kpi-row">`;
+            kpis.forEach(w=>{
+              const d=w.data||{};
+              const val=d.value!==undefined?String(d.value):'—';
+              const trend=d.trend_pct!=null?` <small style="color:${d.trend_pct>=0?'#1a9e5c':'#dc3232'}">${d.trend_pct>=0?'▲':'▼'}${Math.abs(d.trend_pct)}%</small>`:'';
+              fb+=`<div class="db-kpi"><b>${val}${trend}</b>${w.title||''}</div>`;
+            });
+            fb += `</div>`;
+          }
+          charts.forEach(w=>{
+            const d=w.data||{};
+            if(d.rows&&d.rows.length){
+              const cols=Object.keys(d.rows[0]);
+              fb+=`<div style="margin:6px 0;font-size:11px;font-weight:600;color:#444;">${w.title||w.chart_type}</div>`;
+              fb+=`<table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:10px;">`;
+              fb+=`<tr>${cols.map(c=>`<th style="background:#e8f3ff;padding:4px 8px;border:1px solid #cce;text-align:left;">${c}</th>`).join('')}</tr>`;
+              d.rows.slice(0,20).forEach(row=>{
+                fb+=`<tr>${cols.map(c=>`<td style="padding:3px 8px;border:1px solid #eee;">${row[c]??'—'}</td>`).join('')}</tr>`;
+              });
+              if(d.rows.length>20) fb+=`<tr><td colspan="${cols.length}" style="padding:3px 8px;color:#888;font-style:italic;">… ${d.rows.length-20} lignes supplémentaires</td></tr>`;
+              fb+=`</table>`;
+            }
+          });
+          dashHtml += fb;
+        }
+      }
+      rawContent = rawContent.replace(/```dashboard[\s\S]*?\n```/g,'').trim();
+    }
+    const content = rawContent.replace(/</g,'&lt;').replace(/>/g,'&gt;').trim();
+    html+=`<div class="msg ${cls}">
+      <div class="msg-role">${role}</div>
+      ${content?`<div class="msg-content">${content}</div>`:''}
+      ${dashHtml}
+    </div>`;
+  }
+  html+=`<div class="footer">OnePilot Chat IA — ${dateStr}</div></body></html>`;
+  const blob=new Blob([html],{type:'text/html'});
+  const url=URL.createObjectURL(blob);
+  const w=window.open(url,'_blank');
+  if(w){setTimeout(()=>{w.print();URL.revokeObjectURL(url);},1000);}
+  toast('<svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 6 5 9 10 3"/></svg> PDF prêt à imprimer','success');
 }
 
 // ════ SEND ════
@@ -1738,6 +2446,32 @@ const _TEMPLATES = {
 };
 function toggleSbTpl(){const s=document.getElementById('sbTplSection');if(s)s.classList.toggle('open');}
 function toggleSbFav(){const s=document.getElementById('sbFavSection');if(s)s.classList.toggle('open');}
+/* ── Rail popups ── */
+function toggleRailPopup(id, btn){
+  closeRailPopups();
+  const p=document.getElementById(id);
+  if(!p)return;
+  // Positionner verticalement au niveau du bouton
+  const r=btn.getBoundingClientRect();
+  p.style.top=Math.min(r.top, window.innerHeight-200)+'px';
+  p.classList.add('open');
+  // Remplir favoris si besoin
+  if(id==='railFavPopup') renderRailFavs();
+}
+function closeRailPopups(){
+  document.querySelectorAll('.rail-popup').forEach(p=>p.classList.remove('open'));
+}
+function renderRailFavs(){
+  const el=document.getElementById('railFavList');
+  if(!el)return;
+  const favs=Array.from(_favorites.values()).slice(0,8);
+  if(!favs.length){el.innerHTML='<div style="color:var(--text-3);font-size:11px;padding:6px 0;">Aucun favori</div>';return;}
+  el.innerHTML=favs.map(f=>`<div class="rail-popup-item" onclick="closeRailPopups();loadConv('${f.conv_id||''}')">
+    <svg viewBox="0 0 24 24" fill="#f5c518" stroke="#f5c518" width="12" height="12"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+    <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;">${f.title||'Sans titre'}</span>
+  </div>`).join('');
+}
+document.addEventListener('click',e=>{if(!e.target.closest('.rail-popup')&&!e.target.closest('.rail-btn'))closeRailPopups();});
 async function runTemplate(tplId){
   const ts=document.getElementById('sbTplSection');if(ts)ts.classList.remove('open');
   const src=(S.sources||[]).find(s=>s.id===S.srcId);const sn=((src||{}).name||'').toLowerCase();
@@ -1750,16 +2484,27 @@ async function runTemplate(tplId){
 
 // ── Favoris ───────────────────────────────────────────────────────────────
 const _favorites=new Map();
+const _favsByConv=new Map(); // conv_id → dashboard_id (index inverse)
+const _pinnedConvs=new Set(); // conv_ids épinglées (Option A)
+
+function _rebuildFavsByConv(){
+  _favsByConv.clear();
+  _favorites.forEach((fav, dashId)=>{
+    if(fav.conv_id) _favsByConv.set(fav.conv_id, dashId);
+  });
+}
 async function loadFavorites(){
   try{const r=await fetch(API_BASE+'/api/favorites?user_id=admin');if(!r.ok)return;
   const d=await r.json();_favorites.clear();
   (d.favorites||[]).forEach(f=>_favorites.set(f.dashboard_id,{dashboard_id:f.dashboard_id,title:f.title,spec_json:f.spec_json,source_id:f.source_id,conv_id:f.conv_id}));
+  _rebuildFavsByConv();
   renderFavoritesSidebar();}catch(e){console.warn('Favorites:',e);}
 }
 function renderFavoritesSidebar(){
+  _rebuildFavsByConv();
   const list=document.getElementById('sbFavList');const empty=document.getElementById('sbFavEmpty');
   if(!list)return;list.querySelectorAll('.sb-fav-item').forEach(el=>el.remove());
-  if(_favorites.size===0){if(empty)empty.style.display='block';return;}
+  if(_favorites.size===0){if(empty)empty.style.display='block'; renderConvs(); return;}
   if(empty)empty.style.display='none';
   _favorites.forEach((fav,did)=>{
     const item=document.createElement('div');item.className='sb-fav-item';
@@ -1768,6 +2513,7 @@ function renderFavoritesSidebar(){
     item.querySelector('.sb-fav-item-del').onclick=(e)=>removeFavorite(did,e);
     list.appendChild(item);
   });
+  renderConvs();
 }
 async function toggleFavorite(dashId,title,btn){
   if(_favorites.has(dashId)){await removeFavorite(dashId,null);const svg=btn.querySelector('svg');btn.classList.remove('active');if(svg)svg.style.fill='none';return;}
@@ -1840,6 +2586,7 @@ async function send(){
   const q=inp.value.trim();
   if(!q||S.streaming)return;
   if(!S.srcId){toast('Sélectionnez une source');return;}
+  S.lastQuestion=q;
   S.qHistory.push(q);S.qHistoryIdx=S.qHistory.length;
   inp.value='';inp.style.height='auto';refreshSend();
   document.getElementById('charCt').textContent='';
@@ -1872,7 +2619,90 @@ async function doStream(q){
         for(const line of dec.decode(value,{stream:true}).split('\n')){
           if(!line.startsWith('data: '))continue;
           const d=line.slice(6).trim();if(d==='[DONE]')break;
-          try{const p=JSON.parse(d);full+=p.token||p.content||p.text||'';}
+          try{
+            const p=JSON.parse(d);
+            // Messages thinking → ignorer complètement (pas dans la bulle)
+            if(p.type==='thinking'||(p.thinking&&!p.token&&!p.content)){continue;}
+
+            // ── Sprint 9 : Résultats Multi-Agent ─────────────────────────────
+            if(p.type==='sql'){
+              // ── Fix Sprint 10 : dashboard envoyé avec type "sql" par le backend ──
+              // Le backend fait : yield _sse({"type":"sql","content":"```dashboard\n{...}\n```","method":"dashboard_engine"})
+              // Il faut préserver le bloc ```dashboard tel quel au lieu de le wrapper dans ```sql
+              const _rawContent = p.content||p.sql||'';
+              if(_rawContent.trimStart().startsWith('```dashboard')){
+                full += '\n\n' + _rawContent.trim();
+                continue;
+              }
+              const method = p.method||'';
+              const isMulti = p.sqls && p.sqls.length > 1;
+              const isComparison = method.includes('multi_query') &&
+                (q.toLowerCase().includes(' vs ') ||
+                 q.toLowerCase().includes('versus') ||
+                 q.toLowerCase().startsWith('compare'));
+
+              if(isMulti && isComparison){
+                // Mode comparaison (vs/compare) → deux blocs SQL séparés
+                let multiBlock = '';
+                (p.sub_queries||[]).forEach((sq,i)=>{
+                  multiBlock += `
+
+**Sous-question ${i+1}** — *${sq.text}*
+`;
+                  if(sq.success && sq.sql){
+                    multiBlock += `\`\`\`sql
+${sq.sql}
+\`\`\``;
+                  } else {
+                    multiBlock += `> <span class='sq-fail'><svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 1L13 13H1z"/><line x1="7" y1="6" x2="7" y2="9"/><circle cx="7" cy="11" r=".6" fill="currentColor"/></svg> Échec : ${sq.error||'aucun résultat'}</span>`;
+                  }
+                });
+                full += multiBlock;
+              } else if(isMulti){
+                // Mode fusion (et) → SQL principal + note sur les sous-questions
+                let fuseBlock = `
+
+\`\`\`sql
+${p.content||p.sql||''}
+\`\`\``;
+                const subs = (p.sub_queries||[]).filter(sq=>sq.success && sq.sql);
+                if(subs.length > 1){
+                  fuseBlock += `
+
+> <svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="1" y="1" width="12" height="12" rx="1.5"/><line x1="1" y1="5" x2="13" y2="5"/><line x1="5" y1="5" x2="5" y2="13"/></svg> **${subs.length} requêtes combinées** :`;
+                  subs.forEach((sq,i)=>{
+                    fuseBlock += `
+> ${i+1}. *${sq.text}*
+
+\`\`\`sql
+${sq.sql}
+\`\`\``;
+                  });
+                }
+                full += fuseBlock;
+              } else {
+                // Mode simple → comportement original
+                full += `
+
+SQL
+
+\`\`\`sql
+${p.content||''}
+\`\`\``;
+              }
+              continue;
+            }
+
+            // Warning sprint 9
+            if(p.type==='warning'){
+              full += `
+
+> <svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 1L13 13H1z"/><line x1="7" y1="6" x2="7" y2="9"/><circle cx="7" cy="11" r=".6" fill="currentColor"/></svg> ${p.content||''}`;
+              continue;
+            }
+
+            full+=p.token||p.content||p.text||'';
+          }
           catch{full+=d!=='[DONE]'?d:'';}
           const b=document.getElementById(bubbleId);
           if(b){b.innerHTML=mdRender(full)+'<span class="cur"></span>';scrollMsgs();}
@@ -1907,20 +2737,20 @@ async function doStream(q){
 // ════ FALLBACK LOCAL INTELLIGENT ════
 async function genLocal(q){
   const ql=q.toLowerCase(),ctx=srcCtx;
-  if(!ctx)return'⚠️ Sélectionnez une source pour continuer.';
+  if(!ctx)return'Sélectionnez une source pour continuer.';
   const{source:src,total_entities:te,total_relations:tr,entities,relations}=ctx;
   const n=src.name;
   if((ql.includes('combien')||ql.includes('nombre'))&&(ql.includes('table')||ql.includes('entit')))
     return`**${n}** contient **${te} entités** indexées.\n\nExemples : ${entities.slice(0,5).map(e=>'`'+e.name+'`').join(', ')}${te>5?'…':''}`;
   if(ql.includes('relation')||ql.includes('fk')||ql.includes('clé étrangère')){
     const smp=relations.slice(0,4).map(r=>`- \`${r.source_entity}.${r.source_field}\` → \`${r.target_entity}.${r.target_field}\` *(${r.detection_method}, conf: ${Math.round((r.confidence||1)*100)}%)*`).join('\n');
-    return`**${n}** — **${tr} relations** détectées.\n\n${smp||'Aucune relation chargée.'}\n\n💡 Voir onglet **Relations** dans l'interface principale.`;
+    return`**${n}** — **${tr} relations** détectées.\n\n${smp||'Aucune relation chargée.'}\n\n<svg viewBox="0 0 14 14" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M7 1a4 4 0 0 1 2.5 7.1V10H4.5V8.1A4 4 0 0 1 7 1z"/><line x1="4.5" y1="12" x2="9.5" y2="12"/><line x1="5.5" y1="13.5" x2="8.5" y2="13.5"/></svg> Voir onglet **Relations** dans l'interface principale.`;
   }
   if(ql.includes('sql')||ql.includes('requête')||ql.includes('jointure')){
     const rel=relations[0];
-    if(rel)return`🔧 Exemple SQL — **${n}** :\n\n\`\`\`sql\nSELECT a.*, b.*\nFROM ${rel.source_entity} a\nJOIN ${rel.target_entity} b\n  ON a.${rel.source_field} = b.${rel.target_field}\nWHERE 1=1\nLIMIT 100;\n\`\`\``;
+    if(rel)return`Exemple SQL — **${n}** :\n\n\`\`\`sql\nSELECT a.*, b.*\nFROM ${rel.source_entity} a\nJOIN ${rel.target_entity} b\n  ON a.${rel.source_field} = b.${rel.target_field}\nWHERE 1=1\nLIMIT 100;\n\`\`\``;
     const e=entities[0];
-    return e?`\`\`\`sql\nSELECT *\nFROM ${e.name}\nLIMIT 100;\n\`\`\``:'⚠️ Aucune entité disponible.';
+    return e?`\`\`\`sql\nSELECT *\nFROM ${e.name}\nLIMIT 100;\n\`\`\``:'Aucune entité disponible.';
   }
   if(ql.includes('primaire')||ql.includes('primary key')){
     const pks=[];
@@ -1929,7 +2759,7 @@ async function genLocal(q){
   }
   if(ql.includes('liste')||ql.includes('table')||ql.includes('entit')){
     const list=entities.slice(0,10).map((e,i)=>`${i+1}. \`${e.name}\` — ${e.field_count||0} champs`).join('\n');
-    return`📋 Entités de **${n}** :\n\n${list}${te>10?`\n\n*… et ${te-10} autres.*`:''}`;
+    return`Entités de **${n}** :\n\n${list}${te>10?`\n\n*… et ${te-10} autres.*`:''}`;
   }
   if(ql.includes('structure')||ql.includes('info')||ql.includes('résumé'))
     return`**${n}**\n\n- **Type** : ${src.connector_type}\n- **Hôte** : \`${src.host||'—'}${src.port?':'+src.port:''}\`\n- **Base** : \`${src.database_name||src.base_url||'—'}\`\n- **Entités** : ${te}\n- **Relations** : ${tr}\n- **Statut** : ${src.status||'unknown'}`;
@@ -1944,7 +2774,19 @@ function appendBubble(role,content,animate){
   const grp=document.createElement('div');grp.className='msg-grp';
   const init=AUTH?AUTH.username.charAt(0).toUpperCase():'U';
   if(role==='user'){
-    grp.innerHTML=`<div class="msg-row usr"><div class="av usr">${init}</div><div class="bubble usr" id="${bid}">${esc(content)}</div></div>`;
+    grp.innerHTML=`
+      <div class="msg-row usr">
+        <div class="av usr">${init}</div>
+        <div class="bubble usr" id="${bid}">${esc(content)}</div>
+      </div>
+      <div class="bbl-actions usr-acts">
+        <span class="bbl-act" onclick="copyUserMsg('${bid}')" title="Copier">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="4" y="4" width="10" height="10" rx="1.5"/><path d="M12 4V2.5A1.5 1.5 0 0010.5 1h-8A1.5 1.5 0 001 2.5v8A1.5 1.5 0 002.5 12H4"/></svg>
+        </span>
+        <span class="bbl-act" onclick="editUserMsg('${bid}')" title="Modifier et renvoyer">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M11 2l3 3L5 14H2v-3L11 2z"/><path d="M9 4l3 3"/></svg>
+        </span>
+      </div>`;
   }else{
     grp.id=bid+'-g';
     // Extraire les specs dashboard si présentes (même logique que finalizeStream)
@@ -1969,25 +2811,32 @@ function appendBubble(role,content,animate){
         <div class="msg-time">${time}</div>
       </div>
       <div class="bbl-actions" style="position:relative;">
-        <span class="bbl-act" onclick="copyBubble('${bid}')">
-          <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="3" width="8" height="8" rx="1"/><path d="M9 3V1.5A1.5 1.5 0 007.5 0H1.5A1.5 1.5 0 000 1.5v6A1.5 1.5 0 001.5 9H3"/></svg>Copier
+        <span class="bbl-act" onclick="copyBubble('${bid}')" title="Copier">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="4" y="4" width="10" height="10" rx="1.5"/><path d="M12 4V2.5A1.5 1.5 0 0010.5 1h-8A1.5 1.5 0 001 2.5v8A1.5 1.5 0 002.5 12H4"/></svg>
         </span>
-        <span class="bbl-act" id="${bid}-tts" onclick="speak('${bid}',this)">
-          ${ttsIco()}Écouter
         </span>
-        <span class="bbl-act explain-btn" id="${bid}-explain" onclick="explainSQL('${bid}',this)" title="Analyser le SQL — explain plan + optimisations">
-          <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-            <circle cx="6" cy="6" r="5"/>
-            <path d="M4.5 4.5a1.5 1.5 0 013 .5c0 1-1.5 1.5-1.5 2.5"/>
-            <circle cx="6" cy="10" r=".5" fill="currentColor" stroke="none"/>
-          </svg>Expliquer
+        <span class="bbl-act" id="${bid}-tts" onclick="speak('${bid}',this)" title="Écouter">
+          ${ttsIco()}
+        </span>
+        <span class="bbl-act explain-btn" id="${bid}-explain" onclick="explainSQL('${bid}',this)" title="Analyser le SQL">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+            <circle cx="8" cy="8" r="6.5"/>
+            <path d="M6 6a2 2 0 014 1c0 1.5-2 2-2 3.5"/>
+            <circle cx="8" cy="13" r=".7" fill="currentColor" stroke="none"/>
+          </svg>
         </span>
         <span class="bbl-act" id="${bid}-like" onclick="feedback('${bid}','like',this)" title="Bonne réponse"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 7V13H2V7H5z"/><path d="M5 7l3-5a2 2 0 014 2v2h3l-1 6H5z"/></svg></span>
         <span class="bbl-act" id="${bid}-dislike" onclick="feedback('${bid}','dislike',this)" title="Mauvaise réponse"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M11 9V3h3v6h-3z"/><path d="M11 9l-3 5a2 2 0 01-4-2V10H1l1-6h9z"/></svg></span>
+        <span class="bbl-act" onclick="regenMsg('${bid}')" title="Regénérer"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8a6 6 0 1 0 1.2-3.6"/><polyline points="2 3 2 8 7 8"/></svg></span>
         <span class="fb-toast" id="${bid}-fb"></span>
       </div>`;
   }
   inner.appendChild(grp);
+  // ── Sauvegarder contenu brut pour export PDF (anciennes conversations) ──
+  if(role !== 'user'){
+    const _bbl = document.getElementById(bid);
+    if(_bbl && !_bbl.dataset.raw) _bbl.dataset.raw = content;
+  }
   if(animate)scrollMsgs();
   // Rendre les dashboards inline sous la bulle (rechargement de conv)
   if(typeof _dbSpecs !== 'undefined' && _dbSpecs && _dbSpecs.length > 0){
@@ -2052,7 +2901,10 @@ function finalizeStream(bid,full){
     dbSpecs.forEach((spec,i)=>{
       const dbContainer=document.createElement('div');
       dbContainer.id='dbcontainer_'+bid+'_'+i;
-      bbl.appendChild(dbContainer);
+      // Appendre au msg-grp (pas dans la bulle) — même logique que appendBubble
+      const _grp = document.getElementById(bid+'-g');
+      if(_grp) _grp.appendChild(dbContainer);
+      else bbl.appendChild(dbContainer);
       requestAnimationFrame(()=>{ renderDashboard(spec,'dbcontainer_'+bid+'_'+i); setTimeout(fitDashboards, 300); });
     });
     // Sauvegarder TOUS les dashboards de cette conversation (pas seulement le dernier)
@@ -2072,12 +2924,12 @@ function finalizeStream(bid,full){
   }
   const grp=document.getElementById(bid+'-g');if(!grp)return;
   const acts=document.createElement('div');acts.className='bbl-actions';acts.style.position='relative';
-  acts.innerHTML=`<span class="bbl-act" onclick="copyBubble('${bid}')"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="3" width="8" height="8" rx="1"/><path d="M9 3V1.5A1.5 1.5 0 007.5 0H1.5A1.5 1.5 0 000 1.5v6A1.5 1.5 0 001.5 9H3"/></svg>Copier</span><span class="bbl-act" id="${bid}-tts" onclick="speak('${bid}',this)">${ttsIco()}Écouter</span><span class="bbl-act explain-btn" id="${bid}-explain" onclick="explainSQL('${bid}',this)" title="Analyser le SQL — explain plan + optimisations"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="6" cy="6" r="5"/><path d="M4.5 4.5a1.5 1.5 0 013 .5c0 1-1.5 1.5-1.5 2.5"/><circle cx="6" cy="10" r=".5" fill="currentColor" stroke="none"/></svg>Expliquer</span><span class="bbl-act" id="${bid}-like" onclick="feedback('${bid}','like',this)" title="Bonne réponse"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 7V13H2V7H5z"/><path d="M5 7l3-5a2 2 0 014 2v2h3l-1 6H5z"/></svg></span><span class="bbl-act" id="${bid}-dislike" onclick="feedback('${bid}','dislike',this)" title="Mauvaise réponse"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M11 9V3h3v6h-3z"/><path d="M11 9l-3 5a2 2 0 01-4-2V10H1l1-6h9z"/></svg></span><span class="fb-toast" id="${bid}-fb"></span>`;
+  acts.innerHTML=`<span class="bbl-act" onclick="copyBubble('${bid}')" title="Copier"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="4" y="4" width="10" height="10" rx="1.5"/><path d="M12 4V2.5A1.5 1.5 0 0010.5 1h-8A1.5 1.5 0 001 2.5v8A1.5 1.5 0 002.5 12H4"/></svg></span><span class="bbl-act" id="${bid}-tts" onclick="speak('${bid}',this)" title="Écouter">${ttsIco()}</span><span class="bbl-act explain-btn" id="${bid}-explain" onclick="explainSQL('${bid}',this)" title="Analyser le SQL"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6.5"/><path d="M6 6a2 2 0 014 1c0 1.5-2 2-2 3.5"/><circle cx="8" cy="13" r=".7" fill="currentColor" stroke="none"/></svg></span><span class="bbl-act" id="${bid}-like" onclick="feedback('${bid}','like',this)" title="Bonne réponse"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 7V13H2V7H5z"/><path d="M5 7l3-5a2 2 0 014 2v2h3l-1 6H5z"/></svg></span><span class="bbl-act" id="${bid}-dislike" onclick="feedback('${bid}','dislike',this)" title="Mauvaise réponse"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M11 9V3h3v6h-3z"/><path d="M11 9l-3 5a2 2 0 01-4-2V10H1l1-6h9z"/></svg></span><span class="bbl-act" onclick="regenMsg('${bid}')" title="Regénérer"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8a6 6 0 1 0 1.2-3.6"/><polyline points="2 3 2 8 7 8"/></svg></span><span class="fb-toast" id="${bid}-fb"></span>`;
   grp.appendChild(acts);
 }
 function showWelcome(){
   document.getElementById('msgsInner').innerHTML=`<div class="welcome" id="welcome">
-    <div class="wlc-rw"><div class="wlc-r"></div><div class="wlc-r2"></div><div class="wlc-logo"><img src="/logo-onepilot-removebg-preview.png" alt="OP" onerror="this.outerHTML='<svg width="32" height="32" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="5" width="10" height="8" rx="2"/><path d="M6 5V4a2 2 0 014 0v1"/><circle cx="6" cy="9" r="1" fill="currentColor"/><circle cx="10" cy="9" r="1" fill="currentColor"/><line x1="6" y1="12" x2="10" y2="12"/></svg>'"></div></div>
+    <div class="wlc-rw"><div class="wlc-r"></div><div class="wlc-r2"></div><div class="wlc-logo"><img src="/logo-onepilot-removebg-preview.png" alt="OP" onerror="this.style.opacity='0'"></div></div>
     <div class="wlc-title">OnePilot Chat IA</div>
     <div class="wlc-sub">Toujours prêt à répondre.</div>
     <div class="chips" id="chips">
@@ -2201,15 +3053,18 @@ async function feedback(bid,type,btn){
   likeBtn.classList.toggle('liked',type==='like');
   dislikeBtn.classList.toggle('disliked',type==='dislike');
   if(fbToast){
-    fbToast.textContent=type==='like'?'✓ Merci !':'✗ Feedback envoyé';
+    fbToast.innerHTML=type==='like'?'<svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 6 5 9 10 3"/></svg> Merci !':'<svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="2" x2="10" y2="10"/><line x1="10" y1="2" x2="2" y2="10"/></svg> Feedback envoyé';
     fbToast.classList.add('show');
     setTimeout(()=>fbToast.classList.remove('show'),2000);
   }
   try{
     await api('/feedback','POST',{
-      conversation_id:S.convId,source_id:S.srcId,
-      message_id:bid,feedback_type:type,
+      conversation_id:S.convId,
+      source_id:S.srcId,
+      message_id:bid,
+      feedback_type:type,
       answer:bbl.innerText.substring(0,500),
+      question:S.lastQuestion||'',
     });
   }catch(e){console.warn('feedback:',e);}
 }
@@ -2256,7 +3111,7 @@ function renderChart(body){
   if(lastData.type==='bar'||lastData.type==='stats'){
     const labels=lastData.labels||lastData.values.map((_,i)=>'Val '+(i+1));
     const values=lastData.values||[];
-    body.innerHTML=`<div class="chart-lbl">📊 <span>${esc(lastData.title)}</span></div><div class="chart-wrap"><div class="cwrap"><canvas id="mc"></canvas></div></div>`;
+    body.innerHTML=`<div class="chart-lbl"><svg viewBox="0 0 14 14" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="3" height="7" rx="1"/><rect x="5.5" y="3" width="3" height="10" rx="1"/><rect x="10" y="1" width="3" height="12" rx="1"/></svg> <span>${esc(lastData.title)}</span></div><div class="chart-wrap"><div class="cwrap"><canvas id="mc"></canvas></div></div>`;
     const isDark=!document.documentElement.classList.contains('light');
     const gc=isDark?'rgba(24,35,54,.6)':'rgba(197,216,232,.5)';
     const tc=isDark?'#7ea4be':'#4a6880';
@@ -2270,7 +3125,7 @@ function renderChart(body){
         if(lbl){
           const dashEl=canvas.closest('[id^="db_"]');
           if(dashEl) applyDashboardFilter(dashEl.id, widget.label_col||'dim', lbl);
-          toast('🔍 Filtre: '+lbl,'info');
+          toast('<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="vertical-align:middle"><circle cx="6.5" cy="6.5" r="4"/><line x1="10" y1="10" x2="14" y2="14"/></svg> Filtre: '+lbl,'info');
         }
       },
      options:{responsive:true,maintainAspectRatio:false,animation:{duration:700},plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>' '+ctx.parsed.y.toLocaleString('fr-FR')}}},scales:{x:{grid:{color:gc},ticks:{color:tc,font:{family:'"JetBrains Mono"',size:10},maxRotation:30}},y:{grid:{color:gc},ticks:{color:tc,font:{family:'"JetBrains Mono"',size:10}}}}},
@@ -2287,7 +3142,7 @@ function renderStats(body){
   const nums=lastData.values||[];
   const labels=lastData.labels||['Valeur 1','Valeur 2','Valeur 3','Valeur 4'];
   const colors=['ac','gn','or',''];
-  body.innerHTML=`<div class="chart-lbl">📈 <span>${esc(lastData.title)}</span></div><div class="stat-grid">${nums.slice(0,4).map((v,i)=>`<div class="stat-card"><div class="stat-val ${colors[i]||''}">${v.toLocaleString('fr-FR')}</div><div class="stat-lbl">${esc(labels[i]||'Métrique')}</div></div>`).join('')}</div>`;
+  body.innerHTML=`<div class="chart-lbl"><svg viewBox="0 0 14 14" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1,11 4,7 7,9 10,4 13,2"/></svg> <span>${esc(lastData.title)}</span></div><div class="stat-grid">${nums.slice(0,4).map((v,i)=>`<div class="stat-card"><div class="stat-val ${colors[i]||''}">${v.toLocaleString('fr-FR')}</div><div class="stat-lbl">${esc(labels[i]||'Métrique')}</div></div>`).join('')}</div>`;
 }
 function renderCtx(){
   const body=document.getElementById('dpBody');
@@ -2360,7 +3215,7 @@ async function startMediaRec(){
         if(tx){
           S._lastTranscript=tx;  // Stocke pour saveVoiceMessage() fallback
           const lt=document.getElementById('voLiveTranscript');if(lt)lt.textContent=tx;
-          if(voT)voT.textContent='✅ '+tx;
+          if(voT)voT.textContent=tx;
           if(d.command){setTimeout(()=>{handleVoiceCommand(d.command);stopVoice();},400);return;}
           if(S._voiceMsgMode){
             saveVoiceMessage(tx,blob);
@@ -2393,7 +3248,7 @@ async function startMediaRec(){
         an.getFloatTimeDomainData(fb);
         const rms=Math.sqrt(fb.reduce((s,v)=>s+v*v,0)/fb.length);
         const voT=document.getElementById('voTranscript');
-        if(rms>0.01){spoken=true;silMs=0;if(voT)voT.textContent='🎤 Parole détectée…';document.getElementById('voRing')?.classList.add('active');}
+        if(rms>0.01){spoken=true;silMs=0;if(voT)voT.textContent='Parole détectée…';document.getElementById('voRing')?.classList.add('active');}
         else if(spoken){
           silMs+=200;
           if(voT)voT.textContent='⏳ Silence '+(silMs/1000).toFixed(1)+'s…';
@@ -2527,12 +3382,12 @@ function showDictationConfirmation(result,originalText){
   div.style.cssText='position:fixed;bottom:130px;right:20px;z-index:9000;background:var(--bg-2);border:1px solid var(--accent);border-radius:10px;padding:16px;max-width:340px;box-shadow:0 4px 20px rgba(0,0,0,.35);';
   div.innerHTML=`
     <div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">
-      🎤 Dictée détectée — ${esc(entities.action||'action')} ${esc(entities.entity_type||'')}
+      Dictée détectée — ${esc(entities.action||'action')} ${esc(entities.entity_type||'')}
     </div>
     <div style="margin-bottom:10px;">${fieldsHtml}</div>
     ${suggested_sql?`<div style="background:var(--bg-1);border-radius:6px;padding:8px;font-family:var(--font-mono);font-size:11px;color:var(--text-2);margin-bottom:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(suggested_sql)}">${esc(suggested_sql)}</div>`:''}
     <div style="display:flex;gap:8px;margin-top:4px;">
-      <button onclick="confirmDictation('${btoa(unescape(encodeURIComponent(suggested_sql||originalText)))}')" style="flex:1;background:var(--accent);border:none;border-radius:6px;padding:7px;color:#040e1a;cursor:pointer;font-size:12px;font-weight:700;">✓ Confirmer</button>
+      <button onclick="confirmDictation('${btoa(unescape(encodeURIComponent(suggested_sql||originalText)))}')" style="flex:1;background:var(--accent);border:none;border-radius:6px;padding:7px;color:#040e1a;cursor:pointer;font-size:12px;font-weight:700;"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 6 5 9 10 3"/></svg> Confirmer</button>
       <button onclick="document.getElementById('dictConfirm').remove()" style="flex:1;background:none;border:1px solid var(--border-hi);border-radius:6px;padding:7px;color:var(--text-2);cursor:pointer;font-size:12px;">Annuler</button>
     </div>`;
   // Auto-dismiss après 15s
@@ -2577,7 +3432,7 @@ function startStreamingSTT(){
         const tx=d.text||'';
         if(liveEl)liveEl.textContent='';
         if(tx){
-          if(transEl)transEl.textContent='✅ '+tx;
+          if(transEl)transEl.textContent=tx;
           if(d.command){
             setTimeout(()=>{handleVoiceCommand(d.command);stopVoice();},400);
           } else {
@@ -2587,7 +3442,7 @@ function startStreamingSTT(){
         }
       } else if(d.partial){
         if(liveEl)liveEl.textContent=d.partial;
-        if(transEl)transEl.textContent='🎤 '+d.partial+'…';
+        if(transEl)transEl.textContent=d.partial+'…';
       }
     }catch{}
   };
@@ -2676,7 +3531,7 @@ function renderDashboard(spec, containerId){
           title="Ajouter aux favoris">
           <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
         </button>
-        <button class="db-btn" data-drillup="db_${spec.dashboard_id}" onclick="drillUp('db_${spec.dashboard_id}')" title="Retour vue globale" style="opacity:.4;font-size:10px;">⬆ Drill-up</button>
+        <button class="db-btn" data-drillup="db_${spec.dashboard_id}" onclick="drillUp('db_${spec.dashboard_id}')" title="Retour vue globale" style="opacity:.4;font-size:10px;"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><line x1="8" y1="13" x2="8" y2="3"/><polyline points="4,7 8,3 12,7"/></svg> Drill-up</button>
         <button class="db-btn" onclick="toggleDashboardHistory()" title="Historique des dashboards" style="font-size:10px;">
           <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="4" width="3" height="7"/><rect x="4.5" y="2" width="3" height="9"/><rect x="8" y="0" width="3" height="11"/></svg>
           Historique
@@ -2749,7 +3604,7 @@ function renderDashboard(spec, containerId){
   <button id="reset_${spec.dashboard_id}" onclick="resetDashboardFilters('db_${spec.dashboard_id}')"
     style="display:none;background:rgba(255,80,80,.12);border:1px solid rgba(255,80,80,.3);
     color:#f87;border-radius:4px;padding:2px 8px;font-size:10px;cursor:pointer;margin-left:4px;">
-    ✕ Reset filtres
+    <svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="2" y1="2" x2="8" y2="8"/><line x1="8" y1="2" x2="2" y2="8"/></svg> Reset filtres
   </button>`;
 
   // Chart/Table widgets
@@ -2761,7 +3616,7 @@ function renderDashboard(spec, containerId){
       html += `<div class="db-widget" style="grid-column:span 12;">
         <div class="db-widget-header" style="display:flex;align-items:center;justify-content:space-between;">
         <div class="db-widget-title">${(_CHART_SVG[w.chart_type]||'')} ${esc(w.title)}</div>
-        <button class="db-type-btn" onclick="openChartTypePicker('${wid}')" title="Changer le type de graphique">⚙️</button>
+        <button class="db-type-btn" onclick="openChartTypePicker('${wid}')" title="Changer le type de graphique"><svg viewBox="0 0 14 14" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="2"/><path d="M7 1v2M7 11v2M1 7h2M11 7h2M3.1 3.1l1.4 1.4M9.5 9.5l1.4 1.4M3.1 10.9l1.4-1.4M9.5 4.5l1.4-1.4"/></svg></button>
         </div>`;
 
       if(w.chart_type==='table'){
@@ -2903,7 +3758,7 @@ function drillDown(dashId, timeValue, currentLevel){
   if(idx >= _DRILL_LEVELS.length-1){ toast('Niveau maximum de détail atteint'); return; }
   const nextLevel = _DRILL_LEVELS[idx+1];
   _dbDrilldown[dashId] = {level: nextLevel, value: timeValue};
-  toast(`🔍 Drill-down: ${timeValue} → ${_DRILL_LABELS[nextLevel]}`,'info');
+  toast(`<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="vertical-align:middle"><circle cx="6.5" cy="6.5" r="4"/><line x1="10" y1="10" x2="14" y2="14"/></svg> Drill-down: ${timeValue} → ${_DRILL_LABELS[nextLevel]}`,'info');
   const wrap = document.getElementById(dashId);
   if(wrap){
     const q = wrap.dataset.question;
@@ -2924,7 +3779,7 @@ async function generateDrillDashboard(dashId, question, sourceId, level, filterV
   const spinner = document.createElement('div');
   spinner.id = 'drill_spinner_'+dashId;
   spinner.style.cssText = 'text-align:center;padding:16px;color:var(--text-3);font-size:11px;margin-top:8px;';
-  spinner.textContent = `🔍 Chargement ${_DRILL_LABELS[level]||level} pour "${filterValue}"…`;
+  spinner.textContent = `Chargement ${_DRILL_LABELS[level]||level} pour "${filterValue}"…`;
   wrap.after(spinner);
 
   const drillMap = {
@@ -2964,7 +3819,7 @@ async function generateDrillDashboard(dashId, question, sourceId, level, filterV
     const btn = document.querySelector(`[data-drillup="${dashId}"]`);
     if(btn) btn.style.opacity = '1';
 
-    toast(`📊 ${_DRILL_LABELS[level]||level} : "${filterValue}"`, 'info');
+    toast(`<svg viewBox="0 0 14 14" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="3" height="7" rx="1"/><rect x="5.5" y="3" width="3" height="10" rx="1"/><rect x="10" y="1" width="3" height="12" rx="1"/></svg> ${_DRILL_LABELS[level]||level} : "${filterValue}"`, 'info');
 
     if(S.convId){
       if(!_dashboardHistory[S.convId]) _dashboardHistory[S.convId] = [];
@@ -3167,7 +4022,7 @@ function drillUp(dashId){
   const btn = document.querySelector(`[data-drillup="${dashId}"]`);
   if(btn) btn.style.opacity = '0.4';
 
-  toast('⬆ Retour vue globale','info');
+  toast('<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><line x1="8" y1="13" x2="8" y2="3"/><polyline points="4,7 8,3 12,7"/></svg> Retour vue globale','info');
 }
 
 // ── Sparkline ─────────────────────────────────────────────────────
@@ -4159,7 +5014,7 @@ function exportDashboardPNG(wrapId){
       a.href=canvas.toDataURL('image/png');
       a.download='dashboard_'+new Date().toISOString().slice(0,10)+'.png';
       a.click();
-      toast('✅ Dashboard exporté en PNG');
+      toast('<svg viewBox="0 0 16 16" width="14" height="14" fill="#22c55e" style="vertical-align:middle"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm3.3 5.3-4 4a.75.75 0 0 1-1.06 0l-2-2a.75.75 0 0 1 1.06-1.06L6.75 8.69l3.47-3.47a.75.75 0 0 1 1.06 1.06z"/></svg> Dashboard exporté en PNG');
     }).catch(e=>{ toast('Erreur PNG: '+e.message,'error'); });
   }
   if(typeof html2canvas==='undefined'){
@@ -4341,7 +5196,7 @@ function _doExportExcel(wrapId, dashTitle){
     cellStyles: true,
   });
 
-  toast(`✅ Export Excel — ${sheetCount-1} feuille(s)`, 'info');
+  toast(`<svg viewBox="0 0 16 16" width="14" height="14" fill="#22c55e" style="vertical-align:middle"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm3.3 5.3-4 4a.75.75 0 0 1-1.06 0l-2-2a.75.75 0 0 1 1.06-1.06L6.75 8.69l3.47-3.47a.75.75 0 0 1 1.06 1.06z"/></svg> Export Excel — ${sheetCount-1} feuille(s)`, 'info');
 }
 
 function exportDashboardCSV(dashId){
@@ -4381,7 +5236,7 @@ function exportDashboardCSV(dashId){
   a.href = URL.createObjectURL(blob);
   a.download = 'dashboard_'+new Date().toISOString().slice(0,10)+'.csv';
   a.click();
-  toast('✅ Export CSV — '+rows.length+' lignes');
+  toast('<svg viewBox="0 0 16 16" width="14" height="14" fill="#22c55e" style="vertical-align:middle"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm3.3 5.3-4 4a.75.75 0 0 1-1.06 0l-2-2a.75.75 0 0 1 1.06-1.06L6.75 8.69l3.47-3.47a.75.75 0 0 1 1.06 1.06z"/></svg> Export CSV — '+rows.length+' lignes');
 }
 
 // ── Dashboard Persistence ──────────────────────────────────────────────
@@ -4489,6 +5344,13 @@ async function restoreDashboard(convId){
       if(targetGrp) _usedGrps.add(targetGrp);
       if(targetGrp){
         targetGrp.appendChild(dbContainer);
+        // ── Sauvegarder spec dans data-raw de la bulle pour export PDF ──
+        const _tBbl = targetGrp.querySelector('.bubble.bot');
+        if(_tBbl){
+          const _cur = _tBbl.dataset.raw||'';
+          const _block = '\x60\x60\x60dashboard\n'+JSON.stringify(spec)+'\n\x60\x60\x60';
+          if(!_cur.includes(spec.dashboard_id)) _tBbl.dataset.raw = (_cur+(_cur?'\n':'')+_block).trim();
+        }
       } else {
         const grp = document.createElement('div');
         grp.className = 'msg-grp';
@@ -4564,7 +5426,7 @@ function openChartTypePicker(widgetId){
   const picker = document.createElement('div');
   picker.className = 'db-type-picker';
   picker.innerHTML = `
-    <div class="db-type-picker-title">⚙️ Choisir le type de visualisation</div>
+    <div class="db-type-picker-title"><svg viewBox="0 0 14 14" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="2"/><path d="M7 1v2M7 11v2M1 7h2M11 7h2M3.1 3.1l1.4 1.4M9.5 9.5l1.4 1.4M3.1 10.9l1.4-1.4M9.5 4.5l1.4-1.4"/></svg> Choisir le type de visualisation</div>
     <div class="db-type-grid">
       ${_CHART_TYPES.map(t=>`
         <div class="db-type-item ${w && w.chart_type===t.type?'active':''}"
@@ -4607,8 +5469,8 @@ function applyChartType(widgetId, newType){
   _dbWidgets[widgetId] = w;
 
   // Update icon in title
-  const icons = {pie:'🥧',doughnut:'🍩',line:'📈',bar:'📊',bar_horizontal:'📊',
-                 area:'📉',scatter:'🔵',treemap:'🌳',gauge:'🎯',waterfall:'↕️',
+  const icons = {pie:'pie',doughnut:'donut',line:'line',bar:'bar',bar_horizontal:'bar',
+                 area:'area',scatter:'scatter',treemap:'tree',gauge:'gauge',waterfall:'fall',
                  funnel:'funnel',kpi_card:'kpi',table:'table',sparkline:'spark'};
   const titleEl = document.getElementById(widgetId)?.closest('.db-widget')?.querySelector('.db-widget-title');
 
@@ -4635,7 +5497,7 @@ function applyChartType(widgetId, newType){
       }
     }
   }
-  toast(`✅ Type changé : ${newType}`, 'info');
+  toast(`<svg viewBox="0 0 16 16" width="14" height="14" fill="#22c55e" style="vertical-align:middle"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm3.3 5.3-4 4a.75.75 0 0 1-1.06 0l-2-2a.75.75 0 0 1 1.06-1.06L6.75 8.69l3.47-3.47a.75.75 0 0 1 1.06 1.06z"/></svg> Type changé : ${newType}`, 'info');
 }
 
 
@@ -4691,7 +5553,16 @@ function _buildDashboardPDF(el, title, sourceId, question, isConsolidated){
   const isLight = document.documentElement.classList.contains('light');
   const bgColor  = isLight ? '#f4f8ff' : '#0d1b2e';
 
-  html2canvas(el, {
+  /* ── Désactiver animations Chart.js → capture propre garantie ── */
+  if(window._dbCharts){
+    Object.values(_dbCharts).forEach(c=>{
+      try{ c.options.animation=false; c.update('none'); }catch{}
+    });
+  }
+
+  /* ── Attendre fin de rendu : rAF + délai sécurité 250ms ── */
+  new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,250)))
+  .then(()=>html2canvas(el, {
     backgroundColor: bgColor,
     scale: 2,
     useCORS: true,
@@ -4699,7 +5570,7 @@ function _buildDashboardPDF(el, title, sourceId, question, isConsolidated){
     logging: false,
     windowWidth: el.scrollWidth,
     windowHeight: el.scrollHeight
-  }).then(canvas => {
+  })).then(canvas => {
     const { jsPDF } = window.jspdf;
 
     /* Dimensions A4 landscape en mm */
@@ -4817,7 +5688,7 @@ function _buildDashboardPDF(el, title, sourceId, question, isConsolidated){
       .slice(0, 50);
     const dateFile = new Date().toISOString().slice(0,10);
     pdf.save(`${safeName}_${dateFile}.pdf`);
-    toast(`✅ PDF exporté — ${pageCount} page(s)`,'info');
+    toast(`<svg viewBox="0 0 16 16" width="14" height="14" fill="#22c55e" style="vertical-align:middle"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm3.3 5.3-4 4a.75.75 0 0 1-1.06 0l-2-2a.75.75 0 0 1 1.06-1.06L6.75 8.69l3.47-3.47a.75.75 0 0 1 1.06 1.06z"/></svg> PDF exporté — ${pageCount} page(s)`,'info');
 
   }).catch(e => {
     console.error('PDF error:', e);
@@ -4874,7 +5745,7 @@ function filterDBWidget(widgetId, field, value){
     }
   }
   if(dashEl) applyDashboardFilter(dashEl.id, field, value);
-  toast(`🔍 Filtre : ${value}`, 'info');
+  toast(`<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="vertical-align:middle"><circle cx="6.5" cy="6.5" r="4"/><line x1="10" y1="10" x2="14" y2="14"/></svg> Filtre : ${value}`, 'info');
 }
 
 // ── Historique des dashboards par conversation ─────────────────────
@@ -4925,7 +5796,7 @@ function updateDashboardHistoryPanel(convId){
         Dashboards (${specs.length})
       </span>
       <button onclick="document.getElementById('db-history-panel').style.transform='translateX(100%)'"
-        style="background:none;border:none;color:var(--text-3);cursor:pointer;font-size:13px;padding:0;">✕</button>
+        style="background:none;border:none;color:var(--text-3);cursor:pointer;font-size:13px;padding:0;"><svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="2" y1="2" x2="8" y2="8"/><line x1="8" y1="2" x2="2" y2="8"/></svg></button>
     </div>
     ${specs.map((spec, i) => `
       <div onclick="replayDashboard('${spec.dashboard_id}')" style="
@@ -5041,25 +5912,48 @@ function mergeAllDashboards(convId){
   document.body.style.overflow = 'hidden';
 
   modal.innerHTML = `
-    <div id="dbm-header" style="flex-shrink:0;background:var(--bg-1);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);padding:8px 12px;display:flex;align-items:center;gap:8px;overflow:hidden;">
-      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;max-width:150px;overflow:hidden;">
-        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#00b8f5" stroke-width="1.5"><rect x="1" y="8" width="3" height="7"/><rect x="5.5" y="5" width="3" height="10"/><rect x="10" y="2" width="3" height="13"/></svg>
-        <span style="font-size:15px;font-weight:700;color:var(--text-0);">Tableau de bord consolidé</span>
-        <span id="dbm-count" style="font-size:10px;color:var(--accent);opacity:.7;"></span>
+    <div id="dbm-header" style="flex-shrink:0;background:var(--bg-1);border-bottom:1px solid var(--border);padding:0 16px;height:48px;display:flex;align-items:center;gap:12px;">
+      <!-- Titre à gauche -->
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+        <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="#00b8f5" stroke-width="1.5"><rect x="1" y="8" width="3" height="7"/><rect x="5.5" y="5" width="3" height="10"/><rect x="10" y="2" width="3" height="13"/></svg>
+        <span style="font-size:13px;font-weight:700;color:var(--text-0);white-space:nowrap;">Tableau de bord consolidé</span>
+        <span id="dbm-count" style="font-size:10px;color:var(--accent);opacity:.7;white-space:nowrap;"></span>
       </div>
-      <div style="display:flex;gap:6px;align-items:center;flex:1;min-width:0;overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;scrollbar-width:none;">
-        <button onclick="document.getElementById('dbm-sidebar').style.display = document.getElementById('dbm-sidebar').style.display==='none'?'flex':'none'"
-          style="background:var(--bg-3);border:1px solid var(--border);color:var(--accent);border-radius:5px;padding:4px 10px;font-size:11px;cursor:pointer;">
-          ⊞ Dashboards
+      <!-- Bouton Dashboards -->
+      <button onclick="document.getElementById('dbm-sidebar').style.display=document.getElementById('dbm-sidebar').style.display==='none'?'flex':'none'"
+        style="background:var(--bg-3);border:1px solid var(--border);color:var(--accent);border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:5px;flex-shrink:0;">
+        <svg viewBox="0 0 14 14" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="1" y="1" width="5" height="12" rx="1"/><rect x="8" y="1" width="5" height="5" rx="1"/><rect x="8" y="8" width="5" height="5" rx="1"/></svg>Dashboards
+      </button>
+      <!-- Spacer -->
+      <div style="flex:1;"></div>
+      <!-- Séparateur -->
+      <div style="width:1px;height:20px;background:var(--border);flex-shrink:0;"></div>
+      <!-- Boutons export groupés à droite -->
+      <div style="display:flex;gap:5px;align-items:center;flex-shrink:0;">
+        <button onclick="exportMergedPNG()" style="background:rgba(0,180,230,.12);border:1px solid rgba(0,180,230,.3);color:#00b8f5;border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;">
+          <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 1v7M3 5l3 3 3-3"/><path d="M1 9v1a1 1 0 001 1h8a1 1 0 001-1V9"/></svg>PNG
         </button>
-        <button onclick="exportMergedPNG()" style="background:rgba(0,180,230,.12);border:1px solid rgba(0,180,230,.3);color:#00b8f5;border-radius:5px;padding:4px 12px;font-size:11px;cursor:pointer;">⬇ PNG</button>
-        <button onclick="exportMergedExcel()" style="background:rgba(29,111,66,.15);border:1px solid rgba(29,111,66,.4);color:#4caf7d;border-radius:5px;padding:4px 12px;font-size:11px;cursor:pointer;">⬇ Excel</button>
-        <button onclick="exportMergedPDF()" style="background:rgba(220,50,50,.12);border:1px solid rgba(220,50,50,.35);color:#f07070;border-radius:5px;padding:4px 12px;font-size:11px;cursor:pointer;">⬇ PDF</button>
-        <button onclick="exportMergedPPT()" style="background:rgba(197,90,17,.12);border:1px solid rgba(197,90,17,.35);color:#c55a11;border-radius:5px;padding:4px 12px;font-size:11px;cursor:pointer;">⬇ PPT</button>
-        <button onclick="event.stopPropagation();shareConsolidatedDashboard(S.convId)" style="background:rgba(34,211,238,.12);border:1px solid rgba(34,211,238,.35);color:#22d3ee;border-radius:5px;padding:4px 12px;font-size:11px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;"><svg viewBox="0 0 14 14" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="11.5" cy="2.5" r="1.5"/><circle cx="2.5" cy="7" r="1.5"/><circle cx="11.5" cy="11.5" r="1.5"/><line x1="3.9" y1="6.2" x2="10.1" y2="3.6"/><line x1="3.9" y1="7.8" x2="10.1" y2="10.4"/></svg> Partager</button>
-        <button id="dbm-theme-btn" onclick="toggleTheme();_dbmUpdateThemeBtn()" title="Changer le thème" style="background:var(--bg-3);border:1px solid var(--border);color:var(--text-1);border-radius:5px;padding:4px 10px;font-size:11px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M12.3 10.9A6 6 0 0 1 5.1 3.7a6 6 0 1 0 7.2 7.2z"/></svg><span id="dbm-theme-label">Dark</span></button>
-        <button onclick="document.getElementById('db-fullscreen-modal').remove();document.body.style.overflow='';"
-          style="background:var(--bg-3);border:1px solid var(--border);color:var(--text-1);border-radius:5px;padding:4px 12px;font-size:11px;cursor:pointer;">✕ Fermer</button>
+        <button onclick="exportMergedExcel()" style="background:rgba(29,111,66,.15);border:1px solid rgba(29,111,66,.4);color:#4caf7d;border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;">
+          <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 1v7M3 5l3 3 3-3"/><path d="M1 9v1a1 1 0 001 1h8a1 1 0 001-1V9"/></svg>Excel
+        </button>
+        <button onclick="exportMergedPDF()" style="background:rgba(220,50,50,.12);border:1px solid rgba(220,50,50,.35);color:#f07070;border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;">
+          <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 1v7M3 5l3 3 3-3"/><path d="M1 9v1a1 1 0 001 1h8a1 1 0 001-1V9"/></svg>PDF
+        </button>
+        <button onclick="exportMergedPPT()" style="background:rgba(197,90,17,.12);border:1px solid rgba(197,90,17,.35);color:#c55a11;border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;">
+          <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 1v7M3 5l3 3 3-3"/><path d="M1 9v1a1 1 0 001 1h8a1 1 0 001-1V9"/></svg>PPT
+        </button>
+        <button onclick="event.stopPropagation();shareConsolidatedDashboard(S.convId)" style="background:rgba(34,211,238,.12);border:1px solid rgba(34,211,238,.35);color:#22d3ee;border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:5px;">
+          <svg viewBox="0 0 14 14" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="11.5" cy="2.5" r="1.5"/><circle cx="2.5" cy="7" r="1.5"/><circle cx="11.5" cy="11.5" r="1.5"/><line x1="3.9" y1="6.2" x2="10.1" y2="3.6"/><line x1="3.9" y1="7.8" x2="10.1" y2="10.4"/></svg>Partager
+        </button>
+        <!-- Séparateur -->
+        <div style="width:1px;height:20px;background:var(--border);flex-shrink:0;margin:0 2px;"></div>
+        <button id="dbm-theme-btn" onclick="toggleTheme();_dbmUpdateThemeBtn()" title="Thème" style="background:var(--bg-3);border:1px solid var(--border);color:var(--text-1);border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;">
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M12.3 10.9A6 6 0 0 1 5.1 3.7a6 6 0 1 0 7.2 7.2z"/></svg>
+          <span id="dbm-theme-label">Dark</span>
+        </button>
+        <button onclick="document.getElementById('db-fullscreen-modal').remove();document.body.style.overflow='';" style="background:var(--bg-3);border:1px solid var(--border);color:var(--text-1);border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;">
+          <svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="2" y1="2" x2="8" y2="8"/><line x1="8" y1="2" x2="2" y2="8"/></svg>Fermer
+        </button>
       </div>
     </div>
     <div style="display:flex;flex:1;overflow:hidden;">
@@ -5077,7 +5971,7 @@ function mergeAllDashboards(convId){
             </div>
           </label>`).join('')}
         <div style="font-size:10px;color:var(--text-3);margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
-          💡 Glisser-déposer pour réorganiser les widgets
+          <svg viewBox="0 0 14 14" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M7 1a4 4 0 0 1 2.5 7.1V10H4.5V8.1A4 4 0 0 1 7 1z"/><line x1="4.5" y1="12" x2="9.5" y2="12"/><line x1="5.5" y1="13.5" x2="8.5" y2="13.5"/></svg> Glisser-déposer pour réorganiser les widgets
         </div>
       </div>
       <!-- Zone principale -->
@@ -5210,7 +6104,7 @@ function mergeAllDashboards(convId){
             <div style="font-size:20px;font-weight:700;color:var(--accent);">${formatKPI(v, fmt)}</div>
             <div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px;">
               <span style="font-size:9px;color:var(--text-3);">${w.data?.count||''} lignes</span>
-              <button onclick="dbmResize(${idx})" style="background:none;border:none;color:var(--text-2);cursor:pointer;font-size:10px;padding:0 2px;" title="Redimensionner">⤢</button>
+              <button onclick="dbmResize(${idx})" style="background:none;border:none;color:var(--text-2);cursor:pointer;font-size:10px;padding:0 2px;" title="Redimensionner"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="vertical-align:middle"><polyline points="1,6 1,1 6,1"/><polyline points="10,1 15,1 15,6"/><polyline points="15,10 15,15 10,15"/><polyline points="6,15 1,15 1,10"/></svg></button>
             </div>
           </div>`;
       } else {
@@ -5410,7 +6304,7 @@ function _doMergedExcel(){
 
   const fname = `OnePilot_consolide_${new Date().toISOString().slice(0,10)}.xlsx`;
   XLSX.writeFile(wb, fname, {bookType:'xlsx', type:'binary', cellStyles:true});
-  toast(`✅ Excel consolidé — ${totalSheets-1} feuilles`, 'info');
+  toast(`<svg viewBox="0 0 16 16" width="14" height="14" fill="#22c55e" style="vertical-align:middle"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm3.3 5.3-4 4a.75.75 0 0 1-1.06 0l-2-2a.75.75 0 0 1 1.06-1.06L6.75 8.69l3.47-3.47a.75.75 0 0 1 1.06 1.06z"/></svg> Excel consolidé — ${totalSheets-1} feuilles`, 'info');
 }
 
 function exportMergedPNG(){
@@ -5462,7 +6356,7 @@ function _doExportMerged(el){
       a.download = 'dashboard_consolide_' + Date.now() + '.png';
       a.href = canvas.toDataURL('image/png');
       a.click();
-      toast('✅ PNG exporté — contenu complet', 'info');
+      toast('<svg viewBox="0 0 16 16" width="14" height="14" fill="#22c55e" style="vertical-align:middle"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm3.3 5.3-4 4a.75.75 0 0 1-1.06 0l-2-2a.75.75 0 0 1 1.06-1.06L6.75 8.69l3.47-3.47a.75.75 0 0 1 1.06 1.06z"/></svg> PNG exporté — contenu complet', 'info');
     }).catch(e => {
       el.style.overflow  = prevOverflow;
       el.style.height    = prevHeight;
@@ -5526,10 +6420,44 @@ async function generateDashboard(question){
 // ════ MARKDOWN ════
 function mdRender(text){
   if(!text)return'';
+
+  // ── Supprimer métriques techniques ───────────────────────────────────────
+  text = text.replace(/\n?score\s*=\s*[\d.]+\s*[—–-]\s*\d+ms\s*/gi, '');
+  text = text.replace(/\n?LLM\+RAG\s*[—–-]\s*\d+ms\s*/gi, '');
+  text = text.trim();
+
+  // ── Auto-wrapper SQL brut (sans backticks) ───────────────────────────────
+  // Si le texte EST du SQL pur (commence par SELECT/INSERT etc. sans backticks)
+  if(!/```/.test(text) && /^(SELECT|INSERT|UPDATE|DELETE|WITH|CREATE|ALTER|DROP)\b/i.test(text.trim())){
+    text = '```sql\n' + text.trim() + '\n```';
+  }
+
+  // ── Déduplication SQL ─────────────────────────────────────────────────────
+  if(/```[\w]*\n?[\s\S]*?```/.test(text)){
+    const firstBlock = text.indexOf('```');
+    if(firstBlock > 0){
+      const before = text.slice(0, firstBlock).trim();
+      if(/^(SELECT|INSERT|UPDATE|DELETE|WITH|CREATE|ALTER|DROP)\b/i.test(before)){
+        text = text.slice(firstBlock).trim();
+      }
+    }
+  }
+
   let s=esc(text);
-  // Extraire les blocs code avant de traiter le markdown
   const codeBlocks=[];
-  s=s.replace(/```[\w]*\n?([\s\S]*?)```/g,(_,code)=>{const i=codeBlocks.length;codeBlocks.push(`<pre>${code.trim()}</pre>`);return`%%CODE${i}%%`;});
+  const copyIco=`<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="4" y="4" width="10" height="10" rx="1.5"/><path d="M12 4V2.5A1.5 1.5 0 0010.5 1h-8A1.5 1.5 0 001 2.5v8A1.5 1.5 0 002.5 12H4"/></svg>`;
+  s=s.replace(/```([\w]*)\n?([\s\S]*?)```/g,(_,lang,code)=>{
+    const i=codeBlocks.length;
+    const id='pre'+Date.now()+i;
+    const label=(lang||'sql').toUpperCase();
+    codeBlocks.push(
+      `<div class="pre-wrap">` +
+      `<div class="pre-header"><span class="pre-lang">${label}</span><button class="pre-copy-btn" onclick="copyPre('${id}')" title="Copier">${copyIco}</button></div>` +
+      `<pre id="${id}">${code.trim()}</pre>` +
+      `</div>`
+    );
+    return`%%CODE${i}%%`;
+  });
   s=s.replace(/(\|.+\|\n?)+/g,t=>{const rows=t.trim().split('\n').filter(r=>!/^\|[\s\-|]+\|$/.test(r.trim()));const ih=rows.length>1;return`<div class="sql-table-wrap"><table class="sql-table">${rows.map((r,i)=>{const cells=r.split('|').filter((_,ci,arr)=>ci>0&&ci<arr.length-1);const tag=(i===0&&ih)?'th':'td';return`<tr>${cells.map(c=>`<${tag}>${c.trim()}</${tag}>`).join('')}</tr>`;}).join('')}</table></div>`;});
   s=s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
   s=s.replace(/\*([^*\/]+)\*/g,'<em>$1</em>');
@@ -5538,13 +6466,80 @@ function mdRender(text){
   s=s.replace(/^[-]\s+(.+)$/gm,'<li>$1</li>');
   s=s.replace(/(<li>[\s\S]*?<\/li>)+/g,'<ul>$&</ul>');
   s=s.replace(/\n/g,'<br>');
-  // Réinjecter les blocs code
   codeBlocks.forEach((b,i)=>s=s.replace(`%%CODE${i}%%`,b));
+  s=s.replace(/^(<br>)+/,'');
   return s;
 }
 
 // ════ UTILS ════
-async function copyBubble(bid){const b=document.getElementById(bid);if(!b)return;try{await navigator.clipboard.writeText(b.innerText);toast('✓ Copié');}catch{toast('Impossible de copier');}}
+
+// ── User message actions ──────────────────────────────────────────────────────
+function copyUserMsg(bid) {
+  const b = document.getElementById(bid);
+  if (!b) return;
+  navigator.clipboard.writeText(b.innerText).then(() => {
+    toast('&#10003; Message copié');
+  }).catch(() => toast('Impossible de copier'));
+}
+
+function editUserMsg(bid) {
+  const b = document.getElementById(bid);
+  if (!b) return;
+  const text = b.innerText.trim();
+  const inp = document.getElementById('inp');
+  if (inp) {
+    inp.value = text;
+    inp.focus();
+    inp.setSelectionRange(text.length, text.length);
+    toast('Message chargé — modifiez et renvoyez');
+  }
+}
+
+async function copyBubble(bid){const b=document.getElementById(bid);if(!b)return;try{await navigator.clipboard.writeText(b.innerText);toast('&#10003; Copié');}catch{toast('Impossible de copier');}}
+async function copyPre(id){const el=document.getElementById(id);if(!el)return;try{await navigator.clipboard.writeText(el.innerText);toast('&#10003; SQL copié');}catch{toast('Impossible de copier');}}
+function regenMsg(bid){
+  // Trouve la question à régénérer
+  function doRegen(q){
+    if(!q)return toast('Question introuvable — retapez votre message');
+    const inp=document.getElementById('inp');
+    if(!inp)return;
+    inp.value=q;
+    inp.dispatchEvent(new Event('input'));
+    send();
+  }
+  // 1. S.lastQuestion — session courante
+  if(S.lastQuestion){doRegen(S.lastQuestion);return;}
+  // 2. Cherche la bulle user précédente dans le DOM
+  const botBbl=document.getElementById(bid);
+  if(botBbl){
+    const grp=botBbl.closest('.msg-grp');
+    if(grp){
+      let prev=grp.previousElementSibling;
+      while(prev){
+        const usr=prev.querySelector('.bubble.usr');
+        if(usr){const q=usr.innerText.trim();if(q){doRegen(q);return;}}
+        prev=prev.previousElementSibling;
+      }
+    }
+    // aussi chercher dans le parent direct
+    const row=botBbl.closest('.msg-row');
+    if(row){
+      let prev=row.previousElementSibling;
+      while(prev){
+        const usr=prev.querySelector('.bubble.usr');
+        if(usr){const q=usr.innerText.trim();if(q){doRegen(q);return;}}
+        prev=prev.previousElementSibling;
+      }
+    }
+  }
+  // 3. Fallback : dernière bulle user dans le chat
+  const usrBbls=document.querySelectorAll('.bubble.usr');
+  if(usrBbls.length){
+    const q=usrBbls[usrBbls.length-1].innerText.trim();
+    if(q){doRegen(q);return;}
+  }
+  toast('Question introuvable — retapez votre message');
+}
 function toast(msg,dur){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),dur||2500);}
 function relTime(d){const diff=(Date.now()-d)/1000;if(diff<60)return'maintenant';if(diff<3600)return Math.floor(diff/60)+'m';if(diff<86400)return Math.floor(diff/3600)+'h';return Math.floor(diff/86400)+'j';}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
@@ -5567,6 +6562,27 @@ function removeAttach(i){attachedFiles.splice(i,1);renderAttachPreview();}
 function toggleUserMenu(){
   const m=document.getElementById('userMenu');
   if(!m)return;
+  const sb=document.getElementById('sb');
+  const isRail=sb&&sb.classList.contains('closed');
+  if(isRail){
+    const av=document.getElementById('railUserAv');
+    if(av){
+      const r=av.getBoundingClientRect();
+      m.style.left='58px';
+      m.style.bottom=(window.innerHeight-r.top+4)+'px';
+      m.style.top='auto';
+      m.style.width='220px';
+    }
+  } else {
+    const av=document.getElementById('uPill');
+    if(av){
+      const r=av.getBoundingClientRect();
+      m.style.left=r.left+'px';
+      m.style.bottom=(window.innerHeight-r.top+4)+'px';
+      m.style.top='auto';
+      m.style.width=r.width+'px';
+    }
+  }
   const open=m.classList.toggle('open');
   if(open){setTimeout(()=>document.addEventListener('click',closeOnOutside),0);}
 }
@@ -5585,7 +6601,7 @@ async function explainSQL(bid, btn){
   const sql = sqlMatch ? sqlMatch[0].trim() : rawText.trim();
 
   if(!sql || !sql.toUpperCase().includes('SELECT')){
-    toast('⚠️ Aucun SQL détecté dans cette réponse');
+    toast('<svg viewBox="0 0 16 16" width="14" height="14" fill="#f59e0b" style="vertical-align:middle"><path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/></svg> Aucun SQL détecté dans cette réponse');
     return;
   }
 
@@ -5652,7 +6668,7 @@ async function explainSQL(bid, btn){
         <div class="ep-title">${_ico.sql} SQL optimisé</div>
         <div class="ep-sql">${esc(d.optimized_sql)}</div>
         <button class="ep-copy-btn" data-sql="${esc(d.optimized_sql).replace(/"/g,'&quot;')}"
-          onclick="const s=this.dataset.sql;navigator.clipboard.writeText(s).then(()=>toast('✓ SQL copié'))"
+          onclick="const s=this.dataset.sql;navigator.clipboard.writeText(s).then(()=>toast('&#10003; SQL copié'))"
           style="margin-top:6px;display:inline-flex;align-items:center;gap:5px;background:none;border:1px solid var(--border-hi);border-radius:5px;padding:4px 10px;color:var(--text-2);cursor:pointer;font-size:10px;font-family:var(--font-mono);transition:.12s;"
           onmouseover="this.style.borderColor='rgba(0,200,245,.4)';this.style.color='var(--accent)'"
           onmouseout="this.style.borderColor='var(--border-hi)';this.style.color='var(--text-2)'">
@@ -5755,7 +6771,7 @@ function applyVoiceSettings(){
       body:JSON.stringify({terms:vocab,source_id:S.srcId||''})}).catch(()=>{});
   }
   document.getElementById('voiceSettingsModal')?.remove();
-  toast('✓ Paramètres voix sauvegardés');
+  toast('<svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 6 5 9 10 3"/></svg> Paramètres voix sauvegardés');
 }
 
 // ════ MESSAGES VOCAUX ASYNCHRONES — §2.3.2C ════
@@ -5798,7 +6814,7 @@ function startVoiceMsgRecord(){
   document.getElementById('voiceMsgModal')?.remove();
   S._voiceMsgMode=true;
   const btn=document.getElementById('voMsgSaveBtn');if(btn)btn.style.display='';
-  toast('🎤 Enregistrement message vocal — parlez puis "Arrêter"');
+  toast('<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="vertical-align:middle"><rect x="5" y="1" width="6" height="8" rx="3"/><path d="M3 8c0 2.8 2.2 5 5 5s5-2.2 5-5"/><line x1="8" y1="13" x2="8" y2="15"/><line x1="5" y1="15" x2="11" y2="15"/></svg> Enregistrement message vocal — parlez puis "Arrêter"');
   startVoice();
 }
 
@@ -5806,8 +6822,8 @@ function saveVoiceMessage(text,blob){
   if(!text){
     // Priorité : transcription stockée dans S, pas le DOM (qui peut afficher état VAD)
     const tx=S._lastTranscript||document.getElementById('voTranscript')?.textContent||'';
-    const clean=tx.replace('✅ ','').trim();
-    const invalid=['Parlez maintenant…','Transcription en cours…','🎤 Parole détectée…'];
+    const clean=tx.replace('<svg viewBox="0 0 16 16" width="14" height="14" fill="#22c55e" style="vertical-align:middle"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm3.3 5.3-4 4a.75.75 0 0 1-1.06 0l-2-2a.75.75 0 0 1 1.06-1.06L6.75 8.69l3.47-3.47a.75.75 0 0 1 1.06 1.06z"/></svg> ','').trim();
+    const invalid=['Parlez maintenant…','Transcription en cours…','Parole détectée…'];
     if(!clean||invalid.some(s=>tx.includes(s))||clean.startsWith('⏳')){
       toast('Aucune transcription — réessayez');return;
     }
@@ -5820,7 +6836,7 @@ function saveVoiceMessage(text,blob){
   S._voiceMsgMode=false;
   const btn=document.getElementById('voMsgSaveBtn');if(btn)btn.style.display='none';
   stopVoice();
-  toast('✓ Message vocal sauvegardé ('+S.voiceMsgs.length+' total)');
+  toast('<svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 6 5 9 10 3"/></svg> Message vocal sauvegardé ('+S.voiceMsgs.length+' total)');
 }
 
 function playVoiceMsg(idx){
@@ -5968,7 +6984,7 @@ async function copyShareLink() {
   try {
     await navigator.clipboard.writeText(url);
     const btn = document.getElementById('shareCopyBtn');
-    btn.textContent = '✓ Copié !';
+    btn.innerHTML = '<svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 6 5 9 10 3"/></svg> Copié !';
     btn.classList.add('copied');
     setTimeout(() => {
       btn.textContent = 'Copier';
@@ -6048,7 +7064,497 @@ function _resetMobileGrid(wrap){
   });
 }
 
+
+/* ══ FIN CDC §2.2.5 ══ */
+
+
+/* ══ CONV TITLE + RENAME + CTX MENU + CDC ══ */
+let _ctxConvId = null;
+let _cdcSrcId  = null;
+
+// Title
+function updateConvTitle(title) {
+  const wrap = document.getElementById('convTitleWrap');
+  const el = document.getElementById('convTitleText');
+  if(!wrap||!el) return;
+  if(title&&title.trim()){
+    el.textContent = title.trim();
+    wrap.style.display = 'flex';
+  } else {
+    el.textContent = '';
+    wrap.style.display = 'none';
+  }
+}
+
+// Rename modal
+function openRenameModal(convId, titleHint) {
+  _ctxConvId = convId || S.convId;
+  if(!_ctxConvId) return;
+  const current = titleHint || document.getElementById('convTitleText')?.textContent || '';
+  const input = document.getElementById('renameInput');
+  if(input) input.value = current;
+  const overlay = document.getElementById('renameOverlay');
+  if(overlay) overlay.classList.add('open');
+  setTimeout(()=>input?.select(), 50);
+}
+function closeRenameModal() {
+  const overlay = document.getElementById('renameOverlay');
+  if(overlay) overlay.classList.remove('open');
+}
+async function saveRename() {
+  const input = document.getElementById('renameInput');
+  const newTitle = input?.value?.trim();
+  const targetId = _ctxConvId || S.convId;
+  if(!newTitle||!targetId){ closeRenameModal(); return; }
+  if(targetId===S.convId) updateConvTitle(newTitle);
+  const conv = S.convs.find(c=>c.id===targetId);
+  if(conv) conv.title = newTitle;
+  renderConvs();
+  try { await api('/conversations/'+targetId,'PATCH',{title:newTitle}); } catch(e){}
+  closeRenameModal();
+  toast('Conversation renommée','success');
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  const inp = document.getElementById('renameInput');
+  if(inp){
+    inp.addEventListener('keydown',e=>{ if(e.key==='Enter') saveRename(); if(e.key==='Escape') closeRenameModal(); });
+  }
+});
+
+// Context menu
+function showConvCtxMenu(e, convId, title) {
+  e.preventDefault(); e.stopPropagation();
+  _ctxConvId = convId;
+  const menu = document.getElementById('convCtxMenu');
+  if(!menu) return;
+  menu.style.left = Math.min(e.clientX, window.innerWidth-200)+'px';
+  menu.style.top  = Math.min(e.clientY, window.innerHeight-120)+'px';
+  menu.classList.add('show');
+  // stocker le titre pour le rename
+  menu._title = title;
+  // Vérifie si la conversation est épinglée
+  const isFav = _pinnedConvs.has(convId);
+  const favDashId = null; // Non utilisé avec Option A
+  const favItem = document.getElementById('ctxFavItem');
+  const favLabel = document.getElementById('ctxFavLabel');
+  const favSvg = favItem?.querySelector('svg');
+  if(favItem){
+    if(isFav){
+      favLabel.textContent = 'Retirer des favoris';
+      if(favSvg){ favSvg.style.fill='#f5c518'; favSvg.style.stroke='#f5c518'; }
+    } else {
+      favLabel.textContent = 'Ajouter aux favoris';
+      if(favSvg){ favSvg.style.fill='none'; favSvg.style.stroke='currentColor'; }
+    }
+    favItem._dashId = favDashId;
+    favItem._convTitle = title;
+  }
+}
+function hideConvCtxMenu(){ document.getElementById('convCtxMenu')?.classList.remove('show'); }
+
+// ── Menu titre header ──────────────────────────────────────────
+function toggleTitleMenu(e){
+  e.stopPropagation();
+  const menu = document.getElementById('titleCtxMenu');
+  if(!menu) return;
+  // Positionne sous le bouton titre
+  const btn = document.getElementById('convTitleBtn');
+  const rect = btn.getBoundingClientRect();
+  menu.style.left = rect.left + 'px';
+  menu.style.top  = (rect.bottom + 4) + 'px';
+  const isOpen = menu.classList.contains('show');
+  // Ferme tous les autres menus
+  document.getElementById('convCtxMenu')?.classList.remove('show');
+  menu.classList.toggle('show', !isOpen);
+  // Met à jour l'état favori
+  if(!isOpen){
+    const history = _dashboardHistory ? (_dashboardHistory[S.convId] || []) : [];
+    const lastSpec = history.length ? history[history.length-1] : null;
+    const dashId = lastSpec?.dashboard_id || null;
+    const isFav = dashId && _favorites.has(dashId);
+    const favLabel = document.getElementById('titleFavLabel');
+    const favSvg = document.getElementById('titleFavItem')?.querySelector('svg');
+    if(favLabel) favLabel.textContent = isFav ? 'Retirer des favoris' : 'Ajouter aux favoris';
+    if(favSvg){ favSvg.style.fill = isFav ? '#f5c518' : 'none'; favSvg.style.stroke = isFav ? '#f5c518' : 'currentColor'; }
+  }
+}
+function hideTitleMenu(){ document.getElementById('titleCtxMenu')?.classList.remove('show'); }
+function titleRename(){
+  hideTitleMenu();
+  openRenameModal(S.convId, document.getElementById('convTitleText')?.textContent || '');
+}
+async function titleToggleFavorite(){
+  hideTitleMenu();
+  const history = _dashboardHistory ? (_dashboardHistory[S.convId] || []) : [];
+  if(!history.length){ toast('Aucun dashboard dans cette conversation','info'); return; }
+  const spec = history[history.length-1];
+  const dashId = spec.dashboard_id;
+  if(_favorites.has(dashId)){
+    await removeFavorite(dashId, null);
+    _favorites.delete(dashId);
+    renderFavoritesSidebar();
+    toast('Retiré des favoris','success');
+  } else {
+    try{
+      const r = await fetch(API_BASE+'/api/favorites',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({dashboard_id:dashId,title:spec.title||'Dashboard',spec_json:JSON.stringify(spec),source_id:S.srcId||null,conv_id:S.convId||null,user_id:'admin'})
+      });
+      if(r.ok){
+        _favorites.set(dashId,{dashboard_id:dashId,title:spec.title,spec_json:JSON.stringify(spec),source_id:S.srcId,conv_id:S.convId});
+        renderFavoritesSidebar();
+        toast('Ajouté aux favoris','success');
+      }
+    } catch(e){ toast('Erreur favoris','error'); }
+  }
+}
+document.addEventListener('click', ()=>{ hideTitleMenu(); });
+function ctxRename(){
+  const title = document.getElementById('convCtxMenu')?._title || '';
+  hideConvCtxMenu();
+  openRenameModal(_ctxConvId, title);
+}
+function ctxDelete(){
+  hideConvCtxMenu();
+  if(!_ctxConvId) return;
+  delConvById(_ctxConvId);
+}
+async function ctxToggleFavorite(){
+  hideConvCtxMenu();
+  const convId = _ctxConvId;
+  if(!convId) return;
+
+  const isPinned = _pinnedConvs.has(convId);
+
+  if(isPinned){
+    // Désépingler
+    try{
+      await fetch(API_BASE+'/conversations/'+convId+'/pin',{method:'DELETE'});
+      _pinnedConvs.delete(convId);
+      renderConvs();
+      toast('Conversation désépinglée','success');
+    } catch(e){ toast('Erreur','error'); }
+  } else {
+    // Épingler
+    try{
+      const r = await fetch(API_BASE+'/conversations/'+convId+'/pin',{method:'POST'});
+      if(r.ok){
+        _pinnedConvs.add(convId);
+        renderConvs();
+        toast('Conversation épinglée','success');
+      }
+    } catch(e){ toast('Erreur','error'); }
+  }
+}
+
+async function delConvById(id){
+  // Supprimer immédiatement de l'UI
+  S.convs = S.convs.filter(c=>c.id!==id);
+  if(S.convId===id){ S.convId=null; updateConvTitle(''); showWelcome(); }
+  renderConvs();
+  renderDiscussions(S.convs);
+  // Puis appel API en arrière-plan
+  try{
+    await api('/conversations/'+id,'DELETE');
+    toast('Conversation supprimée','success');
+  }catch(e){ toast('Erreur: '+e.message,'error'); }
+}
+document.addEventListener('click', hideConvCtxMenu);
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ hideConvCtxMenu(); closeDiscPanel(); } });
+
+// CDC Versioning
+function openCDCPanel(){ _cdcSrcId=S.srcId||null; document.getElementById('cdcPanel').classList.add('open'); cdcTab('history'); }
+function closeCDCPanel(){ document.getElementById('cdcPanel').classList.remove('open'); }
+function cdcTab(tab){
+  ['History','Diff','Notifs','Tags'].forEach(t=>{ const el=document.getElementById('cdcTab'+t); if(el) el.classList.toggle('active',t.toLowerCase()===tab); });
+  if(tab==='history') cdcLoadHistory();
+  else if(tab==='diff') cdcLoadDiff();
+  else if(tab==='notifs') cdcLoadNotifs();
+  else if(tab==='tags') cdcLoadTags();
+}
+async function cdcLoadHistory(){
+  const body=document.getElementById('cdcBody');
+  if(!_cdcSrcId){body.innerHTML='<p style="color:var(--text-3);font-size:11px;text-align:center;margin-top:40px;">Aucune source sélectionnée.</p>';return;}
+  body.innerHTML='<p style="color:var(--text-3);font-size:11px;text-align:center;margin-top:20px;">Chargement…</p>';
+  try{
+    const r=await fetch(API_BASE+'/sources/'+_cdcSrcId+'/versions');
+    const data=await r.json();
+    const versions=data.versions||[];
+    let html=`
+      <button class="cdc-detect-btn" onclick="cdcDetect()">
+        <svg viewBox="0 0 14 14" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><polygon points="3,1 13,7 3,13"/></svg>
+        Détecter changements
+      </button>
+      <button onclick="cdcResetBaseline()" style="
+        width:100%;padding:8px;border-radius:8px;border:1px solid rgba(212,160,0,.4);
+        background:rgba(212,160,0,.1);color:#d4a000;font-size:11px;font-weight:600;
+        cursor:pointer;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:7px;">
+        <svg viewBox="0 0 14 14" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 7a5 5 0 1 1 1.5 3.5"/><polyline points="1,4 2,7 5,6"/></svg>
+        Recalibrer la baseline CDC
+      </button>`;
+    if(!versions.length){
+      html+='<p style="color:var(--text-3);font-size:11px;text-align:center;margin-top:20px;">Aucune version.<br>Cliquez sur Détecter.</p>';
+    } else {
+      versions.forEach(v=>{
+        const brk = v.has_breaking ? `<span class="v-tag brk">BREAKING</span>` : '';
+        const tags = (v.tags||[]).map(t=>`<span class="v-tag">${t}</span>`).join('');
+        const d = new Date(v.created_at);
+        const dateStr = d.toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'});
+        const timeStr = d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+        const nb = v.change_count ?? 0;
+        // Résumé compact des types depuis summary
+        const sum = v.summary || {};
+        const adds = sum.added ?? 0, drops = sum.dropped ?? 0, alts = sum.modified ?? 0;
+        const summaryParts = [];
+        if(adds) summaryParts.push(`<span style="color:#00c48a;">+${adds} ajout${adds>1?'s':''}</span>`);
+        if(drops) summaryParts.push(`<span style="color:#e06060;">-${drops} suppression${drops>1?'s':''}</span>`);
+        if(alts) summaryParts.push(`<span style="color:#d4a000;">${alts} modif.</span>`);
+        const summaryHtml = summaryParts.length ? summaryParts.join(' &nbsp;') : `${nb} changement(s)`;
+        html+=`<div class="v-item ${v.has_breaking?'breaking':''}" onclick="cdcShowVersion(${v.version})">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span class="v-num">v${v.version}</span>
+            <span style="font-size:10px;color:var(--text-3);">${dateStr} ${timeStr}</span>
+          </div>
+          <div class="v-meta" style="margin-top:4px;">${summaryHtml}</div>
+          <div class="v-tags" style="margin-top:4px;">${brk}${tags}</div>
+        </div>`;
+      });
+    }
+    body.innerHTML=html;
+  }catch(e){body.innerHTML=`<p style="color:#e06060;font-size:11px;text-align:center;margin-top:20px;">${e.message}</p>`;}
+}
+async function cdcDetect(){
+  if(!_cdcSrcId)return;
+  const btn=document.querySelector('.cdc-detect-btn');
+  if(btn){btn.disabled=true;btn.style.opacity='.6';}
+  try{
+    const r=await fetch(API_BASE+'/sources/'+_cdcSrcId+'/cdc/detect',{method:'POST'});
+    const d=await r.json();
+    if(d.new_version) toast('v'+d.new_version+' créée'+(d.has_breaking?' — BREAKING':''),d.has_breaking?'error':'success');
+    else toast('Aucun changement détecté','info');
+    cdcLoadHistory();
+  }catch(e){toast('Erreur: '+e.message,'error');}
+  if(btn){btn.disabled=false;btn.style.opacity='';}
+}
+async function cdcShowVersion(version){
+  const body=document.getElementById('cdcBody');
+  body.innerHTML='<p style="color:var(--text-3);font-size:11px;text-align:center;">Chargement v'+version+'…</p>';
+  try{
+    const r=await fetch(API_BASE+'/sources/'+_cdcSrcId+'/versions/'+version);
+    const v=await r.json();
+    const changes=v.changes_delta||[];
+    const breaking=changes.filter(c=>c.breaking);
+    // Groupe par type
+    const byType = {};
+    changes.forEach(c=>{ const t=c.type||'CHANGE'; if(!byType[t])byType[t]=[]; byType[t].push(c); });
+    let html=`
+      <button style="background:none;border:none;color:var(--accent);font-size:11px;cursor:pointer;padding:0;margin-bottom:12px;display:flex;align-items:center;gap:5px;" onclick="cdcLoadHistory()">
+        <svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><polyline points="7,1 3,5 7,9"/></svg>Retour
+      </button>
+      <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:14px;font-weight:700;color:var(--text-0);">Version ${v.version}</span>
+          ${breaking.length?`<span style="font-size:10px;background:rgba(229,62,62,.15);color:#e53e3e;padding:2px 8px;border-radius:10px;font-weight:600;">BREAKING</span>`:''}
+        </div>
+        <div style="font-size:10px;color:var(--text-3);margin-top:4px;">
+          ${new Date(v.created_at).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}
+          &nbsp;à&nbsp;${new Date(v.created_at).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}
+        </div>
+        <div style="font-size:11px;color:var(--text-2);margin-top:6px;">${changes.length} changement(s) détectés</div>
+        ${breaking.length?`<div style="font-size:11px;color:#e06060;margin-top:2px;">${breaking.length} changement(s) critique(s)</div>`:''}
+      </div>`;
+    // Affiche par catégorie
+    Object.entries(byType).forEach(([type,items])=>{
+      const cls=type.includes('DROP')?'diff-del':type.includes('CREATE')?'diff-add':'diff-mod';
+      const label=type.replace(/_/g,' ');
+      html+=`<div style="font-size:10px;font-weight:600;color:var(--text-3);margin:8px 0 4px;text-transform:uppercase;letter-spacing:.05em;">${label} (${items.length})</div>`;
+      items.forEach(c=>{
+        html+=`<div class="diff-item ${cls}" style="margin-bottom:3px;">
+          <b>${c.table||'?'}</b>${c.column?`<span style="opacity:.65">.${c.column}</span>`:''}
+          ${c.breaking?'<span style="font-size:9px;color:#e06060;margin-left:6px;">BREAKING</span>':''}
+        </div>`;
+      });
+    });
+    html+=`<div style="margin-top:14px;display:flex;gap:8px;">
+      <button class="cdc-btn" onclick="cdcRollback(${v.version})" style="background:rgba(212,160,0,.15);color:#d4a000;border:1px solid rgba(212,160,0,.3);">
+        <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 6a4 4 0 1 1 1 2.8"/><polyline points="2,3 2,6 5,6"/></svg>
+        Rollback vers v${v.version}
+      </button>
+    </div>`;
+    body.innerHTML=html;
+  }catch(e){body.innerHTML=`<p style="color:#e06060;font-size:11px;">${e.message}</p>`;}
+}
+async function cdcRollback(version){
+  if(!confirm('Rollback vers v'+version+' ?'))return;
+  try{const r=await fetch(API_BASE+'/sources/'+_cdcSrcId+'/versions/'+version+'/rollback',{method:'POST'});const d=await r.json();toast('Rollback → v'+d.new_version,'success');cdcLoadHistory();}
+  catch(e){toast('Erreur: '+e.message,'error');}
+}
+async function cdcResetBaseline(){
+  if(!_cdcSrcId){ toast('Aucune source sélectionnée','info'); return; }
+  if(!confirm(
+    'Recalibrer la baseline CDC ?\n\n' +
+    'Cette opération va :\n' +
+    '  • Supprimer l\'historique des versions antérieures\n' +
+    '  • Établir un nouveau point de référence (v1) basé sur\n' +
+    '    l\'état actuel du schéma source\n\n' +
+    'Recommandé après une restauration de base de données\n' +
+    '(.bak), une réimportation de schéma, ou lors d\'une\n' +
+    'initialisation initiale du catalogue de données.\n\n' +
+    'Cette action est irréversible.'
+  )) return;
+  const btn = document.querySelector('[onclick="cdcResetBaseline()"]');
+  if(btn){ btn.disabled=true; btn.style.opacity='.6'; btn.textContent='Réinitialisation…'; }
+  try{
+    const r = await fetch(API_BASE+'/sources/'+_cdcSrcId+'/cdc/reset-baseline', {method:'POST'});
+    if(!r.ok){ const err=await r.json(); throw new Error(err.detail||r.statusText); }
+    const d = await r.json();
+    toast('Baseline réinitialisée — nouveau v1 créé ('+d.entities+' entités)','success');
+    cdcLoadHistory();
+  } catch(e){ toast('Erreur: '+e.message,'error'); }
+  if(btn){ btn.disabled=false; btn.style.opacity=''; btn.innerHTML='<svg viewBox="0 0 14 14" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 7a5 5 0 1 1 1.5 3.5"/><polyline points="1,4 2,7 5,6"/></svg> Recalibrer la baseline CDC'; }
+}
+function cdcLoadDiff(){
+  document.getElementById('cdcBody').innerHTML=`<div style="font-size:11px;color:var(--text-2);margin-bottom:10px;">Comparer deux versions :</div><div style="display:flex;gap:6px;margin-bottom:10px;align-items:center;"><input id="cdcDiffV1" type="number" min="1" placeholder="v1" class="cdc-inp" style="width:60px;"><svg viewBox="0 0 14 8" width="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="1" y1="4" x2="10" y2="4"/><polyline points="7,1 10,4 7,7"/></svg><input id="cdcDiffV2" type="number" min="1" placeholder="v2" class="cdc-inp" style="width:60px;"><button class="cdc-btn" onclick="cdcRunDiff()">Comparer</button></div><div id="cdcDiffResult"></div>`;
+}
+async function cdcRunDiff(){
+  const v1=parseInt(document.getElementById('cdcDiffV1').value),v2=parseInt(document.getElementById('cdcDiffV2').value);
+  if(!v1||!v2){toast('Entrez deux versions','info');return;}
+  const res=document.getElementById('cdcDiffResult');
+  res.innerHTML='<p style="color:var(--text-3);font-size:11px;">Calcul…</p>';
+  try{
+    const r=await fetch(API_BASE+'/sources/'+_cdcSrcId+'/versions/diff?v1='+v1+'&v2='+v2);
+    const d=await r.json();
+    const total = d.total_changes ?? d.changes?.length ?? 0;
+    const breaking = d.breaking_count ?? d.breaking?.length ?? 0;
+    let html=`<div style="font-size:11px;font-weight:600;color:var(--text-2);margin-bottom:8px;">
+      v${v1} → v${v2} : <span style="color:var(--text-0);">${total} changement(s)</span>
+      ${breaking?`&nbsp;·&nbsp;<span style="color:#e06060;font-weight:700;">${breaking} BREAKING</span>`:''}
+    </div>`;
+    const changes = d.changes || [];
+    if(!changes.length){
+      html+='<p style="color:var(--text-3);font-size:11px;text-align:center;margin-top:20px;">Aucun changement détecté entre ces deux versions.</p>';
+    } else {
+      changes.forEach(c=>{
+        const type = c.type||c.change_type||'CHANGE';
+        const cls = type.includes('DROP')?'diff-del':type.includes('CREATE')?'diff-add':'diff-mod';
+        const label = type.replace(/_/g,' ');
+        const col = c.column||c.field||'';
+        html+=`<div class="diff-item ${cls}" style="display:flex;justify-content:space-between;align-items:center;">
+          <span><b>${c.table||'?'}</b>${col?'.<span style="opacity:.7">'+col+'</span>':''}</span>
+          <span style="font-size:9px;opacity:.7;margin-left:8px;">${label}</span>
+        </div>`;
+      });
+    }
+    res.innerHTML=html;
+  }
+  catch(e){res.innerHTML=`<p style="color:#e06060;font-size:11px;">${e.message}</p>`;}
+}
+async function cdcLoadNotifs(){
+  const body=document.getElementById('cdcBody');
+  if(!_cdcSrcId){body.innerHTML='<p style="color:var(--text-3);font-size:11px;text-align:center;margin-top:40px;">Aucune source.</p>';return;}
+  body.innerHTML='<p style="color:var(--text-3);font-size:11px;text-align:center;">Chargement…</p>';
+  try{const r=await fetch(API_BASE+'/sources/'+_cdcSrcId+'/cdc/notifications');const d=await r.json();const notifs=d.notifications||[];if(!notifs.length){body.innerHTML='<p style="color:var(--text-3);font-size:11px;text-align:center;margin-top:40px;">Aucune alerte.</p>';return;}let html='';notifs.forEach(n=>{const brk=n.event==='BREAKING_CHANGE';html+=`<div class="cdc-notif ${brk?'breaking':''}"><div style="font-weight:600;color:var(--text-0);">${brk?'<svg viewBox="0 0 16 16" width="14" height="14" fill="#f59e0b" style="vertical-align:middle"><path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/></svg> ':''}${n.event||'CHANGE'}${n.version?` v${n.version}`:''}</div><div style="font-size:9px;color:var(--text-3);">${n.timestamp?new Date(n.timestamp).toLocaleString('fr-FR'):''}</div>${n.count?`<div style="font-size:10px;color:var(--text-3);">${n.count} changement(s)</div>`:''}</div>`;});body.innerHTML=html;}
+  catch(e){body.innerHTML=`<p style="color:#e06060;font-size:11px;">${e.message}</p>`;}
+}
+async function cdcLoadTags(){
+  const body=document.getElementById('cdcBody');
+  if(!_cdcSrcId){body.innerHTML='<p style="color:var(--text-3);font-size:11px;text-align:center;margin-top:40px;">Aucune source.</p>';return;}
+  try{const r=await fetch(API_BASE+'/sources/'+_cdcSrcId+'/tags');const d=await r.json();const tags=d.tags||d||[];let html=`<div style="margin-bottom:8px;font-size:11px;font-weight:600;color:var(--text-2);">Créer un tag</div><div class="cdc-tag-form"><input id="cdcTagV" type="number" min="1" placeholder="v" class="cdc-inp" style="width:55px;"><input id="cdcTagN" type="text" placeholder="nom" class="cdc-inp"><input id="cdcTagNote" type="text" placeholder="note" class="cdc-inp"><button class="cdc-btn" onclick="cdcCreateTag()"><svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="5" y1="1" x2="5" y2="9"/><line x1="1" y1="5" x2="9" y2="5"/></svg></button></div><div style="font-size:11px;font-weight:600;color:var(--text-2);margin-bottom:8px;">${tags.length} tag(s)</div>`;tags.forEach(t=>{html+=`<div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg-2);border:1px solid var(--border);border-radius:6px;padding:7px 10px;margin-bottom:5px;"><div><span class="v-tag">${t.tag}</span><span style="font-size:10px;color:var(--text-3);margin-left:6px;">v${t.version}</span>${t.note?`<div style="font-size:10px;color:var(--text-3);">${t.note}</div>`:''}</div><button onclick="cdcDeleteTag('${t.tag}')" style="background:none;border:none;color:var(--text-3);cursor:pointer;"><svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="2" y1="2" x2="8" y2="8"/><line x1="8" y1="2" x2="2" y2="8"/></svg></button></div>`;});body.innerHTML=html;}
+  catch(e){body.innerHTML=`<p style="color:#e06060;font-size:11px;">${e.message}</p>`;}
+}
+async function cdcCreateTag(){const v=parseInt(document.getElementById('cdcTagV').value),n=document.getElementById('cdcTagN').value.trim(),note=document.getElementById('cdcTagNote').value.trim();if(!v||!n){toast('Version et nom requis','info');return;}try{await fetch(API_BASE+'/sources/'+_cdcSrcId+'/versions/'+v+'/tag',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tag:n,note})});toast('Tag créé','success');cdcLoadTags();}catch(e){toast('Erreur: '+e.message,'error');}}
+async function cdcDeleteTag(tag){if(!confirm('Supprimer "'+tag+'" ?'))return;try{await fetch(API_BASE+'/sources/'+_cdcSrcId+'/tags/'+tag,{method:'DELETE'});toast('Tag supprimé','success');cdcLoadTags();}catch(e){toast('Erreur','error');}}
+
+// Patch loadConv pour titre
+const _origLoadConv = typeof loadConv === 'undefined' ? null : loadConv;
+/* ══ FIN CONV+CDC ══ */
+
+
+// ── Language Switcher ─────────────────────────────────────────────────────────
+const LANG_LABELS = {
+  fr: { label: 'FR', flag: 'FR', name: 'Français' },
+  en: { label: 'EN', flag: 'EN', name: 'English'  },
+  ar: { label: 'AR', flag: 'AR', name: 'العربية'  },
+};
+
+const LANG_STRINGS = {
+  fr: { placeholder: 'Posez votre question…', exportPDF: 'Exporter en PDF' },
+  en: { placeholder: 'Ask your question…',   exportPDF: 'Export as PDF'    },
+  ar: { placeholder: 'اطرح سؤالك…',          exportPDF: 'تصدير PDF'        },
+};
+
+let _currentLang = localStorage.getItem('op_lang') || 'fr';
+
+function applyLang(lang) {
+  _currentLang = lang;
+  localStorage.setItem('op_lang', lang);
+  const s = LANG_STRINGS[lang] || LANG_STRINGS.fr;
+  document.documentElement.dir  = lang === 'ar' ? 'rtl' : 'ltr';
+  document.documentElement.lang = lang;
+  const inp = document.getElementById('inp');
+  if (inp) inp.placeholder = s.placeholder;
+  const btn = document.getElementById('langBtn');
+  if (btn) {
+    const lbl = LANG_LABELS[lang] || LANG_LABELS.fr;
+    const lblEl = btn.querySelector('.lang-label');
+    if (lblEl) lblEl.textContent = lbl.label;
+  }
+  document.querySelectorAll('.lang-option').forEach(opt => {
+    opt.classList.toggle('active', opt.dataset.lang === lang);
+  });
+  closeLangDropdown();
+}
+
+function toggleLangDropdown() {
+  const dd = document.getElementById('langDropdown');
+  if (!dd) return;
+  const isOpen = dd.style.display === 'block';
+  dd.style.display = isOpen ? 'none' : 'block';
+}
+
+function closeLangDropdown() {
+  const dd = document.getElementById('langDropdown');
+  if (dd) dd.style.display = 'none';
+}
+
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('#langBtnWrap')) closeLangDropdown();
+});
+
+// Appliquer la langue sauvegardée
+(function() { applyLang(_currentLang); })();
+
 </script>
+<!-- ══ USER MENU (global, position fixed) ══ -->
+<div class="user-menu" id="userMenu" style="position:fixed;bottom:70px;left:10px;width:220px;z-index:500;">
+  <a class="um-item" href="/" onclick="closeUserMenu()">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 6.5L8 2l6 4.5"/><path d="M3 6v8h4v-4h2v4h4V6"/></svg>
+    Retour à l'accueil
+  </a>
+  <button class="um-item" onclick="openDiscPanel();closeUserMenu()">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 10a2 2 0 0 1-2 2H5l-3 3V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/></svg>
+    Discussions
+  </button>
+  <div class="um-divider"></div>
+  <button class="um-item" onclick="openVoiceMessages();closeUserMenu()">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="1" y="4" width="10" height="8" rx="1"/><path d="M11 6l4-2v8l-4-2"/></svg>
+    Messages vocaux
+    <span id="voiceMsgBadge" style="display:none;background:var(--accent);color:#040e1a;font-size:10px;font-weight:700;border-radius:99px;padding:1px 6px;margin-left:auto;"></span>
+  </button>
+  <button class="um-item" onclick="openVoiceSettings();closeUserMenu()">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41"/></svg>
+    Paramètres voix
+  </button>
+  <div class="um-divider" id="cdcMenuDivider"></div>
+  <button class="um-item" id="cdcMenuItem" onclick="openCDCPanel();closeUserMenu()" style="display:none;">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:#a78bfa;"><circle cx="4.5" cy="3" r="1.8"/><circle cx="4.5" cy="13" r="1.8"/><circle cx="11.5" cy="8" r="1.8"/><line x1="4.5" y1="4.8" x2="4.5" y2="11.2"/><line x1="6.1" y1="7" x2="9.7" y2="5.5"/><line x1="6.1" y1="9" x2="9.7" y2="10.5"/></svg>
+    Versioning CDC
+  </button>
+  <div class="um-divider"></div>
+  <button class="um-item um-logout" onclick="logout()">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M10 2h4v12h-4"/><polyline points="7 11 10 8 7 5"/><line x1="1" y1="8" x2="10" y2="8"/></svg>
+    Se déconnecter
+  </button>
+</div>
 
 </body>
 </html>

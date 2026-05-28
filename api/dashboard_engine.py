@@ -2188,9 +2188,11 @@ class DashboardGenerator:
             "comptabilit":["GACCENTRY","JOURNAL","GL","ACC"],
             "tresorerie": ["SI_T","TRESORERIE","TRS","CASH","VDTSSXA","SI_BANCAIRE","DERNIER"],
             "trésorerie": ["SI_T","TRESORERIE","TRS","VDTSSXA","SI_BANCAIRE"],
-            "solde":      ["SI_T","VDTSSXA","COMPTE","SI_BANCAIRE","DERNIER"],
-            "bancaire":   ["SI_BANCAIRE","VDTSSXA","DERNIER","COMPTES"],
-            "financement":["FINANCEMENT","FIN"],
+            "solde":      ["DERNIÈREINTEGRATION","DERNIEREINTEGRATION","SI_T","VDTSSXA","COMPTE","SI_BANCAIRE","DERNIER","CLOSINGBALANCE"],
+            "bancaire":   ["DERNIÈREINTEGRATION","DERNIEREINTEGRATION","SI_BANCAIRE","VDTSSXA","DERNIER","COMPTES"],
+            "financement":["FINANCEMENT_BI","FINANCEMENTBI","FINANCEMENT","FIN"],
+            "actifs":     ["FINANCEMENT_BI","FINANCEMENTBI","FINANCEMENT"],
+            "actif":      ["FINANCEMENT_BI","FINANCEMENTBI","FINANCEMENT"],
             "amortissement":["AMORT","TABLEAU"],
             "salaire":    ["PAYROLL","SALARY","EMPL"],
             "compte":     ["COMPTE","VDTSSXAACCOUNT","COMPTES"],
@@ -2210,14 +2212,20 @@ class DashboardGenerator:
             "corrélation":["ORDERDETAIL","ORDER DETAIL","ORDER DETAILS"],
             "correlation":["ORDERDETAIL","ORDER DETAIL","ORDER DETAILS"],
         }
+        import unicodedata as _udata
+        def _norm(s):
+            # Normalise : uppercase + retire accents + espaces + underscores
+            s = _udata.normalize('NFD', s.upper())
+            s = ''.join(c for c in s if _udata.category(c) != 'Mn')
+            return s.replace(' ','').replace('_','').replace('-','')
+
         ct=[]
         for kw,pf in BKW.items():
             if kw in q_lower:
                 for tbl in schema.keys():
-                    # Normalise : uppercase, sans espaces, sans underscores
-                    tu = tbl.upper().replace(" ","").replace("_","")
+                    tu = _norm(tbl)
                     for p in pf:
-                        pn = p.upper().replace(" ","").replace("_","")
+                        pn = _norm(p)
                         if (tu.startswith(pn) or pn in tu) and tbl not in ct:
                             ct.append(tbl)
         if ct: logger.info(f"[Dashboard] Keyword-matched: {ct[:2]}"); return ct[:2]

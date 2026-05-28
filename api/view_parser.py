@@ -363,19 +363,108 @@ async def import_views_from_db(source_id: UUID) -> Dict:
     }
 
 
+async def _upsert_views_as_entities(pool, source_id: UUID,
+                                     views: List[Dict]) -> int:
+    """
+    Indexe les vues SQL comme source_entities dans PostgreSQL.
+    Permet au RAG et au LLM de les voir dans le schéma.
+    Extrait les colonnes depuis les alias SELECT de chaque vue.
+    """
+    import re as _re
+    upserted = 0
+    async with pool.acquire() as conn:
+        for v in views:
+            vname = v.get("name", "").strip()
+            vdef  = v.get("definition", "")
+            if not vname or not vdef:
+                continue
+
+            # Extraire les colonnes depuis le SELECT (alias AS xxx ou xxx directement)
+            # Pattern : SELECT col1, col2 AS alias, ... FROM
+            select_match = _re.search(
+                r'SELECT\s+(.*?)\s+FROM\s', vdef, _re.IGNORECASE | _re.DOTALL
+            )
+            columns = []
+            if select_match:
+                cols_raw = select_match.group(1)
+                # Chaque col séparée par virgule, prendre la partie après AS ou le dernier token
+                for col_expr in cols_raw.split(','):
+                    col_expr = col_expr.strip()
+                    # Chercher alias AS xxx
+                    alias_m = _re.search(r'AS\s+\[?([^\],\s]+)\]?', col_expr, _re.IGNORECASE)
+                    if alias_m:
+                        columns.append(alias_m.group(1).strip('[]'))
+                    else:
+                        # Prendre le dernier token (nom de colonne simple)
+                        tokens = _re.findall(r'([A-Za-z_][A-Za-z0-9_]*)', col_expr)
+                        if tokens:
+                            last = tokens[-1]
+                            if last.upper() not in ('SELECT','FROM','WHERE','JOIN',
+                                                    'INNER','LEFT','RIGHT','OUTER'):
+                                columns.append(last)
+
+            # Upsert dans source_entities (toujours — même si déjà existante)
+            try:
+                await conn.execute("""
+                    INSERT INTO source_entities
+                        (source_id, name, entity_type, is_visible,
+                         description, metadata)
+                    VALUES ($1, $2, 'view', TRUE, $3, $4::jsonb)
+                    ON CONFLICT (source_id, name) DO UPDATE
+                        SET entity_type = 'view',
+                            is_visible   = TRUE,
+                            description  = COALESCE(
+                                NULLIF(source_entities.description, ''),
+                                EXCLUDED.description
+                            )
+                """, source_id, vname,
+                    f"Vue SQL : {vname}",
+                    '{"is_view": true}')
+                upserted += 1
+
+                # Upsert les champs (colonnes)
+                for pos, col in enumerate(columns[:50]):
+                    if not col or len(col) < 1:
+                        continue
+                    entity_id = await conn.fetchval(
+                        "SELECT id FROM source_entities WHERE source_id=$1 AND name=$2",
+                        source_id, vname
+                    )
+                    if entity_id:
+                        await conn.execute("""
+                            INSERT INTO entity_fields
+                                (entity_id, name, display_name, position)
+                            VALUES ($1, $2, $2, $3)
+                            ON CONFLICT (entity_id, name) DO NOTHING
+                        """, entity_id, col, pos)
+            except Exception as e:
+                logger.warning(f"[VP] Upsert vue '{vname}' : {e}")
+    logger.info(f"[VP] {upserted} vues indexées comme source_entities")
+    return upserted
+
+
 async def import_views_from_paste(source_id: UUID,
                                    views: List[Dict]) -> Dict:
     from .database import get_pg_pool
     pool  = await get_pg_pool()
+    # 1. Indexer les vues comme entités (pour RAG + LLM)
+    n_entities = await _upsert_views_as_entities(pool, source_id, views)
+    # 2. Extraire et sauvegarder les jointures
     rels  = parse_multiple_views(views)
     stats = await _save_view_relations(pool, source_id, rels)
     return {
-        "success": True, "views_parsed": len(views),
+        "success":             True,
+        "views_parsed":        len(views),
+        "views_indexed":       n_entities,
         "relations_extracted": len(rels),
-        "imported": stats["imported"],
-        "updated":  stats["updated"],
-        "skipped":  stats["skipped"],
-        "message": f"{len(views)} vues → {stats['imported']} nouvelles",
+        "imported":            stats["imported"],
+        "updated":             stats["updated"],
+        "skipped":             stats["skipped"],
+        "message": (
+            f"{len(views)} vues parsées → "
+            f"{n_entities} entités indexées, "
+            f"{stats['imported']} nouvelles relations"
+        ),
     }
 
 

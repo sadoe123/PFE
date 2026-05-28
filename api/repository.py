@@ -328,16 +328,39 @@ async def save_test_result(source_id: UUID, success: bool, message: str, latency
 async def save_metadata(source_id: UUID, entities_data: list) -> int:
     entity_count = 0
     async with pg_conn() as conn:
-        await conn.execute("DELETE FROM source_entities WHERE source_id=$1", source_id)
+        # Collecter les noms des entités reçues
+        incoming_names = {e.get("name", "") for e in entities_data}
+
+        # Supprimer uniquement les entités qui n'existent plus dans la source
+        await conn.execute("""
+            DELETE FROM source_entities
+            WHERE source_id = $1
+              AND name NOT IN (SELECT unnest($2::text[]))
+        """, source_id, list(incoming_names))
 
         for entity in entities_data:
             indexes_json  = json.dumps(entity.get("indexes", []))
             metadata_json = json.dumps(entity.get("metadata", {}))
+            # UPSERT : préserve la description LLM existante si elle existe
             row = await conn.fetchrow(
                 """INSERT INTO source_entities
                    (source_id, name, display_name, entity_type, description,
                     indexes, metadata, row_count)
-                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id""",
+                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+                   ON CONFLICT (source_id, name)
+                   DO UPDATE SET
+                       display_name = EXCLUDED.display_name,
+                       entity_type  = EXCLUDED.entity_type,
+                       description  = CASE
+                           WHEN source_entities.description IS NOT NULL
+                            AND source_entities.description != ''
+                           THEN source_entities.description
+                           ELSE EXCLUDED.description
+                       END,
+                       indexes      = EXCLUDED.indexes,
+                       metadata     = EXCLUDED.metadata,
+                       row_count    = EXCLUDED.row_count
+                   RETURNING id""",
                 source_id,
                 entity.get("name", ""),
                 entity.get("name", "").replace("_", " ").title(),

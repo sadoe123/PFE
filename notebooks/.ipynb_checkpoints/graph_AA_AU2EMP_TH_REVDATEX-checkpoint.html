@@ -1,0 +1,163 @@
+<html>
+    <head>
+        <meta charset="utf-8">
+        
+            <script src="lib/bindings/utils.js"></script>
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/dist/vis-network.min.css" integrity="sha512-WgxfT5LWjfszlPHXRmBWHkV2eceiWTOBvrKCNbdgDYTHrT2AeLCGbF4sZlZw3UMN3WtL0tGUoIAKsu8mllg/XA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/vis-network.min.js" integrity="sha512-LnvoEWDFrqGHlHmDD2101OrLcbsfkrzoSpvtSQtxK3RMnRV0eOkhhBN2dXHKRrUU8p2DGRTk35n4O8nWSVe1mQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+            
+        
+<center>
+<h1></h1>
+</center>
+
+<!-- <link rel="stylesheet" href="../node_modules/vis/dist/vis.min.css" type="text/css" />
+<script type="text/javascript" src="../node_modules/vis/dist/vis.js"> </script>-->
+        <link
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/css/bootstrap.min.css"
+          rel="stylesheet"
+          integrity="sha384-eOJMYsd53ii+scO/bJGFsiCZc+5NDVN2yr8+0RDqr0Ql0h+rP48ckxlpbzKgwra6"
+          crossorigin="anonymous"
+        />
+        <script
+          src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/js/bootstrap.bundle.min.js"
+          integrity="sha384-JEW9xMcG8R+pH31jmWH6WWP0WintQrMb4s7ZOdauHnUtxwoG2vI5DkLtS3qm9Ekf"
+          crossorigin="anonymous"
+        ></script>
+
+
+        <center>
+          <h1></h1>
+        </center>
+        <style type="text/css">
+
+             #mynetwork {
+                 width: 100%;
+                 height: 650px;
+                 background-color: #0d1117;
+                 border: 1px solid lightgray;
+                 position: relative;
+                 float: left;
+             }
+
+             
+
+             
+
+             
+        </style>
+    </head>
+
+
+    <body>
+        <div class="card" style="width: 100%">
+            
+            
+            <div id="mynetwork" class="card-body"></div>
+        </div>
+
+        
+        
+
+        <script type="text/javascript">
+
+              // initialize global variables.
+              var edges;
+              var nodes;
+              var allNodes;
+              var allEdges;
+              var nodeColors;
+              var originalNodes;
+              var network;
+              var container;
+              var options, data;
+              var filter = {
+                  item : '',
+                  property : '',
+                  value : []
+              };
+
+              
+
+              
+
+              // This method is responsible for drawing the graph, returns the drawn network
+              function drawGraph() {
+                  var container = document.getElementById('mynetwork');
+
+                  
+
+                  // parsing and collecting nodes and edges from the python
+                  nodes = new vis.DataSet([{"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "GS_PARTY_BASE_A", "label": "GS_PARTY_BASE_A", "shape": "dot", "size": 15, "title": "\u003cb\u003eGS_PARTY_BASE_A\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 132\u003cbr\u003eFK in: 4 | FK out: 1"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "RC_RPRCSPM_2_ACC_A", "label": "RC_RPRCSPM_2_ACC_A", "shape": "dot", "size": 15, "title": "\u003cb\u003eRC_RPRCSPM_2_ACC_A\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 0 | FK out: 1"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "TH_USRSECRINF_A", "label": "TH_USRSECRINF_A", "shape": "dot", "size": 15, "title": "\u003cb\u003eTH_USRSECRINF_A\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 0 | FK out: 2"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "AA_SIGNTP_A", "label": "AA_SIGNTP_A", "shape": "dot", "size": 15, "title": "\u003cb\u003eAA_SIGNTP_A\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 1 | FK out: 2"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "TH_USR_VLDT_TU_A", "label": "TH_USR_VLDT_TU_A", "shape": "dot", "size": 15, "title": "\u003cb\u003eTH_USR_VLDT_TU_A\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 0 | FK out: 1"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "TH_ALRT_2_USR", "label": "TH_ALRT_2_USR", "shape": "dot", "size": 15, "title": "\u003cb\u003eTH_ALRT_2_USR\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 3 | FK out: 0"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "GS_CMP_A", "label": "GS_CMP_A", "shape": "dot", "size": 15, "title": "\u003cb\u003eGS_CMP_A\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 12\u003cbr\u003eFK in: 0 | FK out: 1"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "GS_CNTRP_A", "label": "GS_CNTRP_A", "shape": "dot", "size": 15, "title": "\u003cb\u003eGS_CNTRP_A\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 0 | FK out: 1"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "AA_EMPGRP_2_AU2EMP", "label": "AA_EMPGRP_2_AU2EMP", "shape": "dot", "size": 15, "title": "\u003cb\u003eAA_EMPGRP_2_AU2EMP\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 0 | FK out: 2"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "AA_SIGNGRP", "label": "AA_SIGNGRP", "shape": "dot", "size": 15, "title": "\u003cb\u003eAA_SIGNGRP\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 1 | FK out: 1"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "GS_EMPLDLGTNS", "label": "GS_EMPLDLGTNS", "shape": "dot", "size": 15, "title": "\u003cb\u003eGS_EMPLDLGTNS\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 0 | FK out: 1"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "GS_CUR", "label": "GS_CUR", "shape": "dot", "size": 15, "title": "\u003cb\u003eGS_CUR\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 183\u003cbr\u003eFK in: 1 | FK out: 0"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "GS_EMPL", "label": "GS_EMPL", "shape": "dot", "size": 15, "title": "\u003cb\u003eGS_EMPL\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 5 | FK out: 1"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "AA_ACCAU_2_AU2EMP", "label": "AA_ACCAU_2_AU2EMP", "shape": "dot", "size": 15, "title": "\u003cb\u003eAA_ACCAU_2_AU2EMP\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 2 | FK out: 2"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "AA_BTCHTL_2_AU2EMP", "label": "AA_BTCHTL_2_AU2EMP", "shape": "dot", "size": 15, "title": "\u003cb\u003eAA_BTCHTL_2_AU2EMP\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 0 | FK out: 2"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "GS_BNKBR_A", "label": "GS_BNKBR_A", "shape": "dot", "size": 15, "title": "\u003cb\u003eGS_BNKBR_A\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 20\u003cbr\u003eFK in: 0 | FK out: 1"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "AA_DOC", "label": "AA_DOC", "shape": "dot", "size": 15, "title": "\u003cb\u003eAA_DOC\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 3 | FK out: 1"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "AA_ACCAU_A", "label": "AA_ACCAU_A", "shape": "dot", "size": 15, "title": "\u003cb\u003eAA_ACCAU_A\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 0 | FK out: 5"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "GS_PERIODTP", "label": "GS_PERIODTP", "shape": "dot", "size": 15, "title": "\u003cb\u003eGS_PERIODTP\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 7\u003cbr\u003eFK in: 2 | FK out: 0"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "GS_BNK_A", "label": "GS_BNK_A", "shape": "dot", "size": 15, "title": "\u003cb\u003eGS_BNK_A\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 20\u003cbr\u003eFK in: 0 | FK out: 1"}, {"borderWidth": 3, "borderWidthSelected": 4, "color": "#00d4aa", "font": {"color": "white"}, "id": "TH_REVDATEX", "label": "TH_REVDATEX", "shape": "dot", "size": 25, "title": "\u003cb\u003eTH_REVDATEX\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83c\udf31 SEED\u003cbr\u003eType: table\u003cbr\u003eLignes: 787515\u003cbr\u003eFK in: 6 | FK out: 1"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "GS_EMPL_FILES", "label": "GS_EMPL_FILES", "shape": "dot", "size": 15, "title": "\u003cb\u003eGS_EMPL_FILES\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 0 | FK out: 1"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "AA_EMPGRP", "label": "AA_EMPGRP", "shape": "dot", "size": 15, "title": "\u003cb\u003eAA_EMPGRP\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 3 | FK out: 0"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "GS_EMPLREL", "label": "GS_EMPLREL", "shape": "dot", "size": 15, "title": "\u003cb\u003eGS_EMPLREL\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 0 | FK out: 1"}, {"borderWidth": 3, "borderWidthSelected": 4, "color": "#00d4aa", "font": {"color": "white"}, "id": "AA_AU2EMP", "label": "AA_AU2EMP", "shape": "dot", "size": 25, "title": "\u003cb\u003eAA_AU2EMP\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83c\udf31 SEED\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 4 | FK out: 2"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "GS_EMPL_U", "label": "GS_EMPL_U", "shape": "dot", "size": 15, "title": "\u003cb\u003eGS_EMPL_U\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 0 | FK out: 1"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "AA_ACCAU", "label": "AA_ACCAU", "shape": "dot", "size": 15, "title": "\u003cb\u003eAA_ACCAU\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 2 | FK out: 6"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "AA_BTCHTL", "label": "AA_BTCHTL", "shape": "dot", "size": 15, "title": "\u003cb\u003eAA_BTCHTL\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 2 | FK out: 1"}]);
+                  edges = new vis.DataSet([{"arrows": "to", "color": "#00d4aa", "from": "GS_PARTY_BASE_A", "title": "JOIN: GS_PARTY_BASE_A.REV = TH_REVDATEX.REVDATEX_ID\u003cbr\u003eConfiance: 100%", "to": "TH_REVDATEX", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "RC_RPRCSPM_2_ACC_A", "title": "JOIN: RC_RPRCSPM_2_ACC_A.REV = TH_REVDATEX.REVDATEX_ID\u003cbr\u003eConfiance: 100%", "to": "TH_REVDATEX", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "TH_USRSECRINF_A", "title": "JOIN: TH_USRSECRINF_A.REV = TH_REVDATEX.REVDATEX_ID\u003cbr\u003eConfiance: 100%", "to": "TH_REVDATEX", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "TH_USRSECRINF_A", "title": "JOIN: TH_USRSECRINF_A.USR_ID = TH_ALRT_2_USR.ALRT_ID\u003cbr\u003eConfiance: 79%", "to": "TH_ALRT_2_USR", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_SIGNTP_A", "title": "JOIN: AA_SIGNTP_A.REV = TH_REVDATEX.REVDATEX_ID\u003cbr\u003eConfiance: 100%", "to": "TH_REVDATEX", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_SIGNTP_A", "title": "JOIN: AA_SIGNTP_A.SIGNGRP_ID = AA_SIGNGRP.SIGNGRP_ID\u003cbr\u003eConfiance: 79%", "to": "AA_SIGNGRP", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "TH_USR_VLDT_TU_A", "title": "JOIN: TH_USR_VLDT_TU_A.REV = TH_REVDATEX.REVDATEX_ID\u003cbr\u003eConfiance: 100%", "to": "TH_REVDATEX", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "GS_CMP_A", "title": "JOIN: GS_CMP_A.REV = GS_PARTY_BASE_A.REV\u003cbr\u003eConfiance: 100%", "to": "GS_PARTY_BASE_A", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "GS_CNTRP_A", "title": "JOIN: GS_CNTRP_A.REV = GS_PARTY_BASE_A.REV\u003cbr\u003eConfiance: 100%", "to": "GS_PARTY_BASE_A", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_EMPGRP_2_AU2EMP", "title": "JOIN: AA_EMPGRP_2_AU2EMP.EMPGRP_ID = AA_EMPGRP.EMPGRP_ID\u003cbr\u003eConfiance: 100%", "to": "AA_EMPGRP", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_EMPGRP_2_AU2EMP", "title": "JOIN: AA_EMPGRP_2_AU2EMP.AU2EMP_ID = AA_AU2EMP.AU2EMP_ID\u003cbr\u003eConfiance: 100%", "to": "AA_AU2EMP", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_SIGNGRP", "title": "JOIN: AA_SIGNGRP.SIGNGRP_ID = AA_SIGNTP_A.SIGNTP_ID\u003cbr\u003eConfiance: 93%", "to": "AA_SIGNTP_A", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "GS_EMPLDLGTNS", "title": "JOIN: GS_EMPLDLGTNS.EMPL_ID_DELEGATOR = GS_EMPL.EMPL_ID\u003cbr\u003eConfiance: 100%", "to": "GS_EMPL", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "GS_EMPL", "title": "JOIN: GS_EMPL.USR_ID = TH_ALRT_2_USR.ALRT_ID\u003cbr\u003eConfiance: 92%", "to": "TH_ALRT_2_USR", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_ACCAU_2_AU2EMP", "title": "JOIN: AA_ACCAU_2_AU2EMP.ACCAU_ID = AA_ACCAU.ACCAU_ID\u003cbr\u003eConfiance: 100%", "to": "AA_ACCAU", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_ACCAU_2_AU2EMP", "title": "JOIN: AA_ACCAU_2_AU2EMP.AU2EMP_ID = AA_AU2EMP.AU2EMP_ID\u003cbr\u003eConfiance: 100%", "to": "AA_AU2EMP", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_BTCHTL_2_AU2EMP", "title": "JOIN: AA_BTCHTL_2_AU2EMP.BTCHTL_ID = AA_BTCHTL.BTCHTL_ID\u003cbr\u003eConfiance: 100%", "to": "AA_BTCHTL", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_BTCHTL_2_AU2EMP", "title": "JOIN: AA_BTCHTL_2_AU2EMP.AU2EMP_ID = AA_AU2EMP.AU2EMP_ID\u003cbr\u003eConfiance: 100%", "to": "AA_AU2EMP", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "GS_BNKBR_A", "title": "JOIN: GS_BNKBR_A.REV = GS_PARTY_BASE_A.REV\u003cbr\u003eConfiance: 100%", "to": "GS_PARTY_BASE_A", "width": 2.5}, {"arrows": "to", "color": "#f28e2b", "from": "AA_DOC", "title": "JOIN: AA_DOC.DOC_ID = AA_BTCHTL.BTCHTL_ID\u003cbr\u003eConfiance: 99%", "to": "AA_BTCHTL", "width": 1.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_ACCAU_A", "title": "JOIN: AA_ACCAU_A.REV = TH_REVDATEX.REVDATEX_ID\u003cbr\u003eConfiance: 100%", "to": "TH_REVDATEX", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_ACCAU_A", "title": "JOIN: AA_ACCAU_A.EMPGRP_ID = AA_EMPGRP.EMPGRP_ID\u003cbr\u003eConfiance: 79%", "to": "AA_EMPGRP", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_ACCAU_A", "title": "JOIN: AA_ACCAU_A.DOC_ID = AA_DOC.DOC_ID\u003cbr\u003eConfiance: 79%", "to": "AA_DOC", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_ACCAU_A", "title": "JOIN: AA_ACCAU_A.AU2EMP_ID = AA_ACCAU_2_AU2EMP.ACCAU_ID\u003cbr\u003eConfiance: 79%", "to": "AA_ACCAU_2_AU2EMP", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_ACCAU_A", "title": "JOIN: AA_ACCAU_A.PERIODTP_ID = GS_PERIODTP.PERIODTP_ID\u003cbr\u003eConfiance: 79%", "to": "GS_PERIODTP", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "GS_BNK_A", "title": "JOIN: GS_BNK_A.REV = GS_PARTY_BASE_A.REV\u003cbr\u003eConfiance: 100%", "to": "GS_PARTY_BASE_A", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "TH_REVDATEX", "title": "JOIN: TH_REVDATEX.USR_ID = TH_ALRT_2_USR.ALRT_ID\u003cbr\u003eConfiance: 92%", "to": "TH_ALRT_2_USR", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "GS_EMPL_FILES", "title": "JOIN: GS_EMPL_FILES.EMPL_ID = GS_EMPL.EMPL_ID\u003cbr\u003eConfiance: 100%", "to": "GS_EMPL", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "GS_EMPLREL", "title": "JOIN: GS_EMPLREL.EMPL_ID_SUBORDINATE = GS_EMPL.EMPL_ID\u003cbr\u003eConfiance: 100%", "to": "GS_EMPL", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_AU2EMP", "title": "JOIN: AA_AU2EMP.AU2EMP_ID = GS_EMPL.EMPL_ID\u003cbr\u003eConfiance: 100%", "to": "GS_EMPL", "width": 2.5}, {"arrows": "to", "color": "#f28e2b", "from": "AA_AU2EMP", "title": "JOIN: AA_AU2EMP.AU2EMP_ID = AA_ACCAU.ACCAU_ID\u003cbr\u003eConfiance: 100%", "to": "AA_ACCAU", "width": 1.5}, {"arrows": "to", "color": "#00d4aa", "from": "GS_EMPL_U", "title": "JOIN: GS_EMPL_U.EMPL_ID = GS_EMPL.EMPL_ID\u003cbr\u003eConfiance: 100%", "to": "GS_EMPL", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_ACCAU", "title": "JOIN: AA_ACCAU.AU2EMP_ID = AA_AU2EMP.AU2EMP_ID\u003cbr\u003eConfiance: 100%", "to": "AA_AU2EMP", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_ACCAU", "title": "JOIN: AA_ACCAU.CUR_ID = GS_CUR.CUR_ID\u003cbr\u003eConfiance: 100%", "to": "GS_CUR", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_ACCAU", "title": "JOIN: AA_ACCAU.DOC_ID = AA_DOC.DOC_ID\u003cbr\u003eConfiance: 100%", "to": "AA_DOC", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_ACCAU", "title": "JOIN: AA_ACCAU.EMPGRP_ID = AA_EMPGRP.EMPGRP_ID\u003cbr\u003eConfiance: 100%", "to": "AA_EMPGRP", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_ACCAU", "title": "JOIN: AA_ACCAU.PERIODTP_ID = GS_PERIODTP.PERIODTP_ID\u003cbr\u003eConfiance: 100%", "to": "GS_PERIODTP", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_ACCAU", "title": "JOIN: AA_ACCAU.AU2EMP_ID = AA_ACCAU_2_AU2EMP.ACCAU_ID\u003cbr\u003eConfiance: 92%", "to": "AA_ACCAU_2_AU2EMP", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_BTCHTL", "title": "JOIN: AA_BTCHTL.DOC_ID = AA_DOC.DOC_ID\u003cbr\u003eConfiance: 100%", "to": "AA_DOC", "width": 2.5}]);
+
+                  nodeColors = {};
+                  allNodes = nodes.get({ returnType: "Object" });
+                  for (nodeId in allNodes) {
+                    nodeColors[nodeId] = allNodes[nodeId].color;
+                  }
+                  allEdges = edges.get({ returnType: "Object" });
+                  // adding nodes and edges to the graph
+                  data = {nodes: nodes, edges: edges};
+
+                  var options = {
+    "configure": {
+        "enabled": false
+    },
+    "edges": {
+        "color": {
+            "inherit": true
+        },
+        "smooth": {
+            "enabled": true,
+            "type": "dynamic"
+        }
+    },
+    "interaction": {
+        "dragNodes": true,
+        "hideEdgesOnDrag": false,
+        "hideNodesOnDrag": false
+    },
+    "physics": {
+        "barnesHut": {
+            "avoidOverlap": 0,
+            "centralGravity": 0.3,
+            "damping": 0.09,
+            "gravitationalConstant": -8000,
+            "springConstant": 0.001,
+            "springLength": 150
+        },
+        "enabled": true,
+        "stabilization": {
+            "enabled": true,
+            "fit": true,
+            "iterations": 1000,
+            "onlyDynamicEdges": false,
+            "updateInterval": 50
+        }
+    }
+};
+
+                  
+
+
+                  
+
+                  network = new vis.Network(container, data, options);
+
+                  
+
+                  
+
+                  
+
+
+                  
+
+                  return network;
+
+              }
+              drawGraph();
+        </script>
+    </body>
+</html>

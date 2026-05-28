@@ -1,0 +1,163 @@
+<html>
+    <head>
+        <meta charset="utf-8">
+        
+            <script src="lib/bindings/utils.js"></script>
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/dist/vis-network.min.css" integrity="sha512-WgxfT5LWjfszlPHXRmBWHkV2eceiWTOBvrKCNbdgDYTHrT2AeLCGbF4sZlZw3UMN3WtL0tGUoIAKsu8mllg/XA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/vis-network.min.js" integrity="sha512-LnvoEWDFrqGHlHmDD2101OrLcbsfkrzoSpvtSQtxK3RMnRV0eOkhhBN2dXHKRrUU8p2DGRTk35n4O8nWSVe1mQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+            
+        
+<center>
+<h1></h1>
+</center>
+
+<!-- <link rel="stylesheet" href="../node_modules/vis/dist/vis.min.css" type="text/css" />
+<script type="text/javascript" src="../node_modules/vis/dist/vis.js"> </script>-->
+        <link
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/css/bootstrap.min.css"
+          rel="stylesheet"
+          integrity="sha384-eOJMYsd53ii+scO/bJGFsiCZc+5NDVN2yr8+0RDqr0Ql0h+rP48ckxlpbzKgwra6"
+          crossorigin="anonymous"
+        />
+        <script
+          src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/js/bootstrap.bundle.min.js"
+          integrity="sha384-JEW9xMcG8R+pH31jmWH6WWP0WintQrMb4s7ZOdauHnUtxwoG2vI5DkLtS3qm9Ekf"
+          crossorigin="anonymous"
+        ></script>
+
+
+        <center>
+          <h1></h1>
+        </center>
+        <style type="text/css">
+
+             #mynetwork {
+                 width: 100%;
+                 height: 650px;
+                 background-color: #0d1117;
+                 border: 1px solid lightgray;
+                 position: relative;
+                 float: left;
+             }
+
+             
+
+             
+
+             
+        </style>
+    </head>
+
+
+    <body>
+        <div class="card" style="width: 100%">
+            
+            
+            <div id="mynetwork" class="card-body"></div>
+        </div>
+
+        
+        
+
+        <script type="text/javascript">
+
+              // initialize global variables.
+              var edges;
+              var nodes;
+              var allNodes;
+              var allEdges;
+              var nodeColors;
+              var originalNodes;
+              var network;
+              var container;
+              var options, data;
+              var filter = {
+                  item : '',
+                  property : '',
+                  value : []
+              };
+
+              
+
+              
+
+              // This method is responsible for drawing the graph, returns the drawn network
+              function drawGraph() {
+                  var container = document.getElementById('mynetwork');
+
+                  
+
+                  // parsing and collecting nodes and edges from the python
+                  nodes = new vis.DataSet([{"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "AA_LT", "label": "AA_LT", "shape": "dot", "size": 15, "title": "\u003cb\u003eAA_LT\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 3 | FK out: 3"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "GS_BNK", "label": "GS_BNK", "shape": "dot", "size": 15, "title": "\u003cb\u003eGS_BNK\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 6\u003cbr\u003eFK in: 4 | FK out: 1"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "RC_RC2ACC", "label": "RC_RC2ACC", "shape": "dot", "size": 15, "title": "\u003cb\u003eRC_RC2ACC\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 18\u003cbr\u003eFK in: 1 | FK out: 0"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "RT_RCT2CMP", "label": "RT_RCT2CMP", "shape": "dot", "size": 15, "title": "\u003cb\u003eRT_RCT2CMP\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 2 | FK out: 2"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "CS_AVCDTN", "label": "CS_AVCDTN", "shape": "dot", "size": 15, "title": "\u003cb\u003eCS_AVCDTN\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 29\u003cbr\u003eFK in: 1 | FK out: 6"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "CS_CSH_R_F2CMP", "label": "CS_CSH_R_F2CMP", "shape": "dot", "size": 15, "title": "\u003cb\u003eCS_CSH_R_F2CMP\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 1 | FK out: 2"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "RC_DSCRLIMIT", "label": "RC_DSCRLIMIT", "shape": "dot", "size": 15, "title": "\u003cb\u003eRC_DSCRLIMIT\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 0 | FK out: 6"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "CS_CRDINTTERM", "label": "CS_CRDINTTERM", "shape": "dot", "size": 15, "title": "\u003cb\u003eCS_CRDINTTERM\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 2\u003cbr\u003eFK in: 1 | FK out: 8"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "AA_LT_U", "label": "AA_LT_U", "shape": "dot", "size": 15, "title": "\u003cb\u003eAA_LT_U\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 0 | FK out: 1"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "AA_LT_2_ACCAU_CAU", "label": "AA_LT_2_ACCAU_CAU", "shape": "dot", "size": 15, "title": "\u003cb\u003eAA_LT_2_ACCAU_CAU\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 0 | FK out: 1"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "AA_LTRUL_2_BNKBR", "label": "AA_LTRUL_2_BNKBR", "shape": "dot", "size": 15, "title": "\u003cb\u003eAA_LTRUL_2_BNKBR\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 3 | FK out: 2"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "GS_CUR", "label": "GS_CUR", "shape": "dot", "size": 15, "title": "\u003cb\u003eGS_CUR\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 183\u003cbr\u003eFK in: 3 | FK out: 0"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "CS_CRDINTTERM_STEPS", "label": "CS_CRDINTTERM_STEP..", "shape": "dot", "size": 15, "title": "\u003cb\u003eCS_CRDINTTERM_STEPS\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 1\u003cbr\u003eFK in: 1 | FK out: 1"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "RT_MANDATE", "label": "RT_MANDATE", "shape": "dot", "size": 15, "title": "\u003cb\u003eRT_MANDATE\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 0 | FK out: 1"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "AA_LTRUL", "label": "AA_LTRUL", "shape": "dot", "size": 15, "title": "\u003cb\u003eAA_LTRUL\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 3 | FK out: 5"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "AA_LT_2_ACCAU_AU", "label": "AA_LT_2_ACCAU_AU", "shape": "dot", "size": 15, "title": "\u003cb\u003eAA_LT_2_ACCAU_AU\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 0 | FK out: 1"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "CS_CSH2ACC", "label": "CS_CSH2ACC", "shape": "dot", "size": 15, "title": "\u003cb\u003eCS_CSH2ACC\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 18\u003cbr\u003eFK in: 2 | FK out: 0"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "AA_LTRUL_2_AU2CMP", "label": "AA_LTRUL_2_AU2CMP", "shape": "dot", "size": 15, "title": "\u003cb\u003eAA_LTRUL_2_AU2CMP\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 1 | FK out: 2"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "GS_BNKBR", "label": "GS_BNKBR", "shape": "dot", "size": 15, "title": "\u003cb\u003eGS_BNKBR\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 6\u003cbr\u003eFK in: 5 | FK out: 2"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "AA_LTUSRTL", "label": "AA_LTUSRTL", "shape": "dot", "size": 15, "title": "\u003cb\u003eAA_LTUSRTL\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 27\u003cbr\u003eFK in: 1 | FK out: 0"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "RT_MANDATE_A", "label": "RT_MANDATE_A", "shape": "dot", "size": 15, "title": "\u003cb\u003eRT_MANDATE_A\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 0 | FK out: 1"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "AA_LT_ESIGN_DOC", "label": "AA_LT_ESIGN_DOC", "shape": "dot", "size": 15, "title": "\u003cb\u003eAA_LT_ESIGN_DOC\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 1 | FK out: 0"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "GS_GLSTTP", "label": "GS_GLSTTP", "shape": "dot", "size": 15, "title": "\u003cb\u003eGS_GLSTTP\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 36\u003cbr\u003eFK in: 1 | FK out: 0"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "GS_CNTR", "label": "GS_CNTR", "shape": "dot", "size": 15, "title": "\u003cb\u003eGS_CNTR\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 222\u003cbr\u003eFK in: 4 | FK out: 1"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "AA_AU2CMP_2_AU2EMP", "label": "AA_AU2CMP_2_AU2EMP", "shape": "dot", "size": 15, "title": "\u003cb\u003eAA_AU2CMP_2_AU2EMP\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 0 | FK out: 2"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "CS_FLOWCDS", "label": "CS_FLOWCDS", "shape": "dot", "size": 15, "title": "\u003cb\u003eCS_FLOWCDS\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 121\u003cbr\u003eFK in: 2 | FK out: 0"}, {"borderWidth": 3, "borderWidthSelected": 4, "color": "#00d4aa", "font": {"color": "white"}, "id": "AA_AU2CMP", "label": "AA_AU2CMP", "shape": "dot", "size": 25, "title": "\u003cb\u003eAA_AU2CMP\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83c\udf31 SEED\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 4 | FK out: 1"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "AA_AU2EMP", "label": "AA_AU2EMP", "shape": "dot", "size": 15, "title": "\u003cb\u003eAA_AU2EMP\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 1 | FK out: 0"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "CS_AVCDTN_RLSTP", "label": "CS_AVCDTN_RLSTP", "shape": "dot", "size": 15, "title": "\u003cb\u003eCS_AVCDTN_RLSTP\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 29\u003cbr\u003eFK in: 0 | FK out: 1"}, {"borderWidth": 1, "borderWidthSelected": 4, "color": "#4e79a7", "font": {"color": "white"}, "id": "CS_CSH_R_F", "label": "CS_CSH_R_F", "shape": "dot", "size": 15, "title": "\u003cb\u003eCS_CSH_R_F\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83d\udd17 FK\u003cbr\u003eType: table\u003cbr\u003eLignes: 0\u003cbr\u003eFK in: 1 | FK out: 0"}, {"borderWidth": 3, "borderWidthSelected": 4, "color": "#00d4aa", "font": {"color": "white"}, "id": "GS_CMP", "label": "GS_CMP", "shape": "dot", "size": 25, "title": "\u003cb\u003eGS_CMP\u003c/b\u003e\u003cbr\u003eR\u00f4le: \ud83c\udf31 SEED\u003cbr\u003eType: table\u003cbr\u003eLignes: 3\u003cbr\u003eFK in: 6 | FK out: 2"}]);
+                  edges = new vis.DataSet([{"arrows": "to", "color": "#00d4aa", "from": "AA_LT", "title": "JOIN: AA_LT.LT_ESIGN_DOC_ID = AA_LT_ESIGN_DOC.LT_ESIGN_DOC_ID\u003cbr\u003eConfiance: 100%", "to": "AA_LT_ESIGN_DOC", "width": 2.5}, {"arrows": "to", "color": "#f28e2b", "from": "AA_LT", "title": "JOIN: AA_LT.LTRUL_ID = AA_AU2CMP.AU2CMP_ID\u003cbr\u003eConfiance: 100%", "to": "AA_AU2CMP", "width": 1.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_LT", "title": "JOIN: AA_LT.LTRUL_ID = AA_LTRUL.LTRUL_ID\u003cbr\u003eConfiance: 100%", "to": "AA_LTRUL", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "GS_BNK", "title": "JOIN: GS_BNK.CNTR_ID = GS_CNTR.CNTR_ID\u003cbr\u003eConfiance: 100%", "to": "GS_CNTR", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "RT_RCT2CMP", "title": "JOIN: RT_RCT2CMP.RCT2CMP_ID = GS_CMP.CMP_ID\u003cbr\u003eConfiance: 100%", "to": "GS_CMP", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "RT_RCT2CMP", "title": "JOIN: RT_RCT2CMP.CNTR_ID = GS_CNTR.CNTR_ID\u003cbr\u003eConfiance: 100%", "to": "GS_CNTR", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "CS_AVCDTN", "title": "JOIN: CS_AVCDTN.CSH2ACC_ID = CS_CSH2ACC.CSH2ACC_ID\u003cbr\u003eConfiance: 100%", "to": "CS_CSH2ACC", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "CS_AVCDTN", "title": "JOIN: CS_AVCDTN.BNK_ID = GS_BNK.BNK_ID\u003cbr\u003eConfiance: 100%", "to": "GS_BNK", "width": 2.5}, {"arrows": "to", "color": "#f28e2b", "from": "CS_AVCDTN", "title": "JOIN: CS_AVCDTN.CSH2ACC_ID = CS_FLOWCDS.FLOWCDS_ID\u003cbr\u003eConfiance: 100%", "to": "CS_FLOWCDS", "width": 1.5}, {"arrows": "to", "color": "#00d4aa", "from": "CS_AVCDTN", "title": "JOIN: CS_AVCDTN.BNKBR_ID = GS_BNKBR.BNKBR_ID\u003cbr\u003eConfiance: 100%", "to": "GS_BNKBR", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "CS_AVCDTN", "title": "JOIN: CS_AVCDTN.CMP_ID = GS_CMP.CMP_ID\u003cbr\u003eConfiance: 100%", "to": "GS_CMP", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "CS_AVCDTN", "title": "JOIN: CS_AVCDTN.BNKBR_ID = AA_LTRUL_2_BNKBR.LTRUL_ID\u003cbr\u003eConfiance: 92%", "to": "AA_LTRUL_2_BNKBR", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "CS_CSH_R_F2CMP", "title": "JOIN: CS_CSH_R_F2CMP.CSH_R_F_ID = CS_CSH_R_F.CSH_R_F_ID\u003cbr\u003eConfiance: 100%", "to": "CS_CSH_R_F", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "CS_CSH_R_F2CMP", "title": "JOIN: CS_CSH_R_F2CMP.CMP_ID = GS_CMP.CMP_ID\u003cbr\u003eConfiance: 100%", "to": "GS_CMP", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "RC_DSCRLIMIT", "title": "JOIN: RC_DSCRLIMIT.CUR_ID_CURRENCY = GS_CUR.CUR_ID\u003cbr\u003eConfiance: 100%", "to": "GS_CUR", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "RC_DSCRLIMIT", "title": "JOIN: RC_DSCRLIMIT.BNKBR_ID = GS_BNKBR.BNKBR_ID\u003cbr\u003eConfiance: 100%", "to": "GS_BNKBR", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "RC_DSCRLIMIT", "title": "JOIN: RC_DSCRLIMIT.CMP_ID = GS_CMP.CMP_ID\u003cbr\u003eConfiance: 100%", "to": "GS_CMP", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "RC_DSCRLIMIT", "title": "JOIN: RC_DSCRLIMIT.BNK_ID = GS_BNK.BNK_ID\u003cbr\u003eConfiance: 100%", "to": "GS_BNK", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "RC_DSCRLIMIT", "title": "JOIN: RC_DSCRLIMIT.GLSTTP_ID = GS_GLSTTP.GLSTTP_ID\u003cbr\u003eConfiance: 100%", "to": "GS_GLSTTP", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "RC_DSCRLIMIT", "title": "JOIN: RC_DSCRLIMIT.RC2ACC_ID = RC_RC2ACC.RC2ACC_ID\u003cbr\u003eConfiance: 100%", "to": "RC_RC2ACC", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "CS_CRDINTTERM", "title": "JOIN: CS_CRDINTTERM.CMP_ID = GS_CMP.CMP_ID\u003cbr\u003eConfiance: 100%", "to": "GS_CMP", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "CS_CRDINTTERM", "title": "JOIN: CS_CRDINTTERM.FLOWCDS_ID = CS_FLOWCDS.FLOWCDS_ID\u003cbr\u003eConfiance: 100%", "to": "CS_FLOWCDS", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "CS_CRDINTTERM", "title": "JOIN: CS_CRDINTTERM.BNK_ID = GS_BNK.BNK_ID\u003cbr\u003eConfiance: 100%", "to": "GS_BNK", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "CS_CRDINTTERM", "title": "JOIN: CS_CRDINTTERM.CUR_ID = GS_CUR.CUR_ID\u003cbr\u003eConfiance: 100%", "to": "GS_CUR", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "CS_CRDINTTERM", "title": "JOIN: CS_CRDINTTERM.BNKBR_ID = GS_BNKBR.BNKBR_ID\u003cbr\u003eConfiance: 100%", "to": "GS_BNKBR", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "CS_CRDINTTERM", "title": "JOIN: CS_CRDINTTERM.CSH2ACC_ID = CS_CSH2ACC.CSH2ACC_ID\u003cbr\u003eConfiance: 100%", "to": "CS_CSH2ACC", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "CS_CRDINTTERM", "title": "JOIN: CS_CRDINTTERM.CMP_ID = CS_CRDINTTERM_STEPS.CRDINTTERM_STEPS_ID\u003cbr\u003eConfiance: 100%", "to": "CS_CRDINTTERM_STEPS", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "CS_CRDINTTERM", "title": "JOIN: CS_CRDINTTERM.BNKBR_ID = AA_LTRUL_2_BNKBR.LTRUL_ID\u003cbr\u003eConfiance: 92%", "to": "AA_LTRUL_2_BNKBR", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_LT_U", "title": "JOIN: AA_LT_U.LT_ID = AA_LT.LT_ID\u003cbr\u003eConfiance: 100%", "to": "AA_LT", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_LT_2_ACCAU_CAU", "title": "JOIN: AA_LT_2_ACCAU_CAU.LT_ID = AA_LT.LT_ID\u003cbr\u003eConfiance: 100%", "to": "AA_LT", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_LTRUL_2_BNKBR", "title": "JOIN: AA_LTRUL_2_BNKBR.LTRUL_ID = AA_LTRUL.LTRUL_ID\u003cbr\u003eConfiance: 100%", "to": "AA_LTRUL", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_LTRUL_2_BNKBR", "title": "JOIN: AA_LTRUL_2_BNKBR.BNKBR_ID = GS_BNKBR.BNKBR_ID\u003cbr\u003eConfiance: 100%", "to": "GS_BNKBR", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "CS_CRDINTTERM_STEPS", "title": "JOIN: CS_CRDINTTERM_STEPS.CRDINTTERM_ID = CS_CRDINTTERM.CRDINTTERM_ID\u003cbr\u003eConfiance: 100%", "to": "CS_CRDINTTERM", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "RT_MANDATE", "title": "JOIN: RT_MANDATE.RCT2CMP_ID = RT_RCT2CMP.RCT2CMP_ID\u003cbr\u003eConfiance: 100%", "to": "RT_RCT2CMP", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_LTRUL", "title": "JOIN: AA_LTRUL.AU2CMP_ID = AA_AU2CMP.AU2CMP_ID\u003cbr\u003eConfiance: 100%", "to": "AA_AU2CMP", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_LTRUL", "title": "JOIN: AA_LTRUL.LTUSRTL_ID = AA_LTUSRTL.LTUSRTL_ID\u003cbr\u003eConfiance: 100%", "to": "AA_LTUSRTL", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_LTRUL", "title": "JOIN: AA_LTRUL.BNKBR_ID = GS_BNKBR.BNKBR_ID\u003cbr\u003eConfiance: 100%", "to": "GS_BNKBR", "width": 2.5}, {"arrows": "to", "color": "#f28e2b", "from": "AA_LTRUL", "title": "JOIN: AA_LTRUL.LTUSRTL_ID = AA_LTRUL_2_AU2CMP.LTRUL_ID\u003cbr\u003eConfiance: 100%", "to": "AA_LTRUL_2_AU2CMP", "width": 1.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_LTRUL", "title": "JOIN: AA_LTRUL.BNKBR_ID = AA_LTRUL_2_BNKBR.LTRUL_ID\u003cbr\u003eConfiance: 92%", "to": "AA_LTRUL_2_BNKBR", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_LT_2_ACCAU_AU", "title": "JOIN: AA_LT_2_ACCAU_AU.LT_ID = AA_LT.LT_ID\u003cbr\u003eConfiance: 100%", "to": "AA_LT", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_LTRUL_2_AU2CMP", "title": "JOIN: AA_LTRUL_2_AU2CMP.LTRUL_ID = AA_LTRUL.LTRUL_ID\u003cbr\u003eConfiance: 100%", "to": "AA_LTRUL", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_LTRUL_2_AU2CMP", "title": "JOIN: AA_LTRUL_2_AU2CMP.AU2CMP_ID = AA_AU2CMP.AU2CMP_ID\u003cbr\u003eConfiance: 100%", "to": "AA_AU2CMP", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "GS_BNKBR", "title": "JOIN: GS_BNKBR.CNTR_ID = GS_CNTR.CNTR_ID\u003cbr\u003eConfiance: 100%", "to": "GS_CNTR", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "GS_BNKBR", "title": "JOIN: GS_BNKBR.BNK_ID = GS_BNK.BNK_ID\u003cbr\u003eConfiance: 100%", "to": "GS_BNK", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "RT_MANDATE_A", "title": "JOIN: RT_MANDATE_A.RCT2CMP_ID = RT_RCT2CMP.RCT2CMP_ID\u003cbr\u003eConfiance: 79%", "to": "RT_RCT2CMP", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "GS_CNTR", "title": "JOIN: GS_CNTR.CUR_ID = GS_CUR.CUR_ID\u003cbr\u003eConfiance: 100%", "to": "GS_CUR", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_AU2CMP_2_AU2EMP", "title": "JOIN: AA_AU2CMP_2_AU2EMP.AU2CMP_ID = AA_AU2CMP.AU2CMP_ID\u003cbr\u003eConfiance: 100%", "to": "AA_AU2CMP", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_AU2CMP_2_AU2EMP", "title": "JOIN: AA_AU2CMP_2_AU2EMP.AU2EMP_ID = AA_AU2EMP.AU2EMP_ID\u003cbr\u003eConfiance: 100%", "to": "AA_AU2EMP", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "AA_AU2CMP", "title": "JOIN: AA_AU2CMP.AU2CMP_ID = GS_CMP.CMP_ID\u003cbr\u003eConfiance: 100%", "to": "GS_CMP", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "CS_AVCDTN_RLSTP", "title": "JOIN: CS_AVCDTN_RLSTP.AVCDTN_ID = CS_AVCDTN.AVCDTN_ID\u003cbr\u003eConfiance: 100%", "to": "CS_AVCDTN", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "GS_CMP", "title": "JOIN: GS_CMP.CNTR_ID = GS_CNTR.CNTR_ID\u003cbr\u003eConfiance: 100%", "to": "GS_CNTR", "width": 2.5}, {"arrows": "to", "color": "#00d4aa", "from": "GS_CMP", "title": "JOIN: GS_CMP.CNTREG_ID = CS_CSH_R_F2CMP.CSH_R_F_ID\u003cbr\u003eConfiance: 100%", "to": "CS_CSH_R_F2CMP", "width": 2.5}]);
+
+                  nodeColors = {};
+                  allNodes = nodes.get({ returnType: "Object" });
+                  for (nodeId in allNodes) {
+                    nodeColors[nodeId] = allNodes[nodeId].color;
+                  }
+                  allEdges = edges.get({ returnType: "Object" });
+                  // adding nodes and edges to the graph
+                  data = {nodes: nodes, edges: edges};
+
+                  var options = {
+    "configure": {
+        "enabled": false
+    },
+    "edges": {
+        "color": {
+            "inherit": true
+        },
+        "smooth": {
+            "enabled": true,
+            "type": "dynamic"
+        }
+    },
+    "interaction": {
+        "dragNodes": true,
+        "hideEdgesOnDrag": false,
+        "hideNodesOnDrag": false
+    },
+    "physics": {
+        "barnesHut": {
+            "avoidOverlap": 0,
+            "centralGravity": 0.3,
+            "damping": 0.09,
+            "gravitationalConstant": -8000,
+            "springConstant": 0.001,
+            "springLength": 150
+        },
+        "enabled": true,
+        "stabilization": {
+            "enabled": true,
+            "fit": true,
+            "iterations": 1000,
+            "onlyDynamicEdges": false,
+            "updateInterval": 50
+        }
+    }
+};
+
+                  
+
+
+                  
+
+                  network = new vis.Network(container, data, options);
+
+                  
+
+                  
+
+                  
+
+
+                  
+
+                  return network;
+
+              }
+              drawGraph();
+        </script>
+    </body>
+</html>

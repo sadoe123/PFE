@@ -1,0 +1,4 @@
+Sprint,Précision Seeds,Couverture JOINs,Erreur Colonnes,Routing Conceptuel,SQL Valide,Temps Réponse
+Sprint 7A (Schema-Aware RAG),55%,30%,45%,0%,55%,8500ms
+Sprint 7B (Graph RAG),65%,75%,35%,0%,68%,12000ms
+Sprint 7C (Corrective RAG),82%,80%,15%,100%,82%,14500ms

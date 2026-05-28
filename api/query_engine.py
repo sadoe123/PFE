@@ -785,6 +785,23 @@ class AdvancedSQLBuilder:
 # §2.3.3.A  SQL GENERATOR  (existant + intégration avancé)
 # ══════════════════════════════════════════════════════════════════════
 
+# ── Blacklist tables infrastructure ──────────────────────────────────────────
+_INFRA_PREFIXES = (
+    "QRTZ_", "qrtz_", "sys", "SYS", "dt_", "DT_",
+    "MSreplication", "msreplication", "sysdiagram", "__",
+)
+
+def _is_infra_table(name: str) -> bool:
+    return any(name.startswith(p) for p in _INFRA_PREFIXES)
+
+def _first_business_table(schema: dict) -> str:
+    """Retourne la premiere table metier du schema (exclut infra)."""
+    for t in schema.keys():
+        if not _is_infra_table(t):
+            return t
+    return "table"
+
+
 class SQLGenerator:
     """
     Génère du SQL depuis les slots NLU.
@@ -898,7 +915,7 @@ class SQLGenerator:
         dialect: str,
         complexity: str,
     ) -> Dict:
-        table  = slots.table_names[0] if slots.table_names else (list(schema.keys())[0] if schema else "table")
+        table  = slots.table_names[0] if slots.table_names else _first_business_table(schema)
         fields = schema.get(table, [])
 
         # Résout le group_by : cherche le vrai champ dans le schéma
@@ -1105,7 +1122,7 @@ class SQLGenerator:
     # ── Templates standards (inchangés + MSSQL TOP corrigé) ──────────
 
     def _generate_select(self, slots: QuerySlots, schema: Dict, dialect: str) -> Dict:
-        table = slots.table_names[0] if slots.table_names else (list(schema.keys())[0] if schema else "table")
+        table = slots.table_names[0] if slots.table_names else _first_business_table(schema)
         fields = schema.get(table, [])
 
         select_cols = "*"
@@ -1133,7 +1150,7 @@ class SQLGenerator:
         }
 
     def _generate_aggregate(self, slots: QuerySlots, schema: Dict, dialect: str) -> Dict:
-        table = slots.table_names[0] if slots.table_names else (list(schema.keys())[0] if schema else "table")
+        table = slots.table_names[0] if slots.table_names else _first_business_table(schema)
         fields = schema.get(table, [])
         metric = slots.metric or "COUNT"
         group_by = slots.group_by
@@ -1213,7 +1230,7 @@ class SQLGenerator:
         return self._generate_select(slots, schema, dialect)
 
     def _generate_count(self, slots: QuerySlots, schema: Dict, dialect: str) -> Dict:
-        table = slots.table_names[0] if slots.table_names else (list(schema.keys())[0] if schema else "table")
+        table = slots.table_names[0] if slots.table_names else _first_business_table(schema)
         sql = f"SELECT COUNT(*) AS total\nFROM {self._quote(table, dialect)}"
         return {
             "sql": sql, "explanation": f"Nombre de lignes dans '{table}'",
@@ -1221,7 +1238,7 @@ class SQLGenerator:
         }
 
     def _generate_profile(self, slots: QuerySlots, schema: Dict, dialect: str) -> Dict:
-        table = slots.table_names[0] if slots.table_names else (list(schema.keys())[0] if schema else "table")
+        table = slots.table_names[0] if slots.table_names else _first_business_table(schema)
         fields = schema.get(table, [])[:5]
 
         if dialect in ("mssql", "sql_server"):

@@ -164,7 +164,7 @@ html,body{height:100%;background:var(--bg-0);color:var(--text-0);font-family:var
 
 /* ── SOURCE TABLE ── */
 .source-table-wrap{padding:0 28px 28px;}
-.source-table{width:100%;border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;background:var(--bg-1);}
+.source-table{width:100%;border:1px solid var(--border);border-radius:var(--radius-lg);overflow:visible;background:var(--bg-1);}
 .source-table table{width:100%;border-collapse:collapse;}
 .source-table th{padding:11px 16px;text-align:left;font-family:var(--font-mono);font-size:9.5px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-3);background:var(--bg-2);border-bottom:1px solid var(--border);}
 .source-table td{padding:12px 16px;border-bottom:1px solid var(--border);vertical-align:middle;}
@@ -1107,7 +1107,10 @@ html.light .gni-title       { color:#0052cc; }
 .btn-ai { font-size:10px; font-weight:700; letter-spacing:0.5px; font-family:var(--font-mono); padding:3px 7px !important; }
 
 .btn-sm { padding: 4px 10px !important; font-size: 12px !important; }
-td .btn-sm { padding: 3px 8px !important; font-size: 11px !important; }
+td .btn-sm { padding: 3px 7px !important; font-size: 11px !important; gap:3px !important; }
+td .btn-sm svg { width:11px !important; height:11px !important; }
+.sources-table td:last-child { white-space:nowrap; }
+.sources-table .actions-cell { display:flex; gap:3px; align-items:center; flex-wrap:nowrap; }
 
 /* ═══════════════════════════════════════════════════════
    CDC / VERSIONING PANEL — §2.2.5
@@ -1262,7 +1265,7 @@ html.light .method-chip.chip-hateoas.active-chip { background:#fff8e1; border-co
       <span>API: connecting...</span>
     </div>
     <div class="theme-toggle" onclick="toggleTheme()" title="Changer le thème">
-      <span id="themeIcon">🌙</span>
+      <svg id="themeIcon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
       <div class="tt-track"><div class="tt-thumb"></div></div>
       <span id="themeLabel">Dark</span>
     </div>
@@ -1356,7 +1359,7 @@ html.light .method-chip.chip-hateoas.active-chip { background:#fff8e1; border-co
             <option value="pending">En attente</option>
           </select>
         </div>
-        <div class="source-table" id="sourceTable2">
+        <div class="source-table" id="sourceTable2" style="overflow-x:auto;">
           <div class="empty-state"><div class="spinner" style="margin:0 auto 12px;"></div></div>
         </div>
       </div>
@@ -1665,20 +1668,17 @@ html.light .method-chip.chip-hateoas.active-chip { background:#fff8e1; border-co
 ════════════════════════════════════════════════════ -->
 <div class="view flex-view" id="view-profiling" style="flex-direction:column;height:100vh;overflow:hidden;">
 
-  <!-- Top bar -->
-  <div class="rel-topbar" style="flex-shrink:0;">
-    <div class="rel-topbar-title">
+  <!-- Top bar — une seule ligne -->
+  <div style="display:flex;align-items:center;gap:8px;padding:0 16px;height:48px;background:var(--bg-1);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;">
+    <div class="rel-topbar-title" style="flex-shrink:0;white-space:nowrap;">
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" style="vertical-align:middle;margin-right:5px;"><polyline points="1 11 4 7 7 9 10 4 13 6"/></svg>Profiling
       <span class="rel-topbar-source" id="profTopSourceName"></span>
     </div>
-    <div style="display:flex;align-items:center;gap:10px;flex:1;max-width:400px;">
-      <input class="rel-search-input" id="profSearch" placeholder="Rechercher une table..." oninput="filterProfTables(this.value)" style="flex:1;">
-    </div>
-    <div style="display:flex;gap:6px;flex-shrink:0;align-items:center;">
-      <span id="profQualityBadge" style="font-family:var(--font-mono);font-size:11px;padding:3px 10px;border-radius:10px;border:1px solid var(--border);"></span>
-      <button class="btn btn-primary btn-sm" id="profileAllBtn" onclick="profileAllTables()" title="Profiler automatiquement toutes les tables en batch">Profiler tout</button>
-      <button class="btn btn-ghost btn-sm" onclick="goBackToProfDetail()">← Retour</button>
-    </div>
+    <input class="rel-search-input" id="profSearch" placeholder="Rechercher une table..." oninput="filterProfTables(this.value)" style="width:180px;min-width:100px;flex-shrink:0;">
+    <div style="flex:1;"></div>
+    <span id="profQualityBadge" style="font-family:var(--font-mono);font-size:11px;padding:3px 10px;border-radius:10px;border:1px solid var(--border);flex-shrink:0;white-space:nowrap;"></span>
+    <button class="btn btn-primary btn-sm" id="profileAllBtn" onclick="profileAllTables()" style="flex-shrink:0;" title="Profiler automatiquement toutes les tables en batch">Profiler tout</button>
+    <button class="btn btn-ghost btn-sm" onclick="goBackToProfDetail()" style="flex-shrink:0;">← Retour</button>
   </div>
 
   <!-- Body -->
@@ -2168,15 +2168,17 @@ function renderSourceTable(sources) {
       '<td><span style="font-family:var(--font-mono);font-size:13px;">' + (s.entity_count||0) + '</span></td>' +
       '<td id="domain-stat-' + s.id + '" style="font-size:11px;"></td>' +
       '<td>' + (s.test_latency_ms != null ? '<span style="font-family:var(--font-mono);font-size:12px;color:' + (s.test_latency_ms<100?'var(--green)':s.test_latency_ms<500?'var(--yellow)':'var(--red)') + '">' + s.test_latency_ms + 'ms</span>' : '<span style="color:var(--text-3)">—</span>') + '</td>' +
-      '<td onclick="event.stopPropagation()"><div style="display:flex;gap:4px;">' +
-      '<button class="btn btn-secondary btn-sm" onclick="testSourceById(\'' + s.id + '\')" title="Tester"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M5 2H3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V9"/><polyline points="9 1 13 1 13 5"/><line x1="13" y1="1" x2="6" y2="8"/></svg>Test</button>' +
-      '<button class="btn btn-secondary btn-sm" onclick="syncSource(\'' + s.id + '\')" title="Synchroniser"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M1 4c1-2 3-3 6-3a6 6 0 0 1 6 6"/><path d="M13 10c-1 2-3 3-6 3a6 6 0 0 1-6-6"/><polyline points="1 1 1 4 4 4"/><polyline points="13 13 13 10 10 10"/></svg>Sync</button>' +
-      '<button class="btn btn-secondary btn-sm" onclick="enrichSource(\'' + s.id + '\',\'' + encodeURIComponent(s.name) + '\')" title="Indexation sémantique"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:4px;"><polyline points="9 2 5 8 7.5 8 5 13"/><line x1="12" y1="5" x2="10" y2="5"/><line x1="12" y1="9" x2="10" y2="9"/></svg>Index</button>' +
-      '<button class="btn btn-danger btn-sm" onclick="deleteSource(\'' + s.id + '\')"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:inline-block;vertical-align:middle;flex-shrink:0;"><line x1="2" y1="2" x2="10" y2="10"/><line x1="10" y1="2" x2="2" y2="10"/></svg></button>' +
+      '<td onclick="event.stopPropagation()" style="white-space:nowrap;"><div style="display:flex;gap:3px;align-items:center;">' +
+      '<button class="btn btn-secondary btn-sm" onclick="testSourceById(\'' + s.id + '\')" title="Tester la connexion" style="padding:3px 8px;font-size:11px;gap:3px;"><svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2H3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V9"/><polyline points="9 1 13 1 13 5"/><line x1="13" y1="1" x2="6" y2="8"/></svg>Test</button>' +
+      '<button class="btn btn-secondary btn-sm" onclick="syncSource(\'' + s.id + '\')" title="Synchroniser les métadonnées" style="padding:3px 8px;font-size:11px;gap:3px;"><svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4c1-2 3-3 6-3a6 6 0 0 1 6 6"/><path d="M13 10c-1 2-3 3-6 3a6 6 0 0 1-6-6"/><polyline points="1 1 1 4 4 4"/><polyline points="13 13 13 10 10 10"/></svg>Sync</button>' +
+      '<button class="btn btn-secondary btn-sm" onclick="enrichSource(\'' + s.id + '\',\'' + encodeURIComponent(s.name) + '\')" title="Indexation sémantique BERT + MeiliSearch" style="padding:3px 8px;font-size:11px;gap:3px;"><svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 2 5 8 7.5 8 5 13"/><line x1="12" y1="5" x2="10" y2="5"/><line x1="12" y1="9" x2="10" y2="9"/></svg>Index</button>' +
+      '<button class="btn btn-sm" style="padding:3px 8px;font-size:11px;gap:3px;background:rgba(155,126,255,0.1);color:var(--purple,#9b7eff);border:1px solid rgba(155,126,255,0.3);" onclick="openDescModal(\'' + s.id + '\',\'' + encodeURIComponent(s.name) + '\',\'' + (s.entity_count||0) + '\')" title="Générer descriptions métier via IA"><svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="5.5"/><path d="M5 7h4M7 5v4"/></svg>Desc. IA</button>' +
+      '<button class="btn btn-danger btn-sm" onclick="deleteSource(\'' + s.id + '\')" title="Supprimer" style="padding:3px 6px;"><svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="2" x2="10" y2="10"/><line x1="10" y1="2" x2="2" y2="10"/></svg></button>' +
       '</div></td></tr>';
     return rowHtml;
   }).join('');
-  el.innerHTML = '<table><thead><tr><th>Source</th><th>Type</th><th>Statut</th><th>Entités</th><th>Domaines</th><th>Latence</th><th>Actions</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  el.style.overflowX='auto';
+  el.innerHTML = '<table style="min-width:900px;width:100%;"><thead><tr><th>Source</th><th>Type</th><th>Statut</th><th>Entités</th><th>Domaines</th><th>Latence</th><th>Actions</th></tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
 function renderSourceTable2() {
@@ -5596,7 +5598,7 @@ function renderFkModal(sourceType) {
   var cfg = FK_MODAL_CONFIG[sourceType] || FK_MODAL_DEFAULT;
 
   // Titre
-  document.getElementById('ssmsModalTitle').textContent = cfg.title;
+  document.getElementById('ssmsModalTitle').innerHTML = cfg.title;
 
   // Bouton importer
   var btn = document.getElementById('ssmsImportBtn');
@@ -5842,14 +5844,14 @@ async function importSsms() {
 function toggleTheme() {
   var isLight = document.documentElement.classList.toggle('light');
   localStorage.setItem('op_theme', isLight ? 'light' : 'dark');
-  document.getElementById('themeIcon').textContent  = isLight ? '☀️' : '🌙';
+  document.getElementById('themeIcon').outerHTML  = isLight ? '<svg id="themeIcon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>' : '<svg id="themeIcon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
   document.getElementById('themeLabel').textContent = isLight ? 'Light' : 'Dark';
 }
 
 function applyStoredTheme() {
   if (localStorage.getItem('op_theme') === 'light') {
     document.documentElement.classList.add('light');
-    document.getElementById('themeIcon').textContent  = '☀️';
+    document.getElementById('themeIcon').outerHTML  = '<svg id="themeIcon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
     document.getElementById('themeLabel').textContent = 'Light';
   }
 }
@@ -6005,7 +6007,7 @@ function renderTableProfile(data) {
 
   var isEmpty = (data.total_rows || 0) === 0;
   var qualityLabel = isEmpty
-    ? '<div style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--text-3);padding:4px 12px;border-radius:8px;border:1px solid var(--border);">📭 Vide</div>'
+    ? '<div style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--text-3);padding:4px 12px;border-radius:8px;border:1px solid var(--border);display:flex;align-items:center;gap:5px;"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="1" y="3" width="12" height="9" rx="1"/><path d="M1 6h12"/></svg>Vide</div>'
     : (avgQ != null ? '<div style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:' + qCol + ';padding:4px 12px;border-radius:8px;border:1px solid ' + qCol + ';">Qualité ' + avgQ + '%</div>' : '');
 
   panel.innerHTML =
@@ -6022,7 +6024,7 @@ function renderTableProfile(data) {
       '</div></div>' +
     (isEmpty
       ? '<div style="padding:20px 16px;background:rgba(255,200,0,0.06);border:1px solid rgba(255,200,0,0.2);border-radius:8px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">' +
-          '<span style="font-size:28px;">📭</span>' +
+          '<span style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:8px;background:rgba(255,200,0,0.08);"><svg width="20" height="20" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><rect x="1" y="3" width="12" height="9" rx="1"/><path d="M1 6h12"/></svg></span>' +
           '<div>' +
             '<div style="font-weight:600;color:var(--text-1);font-size:13px;">Table vide — aucune donnée</div>' +
             '<div style="color:var(--text-3);font-size:11px;margin-top:3px;">Cette table contient 0 ligne. Les statistiques (nulls, unicité, min/max...) ne sont pas calculables. Le schéma est affiché ci-dessous.</div>' +
@@ -6068,7 +6070,25 @@ function renderColumnCard(c, isEmpty) {
 
   return '<div style="background:var(--bg-3);border:1px solid var(--border);border-radius:8px;padding:12px 14px;">' +
     '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">' +
-      '<span style="font-size:14px;">'+(c.sem_icon||'❓')+'</span>' +
+      (function(){
+        var lbl=(c.sem_label||'').toLowerCase();
+        var ic;
+        if(lbl.includes('clé')||lbl.includes('primaire')||lbl.includes('primary')||c.is_primary_key)
+          ic='<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="5.5" r="3.5"/><line x1="8" y1="8" x2="12" y2="12"/></svg>';
+        else if(lbl.includes('numér')||lbl.includes('numeric')||lbl.includes('entier')||lbl.includes('décimal'))
+          ic='<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="1" y="2" width="12" height="10" rx="2"/><line x1="5" y1="5" x2="5" y2="9"/><line x1="3" y1="7" x2="7" y2="7"/><line x1="9" y1="5" x2="11" y2="5"/><line x1="9" y1="7" x2="11" y2="7"/><line x1="9" y1="9" x2="11" y2="9"/></svg>';
+        else if(lbl.includes('date')||lbl.includes('temps')||lbl.includes('time'))
+          ic='<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="1" y="2" width="12" height="11" rx="2"/><line x1="1" y1="6" x2="13" y2="6"/><line x1="4" y1="1" x2="4" y2="3"/><line x1="10" y1="1" x2="10" y2="3"/></svg>';
+        else if(lbl.includes('texte')||lbl.includes('text')||lbl.includes('chaîne')||lbl.includes('chaine'))
+          ic='<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="2" y1="4" x2="12" y2="4"/><line x1="2" y1="7" x2="12" y2="7"/><line x1="2" y1="10" x2="8" y2="10"/></svg>';
+        else if(lbl.includes('booléen')||lbl.includes('bool'))
+          ic='<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="1" y="4" width="12" height="6" rx="3"/><circle cx="10" cy="7" r="2" fill="currentColor" stroke="none"/></svg>';
+        else if(lbl.includes('étrang')||lbl.includes('foreign')||lbl.includes('fk'))
+          ic='<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5.5 8.5a3.5 3.5 0 0 0 5 0l1.5-1.5a3.5 3.5 0 0 0-5-5L5.5 3.5"/><path d="M8.5 5.5a3.5 3.5 0 0 0-5 0L2 7a3.5 3.5 0 0 0 5 5l1.5-1.5"/></svg>';
+        else
+          ic='<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2" y="2" width="10" height="10" rx="2"/><line x1="5" y1="7" x2="9" y2="7"/></svg>';
+        return '<span style="display:inline-flex;align-items:center;color:'+(c.sem_color||'var(--text-3)')+';">'+ic+'</span>';
+      }()) +
       '<span style="font-weight:600;color:var(--text-0);font-size:12px;">' + c.name + '</span>' +
       '<span style="font-family:var(--font-mono);font-size:9px;color:var(--text-3);background:var(--bg-1);padding:1px 5px;border-radius:3px;">' + c.type + '</span>' +
       '<span style="font-size:9px;padding:1px 6px;border-radius:8px;border:1px solid '+(c.sem_color||'var(--border)')+';color:'+(c.sem_color||'var(--text-3)')+';">'+(c.sem_label||'')+'</span>' +
@@ -6104,7 +6124,11 @@ function renderColumnCard(c, isEmpty) {
 // PROFILING AUTOMATIQUE — toutes les tables en batch
 // ═══════════════════════════════════════════════════════
 async function profileAllTables() {
-  if (!profSourceId) return;
+  if (!profSourceId) {
+    var m = location.hash.match(/source\/([\w-]+)/);
+    if (m) { profSourceId = m[1]; }
+    else { toast('Ouvrez d\'abord une source via le bouton Profiling', 'warn'); return; }
+  }
   var btn = document.getElementById('profileAllBtn');
   btn.disabled = true;
   btn.textContent = ' En cours…';
@@ -6916,5 +6940,108 @@ function toggleSidebar() {
   }
 })();
 </script>
+
+<!-- ══ Modal Desc. IA ══════════════════════════════════════════ -->
+<div id="descIaOverlay" class="overlay" onclick="if(event.target===this)closeDescModal()" style="z-index:1100;">
+  <div class="modal" style="max-width:440px;width:100%;">
+    <div class="modal-header">
+      <svg width="18" height="18" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="5.5"/><path d="M5 7h4M7 5v4"/></svg>
+      <span class="modal-title">Générer descriptions IA</span>
+      <button class="btn btn-ghost btn-icon" style="margin-left:auto" onclick="closeDescModal()">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="2" y1="2" x2="12" y2="12"/><line x1="12" y1="2" x2="2" y2="12"/></svg>
+      </button>
+    </div>
+    <div style="padding:20px;display:flex;flex-direction:column;gap:16px;">
+      <div style="font-size:13px;color:var(--text-1);line-height:1.6;">
+        Le LLM analyse chaque table et génère une description métier en français.<br>
+        Ces descriptions permettent au RAG de trouver les bonnes tables automatiquement.<br>
+        <b>Une seule fois suffit</b> — les tables déjà décrites sont ignorées.
+      </div>
+      <div style="background:var(--bg-2);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:12px;font-weight:600;color:var(--text-0);">Nombre de tables à traiter</span>
+          <span id="descLimitLabel" style="font-size:14px;font-weight:700;color:var(--purple,#9b7eff);">100</span>
+        </div>
+        <input type="range" id="descLimitSlider" min="10" max="2000" step="10" value="100"
+          oninput="document.getElementById('descLimitLabel').textContent=this.value"
+          style="width:100%;accent-color:var(--purple,#9b7eff);">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-3);">
+          <span>10</span>
+          <span id="descTotalLabel" style="color:var(--text-2);"></span>
+          <span>Toutes</span>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--text-3);background:var(--bg-2);border-radius:6px;padding:10px;line-height:1.7;">
+        <b>CPU (qwen2.5:3b)</b> : ~30s/table &nbsp;·&nbsp; 100 tables ≈ 50 min<br>
+        <b>GPU</b> : ~3s/table &nbsp;·&nbsp; 100 tables ≈ 5 min<br>
+        Le traitement se fait en arrière-plan — tu peux continuer à travailler.
+      </div>
+    </div>
+    <div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn btn-secondary" onclick="closeDescModal()">Annuler</button>
+      <button class="btn btn-primary" id="descIaLaunchBtn" onclick="launchDescIA()">
+        <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:4px;"><circle cx="7" cy="7" r="5.5"/><path d="M5 7h4M7 5v4"/></svg>
+        Lancer
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+var _descIaSourceId = null;
+var _descIaSourceName = null;
+
+function openDescModal(id, name, entityCount) {
+  try { name = decodeURIComponent(name); } catch(e) {}
+  _descIaSourceId = id;
+  _descIaSourceName = name;
+  var max = Math.max(parseInt(entityCount)||500, 10);
+  var slider = document.getElementById('descLimitSlider');
+  slider.max = max;
+  slider.value = Math.min(100, max);
+  document.getElementById('descLimitLabel').textContent = slider.value;
+  document.getElementById('descTotalLabel').textContent = max + ' tables au total';
+  document.getElementById('descIaOverlay').style.opacity = '1';
+  document.getElementById('descIaOverlay').style.pointerEvents = 'all';
+}
+
+function closeDescModal() {
+  document.getElementById('descIaOverlay').style.opacity = '0';
+  document.getElementById('descIaOverlay').style.pointerEvents = 'none';
+}
+
+async function launchDescIA() {
+  var limit = document.getElementById('descLimitSlider').value;
+  var btn = document.getElementById('descIaLaunchBtn');
+  btn.disabled = true;
+  btn.textContent = 'Lancement...';
+  closeDescModal();
+  await generateDescriptions(_descIaSourceId, encodeURIComponent(_descIaSourceName), limit);
+  btn.disabled = false;
+  btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:4px;"><circle cx="7" cy="7" r="5.5"/><path d="M5 7h4M7 5v4"/></svg>Lancer';
+}
+
+async function generateDescriptions(id, name, limit) {
+  limit = limit || 100;
+  try { name = decodeURIComponent(name); } catch(e) {}
+  toast('Génération descriptions IA pour ' + name + ' (' + limit + ' tables)...', 'info');
+  try {
+    var resp = await fetch('http://localhost:8000/sources/' + id + '/generate-descriptions?limit=' + limit, {method:'POST'});
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    toast('Descriptions IA lancées pour ' + name + ' — traitement en arrière-plan.', 'success');
+    setTimeout(async function() {
+      try {
+        var statsResp = await fetch('http://localhost:8000/sources/' + id + '/description-stats');
+        var stats = await statsResp.json();
+        toast(name + ' — ' + stats.llm_described + '/' + stats.total_entities + ' tables décrites (' + stats.coverage_pct + '%)', 'success');
+        await loadSources();
+      } catch(e) {}
+    }, 30000);
+  } catch(e) {
+    toast('Erreur : ' + (e.message||e), 'error');
+  }
+}
+</script>
+
 </body>
 </html>

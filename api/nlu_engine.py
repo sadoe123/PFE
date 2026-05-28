@@ -39,80 +39,219 @@ _intent_embeddings: Optional[Dict[str, Any]] = None
 # FASTTEXT INTENT CLASSIFIER
 # ══════════════════════════════════════════════════════════════════════
 
-FASTTEXT_TRAIN_DATA = """__label__generate_aggregate total par client
-__label__generate_aggregate somme des ventes par région
-__label__generate_aggregate moyenne des commandes par mois
-__label__generate_aggregate sum by customer
-__label__generate_aggregate group by product
-__label__generate_aggregate total des factures par année
-__label__generate_aggregate chiffre affaires par client
-__label__generate_aggregate Summe nach Kunde
-__label__generate_aggregate total por cliente
-__label__generate_aggregate top 10 clients par chiffre d affaires
-__label__generate_aggregate top 5 produits par ventes
-__label__generate_aggregate top clients par montant
-__label__generate_aggregate classement des fournisseurs
-__label__generate_aggregate meilleures ventes par région
-__label__generate_aggregate les plus grandes commandes
-__label__generate_aggregate ranking by revenue
+FASTTEXT_TRAIN_DATA = """
+__label__generate_aggregate total par categorie
+__label__generate_aggregate total par groupe
+__label__generate_aggregate total par type
+__label__generate_aggregate total par periode
+__label__generate_aggregate total par dimension
+__label__generate_aggregate somme par entite
+__label__generate_aggregate somme par groupe
+__label__generate_aggregate somme par type
+__label__generate_aggregate moyenne par categorie
+__label__generate_aggregate moyenne par groupe
+__label__generate_aggregate repartition par type
+__label__generate_aggregate repartition par categorie
+__label__generate_aggregate repartition par dimension
+__label__generate_aggregate top 10 par valeur
+__label__generate_aggregate top 5 par montant
+__label__generate_aggregate top N par critere
+__label__generate_aggregate classement par valeur
+__label__generate_aggregate classement par montant
+__label__generate_aggregate meilleures entites par valeur
+__label__generate_aggregate les plus grandes valeurs
+__label__generate_aggregate ranking by value
 __label__generate_aggregate top 10 by amount
-__label__generate_aggregate best performing products
-__label__generate_join jointure entre orders et customers
-__label__generate_join join orders with customers
-__label__generate_join joindre les tables
-__label__generate_join relier orders et products
-__label__generate_join unir tablas
+__label__generate_aggregate total by category
+__label__generate_aggregate sum by group
+__label__generate_aggregate average by type
+__label__generate_aggregate distribution by dimension
+__label__generate_aggregate top records by value
+__label__generate_aggregate group by attribute
+__label__generate_aggregate aggregate by field
+__label__generate_aggregate count by status
+__label__correct_sql c'est faux
+__label__correct_sql c'est pas bon
+__label__correct_sql corrige le sql
+__label__correct_sql il manque un crochet
+__label__correct_sql manque les crochets
+__label__correct_sql ajoute un filtre
+__label__correct_sql ajoute la condition
+__label__correct_sql remplace par
+__label__correct_sql change la colonne
+__label__correct_sql erreur dans le sql
+__label__correct_sql le sql est faux
+__label__correct_sql mauvaise colonne
+__label__correct_sql mauvaise table
+__label__correct_sql il faut corriger
+__label__correct_sql modifie la requete
+__label__correct_sql mets les crochets
+__label__correct_sql ajoute top 100
+__label__correct_sql enleve le filtre
+__label__correct_sql change le where
+__label__correct_sql ca marche pas
+__label__correct_sql pas le bon resultat
+__label__correct_sql wrong sql
+__label__correct_sql fix the query
+__label__correct_sql incorrect query
+__label__correct_sql add filter
+__label__correct_sql add brackets
+__label__correct_sql wrong column
+__label__correct_sql missing bracket
+__label__correct_sql update the sql
+__label__correct_sql change the table
+__label__generate_aggregate transactions superieures a 50000
+__label__generate_aggregate transactions inferieures a 10000
+__label__generate_aggregate montants superieurs a 100000
+__label__generate_aggregate transactions en 2023
+__label__generate_aggregate transactions en 2024
+__label__generate_aggregate transactions par banque en 2023
+__label__generate_aggregate financements dont la maturite depasse 5 ans
+__label__generate_aggregate financements superieurs a 1000000
+__label__generate_aggregate encaissements superieurs a 50000
+__label__generate_aggregate decaissements superieurs a 50000
+__label__generate_aggregate liste des transactions superieures
+__label__generate_aggregate total des transactions superieures a la moyenne
+__label__show_dashboard dashboard par categorie
+__label__show_dashboard dashboard par type
+__label__show_dashboard dashboard par periode
+__label__show_dashboard dashboard par dimension
+__label__show_dashboard dashboard par groupe
+__label__show_dashboard affiche dashboard par entite
+__label__show_dashboard montre dashboard par dimension
+__label__show_dashboard dashboard analyse par groupe
+__label__show_dashboard cree dashboard par valeur
+__label__show_dashboard visualise par categorie
+__label__show_dashboard genere dashboard par type
+__label__show_dashboard tableau de bord par categorie
+__label__show_dashboard tableau de bord par periode
+__label__show_dashboard dashboard des donnees
+__label__show_dashboard show dashboard by category
+__label__show_dashboard generate dashboard by type
+__label__show_dashboard create dashboard by period
+__label__show_dashboard display dashboard for entity
+__label__show_dashboard dashboard overview
+__label__show_dashboard visualize data dashboard
+__label__list_entities liste les tables
+__label__list_entities montre les entites
+__label__list_entities quelles sont les tables
+__label__list_entities liste les entites disponibles
+__label__list_entities montre moi les sources
+__label__list_entities quelles entites existent
+__label__list_entities affiche toutes les tables
+__label__list_entities liste les objets disponibles
+__label__list_entities show tables
+__label__list_entities list all entities
+__label__list_entities what tables exist
+__label__list_entities show available sources
 __label__count_entities combien de lignes
-__label__count_entities nombre d enregistrements
+__label__count_entities combien d enregistrements
+__label__count_entities nombre de lignes dans la table
+__label__count_entities taille de la table
+__label__count_entities nombre total d enregistrements
+__label__count_entities compter les enregistrements
 __label__count_entities how many rows
 __label__count_entities count records
-__label__count_entities taille de la table
-__label__list_entities liste les tables
-__label__list_entities montre les entités
-__label__list_entities show tables
-__label__list_entities quelles sont les tables
-__label__show_dashboard génère un dashboard
-__label__show_dashboard montre le dashboard des ventes
-__label__show_dashboard crée un dashboard
-__label__show_dashboard tableau de bord des ventes
-__label__show_dashboard dashboard analyse ventes
-__label__show_dashboard visualise les données
-__label__show_dashboard génère une visualisation
-__label__show_dashboard affiche le dashboard
-__label__generate_sql génère du SQL
-__label__generate_sql écris une requête
-__label__generate_sql generate SQL
-__label__generate_sql donne moi les données
-__label__describe_entity décris la table
-__label__describe_entity info sur cette table
-__label__describe_entity describe the entity
+__label__count_entities how many entries
+__label__count_entities total number of records
+__label__count_entities count all rows in table
+__label__count_entities how many items exist
 __label__list_fields champs de la table
-__label__list_fields colonnes de cette entité
-__label__list_fields fields of the table
+__label__list_fields colonnes de cette entite
+__label__list_fields quelles colonnes disponibles
+__label__list_fields liste des colonnes
+__label__list_fields champs disponibles
+__label__list_fields quels attributs existent
+__label__list_fields affiche les champs
+__label__list_fields liste les attributs
 __label__list_fields quels champs sont des cles primaires
 __label__list_fields quelles sont les cles primaires
 __label__list_fields liste les cles primaires
 __label__list_fields primary keys de la table
 __label__list_fields quels champs sont indexes
-__label__list_fields quelles colonnes sont disponibles
-__label__list_fields champs disponibles dans cette table
-__label__list_fields liste des colonnes de la source
+__label__list_fields fields of the table
+__label__list_fields columns of this entity
+__label__list_fields what fields are available
+__label__list_fields list all columns
+__label__list_fields show primary keys
+__label__describe_entity decris la table
+__label__describe_entity info sur cette table
+__label__describe_entity description de l entite
+__label__describe_entity que contient cette table
+__label__describe_entity explique cette entite
+__label__describe_entity decris cette source
+__label__describe_entity describe the entity
+__label__describe_entity what is this table
+__label__describe_entity explain this entity
+__label__describe_entity tell me about this table
+__label__describe_entity describe this source
 __label__get_relations relations de la table
+__label__get_relations liens entre tables
+__label__get_relations dependances entre entites
+__label__get_relations connexions entre tables
+__label__get_relations relations entre deux entites
+__label__get_relations quelles sont les relations
 __label__get_relations foreign keys
-__label__get_relations dépendances
+__label__get_relations cles etrangeres
+__label__get_relations dependances de la table
+__label__get_relations relations disponibles
+__label__get_relations show relations
+__label__get_relations list foreign keys
+__label__get_relations entity dependencies
+__label__get_relations table connections
+__label__generate_join jointure entre deux tables
+__label__generate_join joindre deux entites
+__label__generate_join relier deux tables
+__label__generate_join join two tables
+__label__generate_join joindre les tables
+__label__generate_join jointure entre entites
+__label__generate_join combine two tables
+__label__generate_join merge tables together
+__label__generate_join join entities
+__label__generate_sql genere du SQL
+__label__generate_sql ecris une requete
+__label__generate_sql donne moi les donnees brutes
+__label__generate_sql requete SQL pour cette table
+__label__generate_sql generate SQL query
+__label__generate_sql write a query
+__label__generate_sql get raw data
+__label__generate_sql SQL request for table
 __label__profile_entity profil de la table
-__label__profile_entity statistiques de
-__label__profile_entity data quality
+__label__profile_entity statistiques de la table
+__label__profile_entity qualite des donnees
+__label__profile_entity analyse la table
+__label__profile_entity data quality check
+__label__profile_entity table statistics
+__label__profile_entity data profile
+__label__profile_entity analyze data quality
+__label__profile_entity show table statistics
 __label__search_entity cherche la table
-__label__search_entity find table
-__label__find_path chemin entre les tables
+__label__search_entity trouve une entite
+__label__search_entity recherche cette table
+__label__search_entity find this table
+__label__search_entity search for entity
+__label__search_entity look for table
+__label__search_entity find entity by name
+__label__find_path chemin entre deux tables
+__label__find_path chemin entre entites
+__label__find_path comment relier ces tables
 __label__find_path path between tables
+__label__find_path how to join these entities
+__label__find_path find path between tables
+__label__find_path shortest path between entities
 __label__greeting bonjour
 __label__greeting hello
 __label__greeting salut
+__label__greeting hi there
+__label__greeting hey
+__label__greeting bonsoir
 __label__help aide moi
 __label__help help me
 __label__help que peux tu faire
+__label__help what can you do
+__label__help comment tu fonctionnes
+__label__help aide
+__label__help how do you work
 """
 
 _fasttext_model = None
@@ -135,6 +274,75 @@ def _get_fasttext():
             logger.warning(f"[NLU v3] FastText non disponible: {e}")
             _fasttext_model = False
     return _fasttext_model if _fasttext_model else None
+
+
+
+def retrain_fasttext_with_feedback(extra_examples: list[tuple[str, str]]) -> dict:
+    """
+    Réentraîne FastText en ajoutant les exemples validés par feedback.
+    extra_examples = [(question, intent), ...]
+    Recharge le modèle en mémoire immédiatement.
+    Retourne {"status", "examples_added", "total_examples", "accuracy"}.
+    """
+    global _fasttext_model
+    try:
+        import fasttext, tempfile, os
+
+        # ── Construit le dataset augmenté ──────────────────────────
+        base_lines = [
+            l for l in FASTTEXT_TRAIN_DATA.strip().split("\n")
+            if l.strip().startswith("__label__")
+        ]
+
+        # Déduplique les nouveaux exemples
+        existing_texts = set(
+            " ".join(l.split()[1:]) for l in base_lines
+        )
+        new_lines = []
+        for question, intent in extra_examples:
+            q_clean = question.strip().lower()
+            if q_clean and q_clean not in existing_texts:
+                label = intent.replace("Intent.", "").lower()
+                new_lines.append(f"__label__{label}  {q_clean}")
+                existing_texts.add(q_clean)
+
+        all_lines = base_lines + new_lines
+        total = len(all_lines)
+
+        # ── Entraîne le nouveau modèle ──────────────────────────────
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".txt", delete=False, encoding="utf-8"
+        ) as f:
+            f.write("\n".join(all_lines))
+            tmp = f.name
+
+        new_model = fasttext.train_supervised(
+            tmp, epoch=50, lr=0.5, wordNgrams=2, dim=100, verbose=0
+        )
+        os.unlink(tmp)
+
+        # ── Recharge en mémoire (hot reload) ───────────────────────
+        _fasttext_model = new_model
+
+        # Réinitialise le pipeline NLU pour prendre le nouveau modèle
+        global _nlu_pipeline
+        _nlu_pipeline = None  # Force reinit au prochain appel
+
+        logger.info(
+            f"[FastText Retrain] ✅ Réentraîné — "
+            f"+{len(new_lines)} exemples, total={total}"
+        )
+
+        return {
+            "status":          "ok",
+            "examples_added":  len(new_lines),
+            "total_examples":  total,
+            "model_reloaded":  True,
+        }
+
+    except Exception as e:
+        logger.error(f"[FastText Retrain] Erreur: {e}")
+        return {"status": "error", "message": str(e)}
 
 
 class FastTextClassifier:
@@ -260,6 +468,7 @@ class Intent:
     HELP             = "help"
     UNKNOWN          = "unknown"
     LLM_EXPLAIN      = "llm_explain"   # Questions explicatives → LLM
+    CORRECT_SQL      = "correct_sql"    # Correction du dernier SQL généré
 
 
 # Phrases d'exemple par intent (FR + EN + ES + DE)
