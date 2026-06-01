@@ -4265,6 +4265,178 @@ SQL corrigé:"""
     )
 
 # ══════════════════════════════════════════════════════════════
+# VALIDATION EXPERTE NLU — Sprint 13
+# ══════════════════════════════════════════════════════════════
+
+@app.get("/admin/nlu/low-confidence", tags=["Admin"])
+async def get_low_confidence_queries(
+    min_conf: float = Query(0.0, ge=0.0, le=1.0),
+    max_conf: float = Query(0.7, ge=0.0, le=1.0),
+    limit:    int   = Query(50, ge=1, le=200),
+):
+    """
+    Retourne les questions avec une faible confiance NLU.
+    L'expert admin peut les corriger pour améliorer FastText.
+    """
+    pool = await get_pg_pool()
+    try:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT
+                    id, question, intent, confidence,
+                    sql_generated IS NOT NULL AS has_sql,
+                    created_at
+                FROM   nlu_query_log
+                WHERE  confidence >= $1
+                  AND  confidence <  $2
+                  AND  question   != ''
+                  AND  question   NOT LIKE '[CORRECTION]%'
+                ORDER  BY created_at DESC
+                LIMIT  $3
+            """, min_conf, max_conf, limit)
+
+        return {
+            "total": len(rows),
+            "queries": [
+                {
+                    "id":         r["id"],
+                    "question":   r["question"],
+                    "intent":     r["intent"],
+                    "confidence": round(float(r["confidence"] or 0), 3),
+                    "has_sql":    r["has_sql"],
+                    "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+                }
+                for r in rows
+            ]
+        }
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@app.post("/admin/nlu/correct-intent", tags=["Admin"])
+async def correct_intent(body: dict):
+    """
+    Permet à l'expert admin de corriger l'intent d'une question.
+    La correction est ajoutée au dataset FastText et déclenche un retrain.
+
+    Body: { question: str, correct_intent: str, question_id?: int }
+    """
+    question       = body.get("question", "").strip()
+    correct_intent = body.get("correct_intent", "").strip()
+    question_id    = body.get("question_id")
+
+    if not question or not correct_intent:
+        raise HTTPException(400, "question et correct_intent requis")
+
+    # Vérifier que l'intent est valide
+    VALID_INTENTS = [
+        "generate_aggregate", "list_entities", "count_entities",
+        "show_dashboard", "list_fields", "describe_entity",
+        "get_relations", "generate_join", "generate_sql",
+        "profile_entity", "search_entity", "find_path",
+        "greeting", "help", "correct_sql", "forecast",
+    ]
+    if correct_intent not in VALID_INTENTS:
+        raise HTTPException(400, f"Intent invalide. Valides: {VALID_INTENTS}")
+
+    pool = await get_pg_pool()
+    try:
+        async with pool.acquire() as conn:
+            # 1. Mettre à jour nlu_query_log si question_id fourni (UUID string)
+            if question_id:
+                try:
+                    from uuid import UUID as _UUID
+                    _qid = _UUID(str(question_id))
+                    await conn.execute("""
+                        UPDATE nlu_query_log
+                        SET    intent     = $1,
+                               confidence = 1.0
+                        WHERE  id         = $2
+                    """, correct_intent, _qid)
+                except Exception:
+                    pass  # question_id invalide → on continue quand même
+
+            # 2. Ajouter dans chat_feedback comme exemple validé
+            await conn.execute("""
+                INSERT INTO chat_feedback
+                    (conversation_id, source_id, message_id,
+                     feedback_type, question, intent,
+                     used_for_training, created_at)
+                VALUES
+                    ('admin_correction', NULL, 'expert_' || $1::text,
+                     'like', $2, $3,
+                     FALSE, NOW())
+                ON CONFLICT DO NOTHING
+            """, question_id or 0, question, correct_intent)
+
+        # 3. Retrain FastText immédiat avec cet exemple
+        result = retrain_fasttext_with_feedback([(question, correct_intent)])
+
+        logger.info(
+            f"[ExpertValidation] Correction: '{question[:40]}' → {correct_intent} "
+            f"| retrain: +{result.get('examples_added',0)} exemples"
+        )
+
+        return {
+            "status":          "corrected",
+            "question":        question,
+            "correct_intent":  correct_intent,
+            "retrain_result":  result,
+            "message":         f"Intent corrigé et FastText réentraîné avec cet exemple."
+        }
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@app.get("/admin/nlu/stats", tags=["Admin"])
+async def get_nlu_validation_stats():
+    """Statistiques globales de validation NLU pour le dashboard admin."""
+    pool = await get_pg_pool()
+    try:
+        async with pool.acquire() as conn:
+            # Distribution des confiances
+            dist = await conn.fetch("""
+                SELECT
+                    CASE
+                        WHEN confidence >= 0.9  THEN 'high (>=0.9)'
+                        WHEN confidence >= 0.7  THEN 'medium (0.7-0.9)'
+                        WHEN confidence >= 0.5  THEN 'low (0.5-0.7)'
+                        ELSE                         'very_low (<0.5)'
+                    END AS bucket,
+                    COUNT(*) AS cnt
+                FROM   nlu_query_log
+                WHERE  confidence IS NOT NULL
+                GROUP  BY bucket
+                ORDER  BY bucket
+            """)
+
+            # Top intents
+            intents = await conn.fetch("""
+                SELECT intent, COUNT(*) AS cnt,
+                       ROUND(AVG(confidence)::NUMERIC, 3) AS avg_conf
+                FROM   nlu_query_log
+                WHERE  intent IS NOT NULL AND intent != ''
+                GROUP  BY intent
+                ORDER  BY cnt DESC
+                LIMIT  15
+            """)
+
+            # Total corrections faites
+            corrections = await conn.fetchval("""
+                SELECT COUNT(*) FROM chat_feedback
+                WHERE  conversation_id = 'admin_correction'
+            """)
+
+        return {
+            "confidence_distribution": [{"bucket": r["bucket"], "count": r["cnt"]} for r in dist],
+            "top_intents":             [{"intent": r["intent"], "count": r["cnt"], "avg_conf": float(r["avg_conf"] or 0)} for r in intents],
+            "total_corrections":       corrections or 0,
+        }
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+# ══════════════════════════════════════════════════════════════
 # A/B TESTING — Sprint 13
 # ══════════════════════════════════════════════════════════════
 
