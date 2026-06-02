@@ -7848,7 +7848,21 @@ async def execute_dashboard_sql(req: DashboardDataRequest):
     if not source:
         raise HTTPException(404, "Source introuvable")
     try:
-        connector = ConnectorFactory.create(source.model_dump())
+        src_dict = source.model_dump()
+        # ── Fetch password depuis connection_secrets ──────────────
+        try:
+            async with pool.acquire() as _c:
+                _sec = await _c.fetchrow(
+                    "SELECT secret_value FROM connection_secrets "
+                    "WHERE source_id=$1 AND secret_key='password'",
+                    UUID(req.source_id)
+                )
+                if _sec:
+                    src_dict["password"] = _sec["secret_value"]
+        except Exception:
+            pass
+        # ─────────────────────────────────────────────────────────
+        connector = ConnectorFactory.create(src_dict)
         rows = connector.execute_query(req.sql)
         if not rows:
             return {"rows": [], "columns": [], "count": 0}
@@ -8337,6 +8351,84 @@ async def clear_nlu_context(conversation_id: str):
 # ══════════════════════════════════════════════════════════════
 # SERVEUR FICHIERS STATIQUES UI
 # ══════════════════════════════════════════════════════════════
+
+
+# ══════════════════════════════════════════════════════════════
+# SPRINT 14 — FORECASTING
+# ══════════════════════════════════════════════════════════════
+
+class ForecastRequest(BaseModel):
+    source_id:   str
+    question:    str  = "prévoir les ventes"
+    granularity: str  = "weekly"   # 'weekly' ou 'monthly'
+    horizon:     int  = 12         # nombre de périodes à prévoir
+
+@app.post("/forecast", tags=["Forecasting"])
+async def forecast_endpoint(req: ForecastRequest):
+    """
+    Lance le pipeline de forecasting complet (SARIMA + Prophet + LSTM + Ensemble).
+    Retourne les prévisions + chart_data pour Chart.js dans chat.html.
+    """
+    try:
+        from .forecast_agent import run_forecast, detect_entity_and_sql, SQL_TEMPLATES
+
+        # 1. Récupérer la source
+        source = await get_source(UUID(req.source_id))
+        if not source:
+            raise HTTPException(404, "Source introuvable")
+
+        pool = await get_pg_pool()
+
+        # 2. Construire src_dict avec password
+        src_dict = source.model_dump()
+        try:
+            async with pool.acquire() as _c:
+                _sec = await _c.fetchrow(
+                    "SELECT secret_value FROM connection_secrets "
+                    "WHERE source_id=$1 AND secret_key='password'",
+                    UUID(req.source_id)
+                )
+                if _sec:
+                    src_dict["password"] = _sec["secret_value"]
+        except Exception:
+            pass
+
+        # 3. Détecter le SQL adapté à la question
+        sql = detect_entity_and_sql(
+            source.name or "", req.question, req.granularity
+        )
+
+        # 4. Extraire les données via ConnectorFactory
+        loop = asyncio.get_event_loop()
+        connector = ConnectorFactory.create(src_dict)
+        rows = await loop.run_in_executor(None, connector.execute_query, sql)
+        if not rows:
+            raise HTTPException(422, "Aucune donnée disponible pour le forecasting")
+
+        # 5. Lancer le pipeline forecasting
+        result = await run_forecast(
+            source_id   = req.source_id,
+            question    = req.question,
+            rows        = rows,
+            granularity = req.granularity,
+            horizon     = req.horizon,
+        )
+
+        return {
+            "success":    True,
+            "best_model": result["best_model"],
+            "mae":        result["mae"],
+            "duration_s": result["duration_s"],
+            "chart_data": result["chart_data"],
+            "ranking":    result["ranking"],
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[/forecast] {e}")
+        raise HTTPException(500, str(e))
+
 
 import pathlib
 UI_DIR = pathlib.Path(__file__).parent.parent / "ui"
