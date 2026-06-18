@@ -156,6 +156,24 @@ __label__count_entities how many entries
 __label__count_entities total number of records
 __label__count_entities count all rows in table
 __label__count_entities how many items exist
+__label__count_entities combien de tables
+__label__count_entities combien d entites
+__label__count_entities nombre de tables dans la source
+__label__count_entities combien de tables dans sxa
+__label__count_entities combien d objets dans la source
+__label__count_entities nombre total de tables
+__label__count_entities how many tables
+__label__count_entities how many entities
+__label__count_entities count tables in source
+__label__count_entities nombre de tables disponibles
+__label__count_entities combien y a t il de tables
+__label__count_entities combien de tables sont disponibles
+__label__count_entities quel est le nombre de tables
+__label__count_entities donnez moi le nombre de tables
+__label__count_entities nombre d entites indexees
+__label__count_entities combien de vues dans la source
+__label__count_entities total tables in database
+__label__count_entities how many tables in source
 __label__list_fields champs de la table
 __label__list_fields colonnes de cette entite
 __label__list_fields quelles colonnes disponibles
@@ -199,6 +217,24 @@ __label__get_relations show relations
 __label__get_relations list foreign keys
 __label__get_relations entity dependencies
 __label__get_relations table connections
+__label__get_relations quelles tables sont liees a
+__label__get_relations quelles tables sont liees
+__label__get_relations tables liees a cette table
+__label__get_relations tables reliees a
+__label__get_relations quelles entites sont connectees
+__label__get_relations montre les liaisons de
+__label__get_relations quelles sont les tables liees
+__label__get_relations tables en relation avec
+__label__get_relations relations de cette entite
+__label__get_relations liens de la table
+__label__get_relations quelles tables pointent vers
+__label__get_relations what tables are linked to
+__label__get_relations tables linked to
+__label__get_relations show links for table
+__label__get_relations quelles fk pour cette table
+__label__get_relations montre les fk de
+__label__get_relations foreign keys of table
+__label__get_relations relations entrantes et sortantes
 __label__generate_join jointure entre deux tables
 __label__generate_join joindre deux entites
 __label__generate_join relier deux tables
@@ -378,7 +414,7 @@ def _get_roberta():
             from sentence_transformers import SentenceTransformer
             import numpy as np
             _roberta_model = SentenceTransformer(
-                "xlm-roberta-base", local_files_only=False
+                "xlm-roberta-base", local_files_only=True
             )
             # Calcule les embeddings des exemples
             embeddings = {}
@@ -435,7 +471,7 @@ def _get_bert():
             from sentence_transformers import SentenceTransformer
             _bert_model = SentenceTransformer(
                 "paraphrase-multilingual-MiniLM-L12-v2",
-                local_files_only=False,
+                local_files_only=True,
             )
             logger.info("[NLU v2] BERT multilingue chargé")
         except Exception as e:

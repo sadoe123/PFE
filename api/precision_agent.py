@@ -91,6 +91,12 @@ def _check_coverage(entities: Dict, sql: str, schema: Dict) -> Tuple[bool, float
 
     for etype, values in entities.items():
         for val in values:
+            # Ignorer les années et montants génériques — pas nécessaire dans le SQL
+            # Ex: "amounts:2024" et "years:2024" sont des faux positifs
+            if etype in ("amounts", "years"):
+                covered += 1
+                total += 1
+                continue
             total += 1
             if _norm(val) in sql_norm:
                 covered += 1
@@ -564,6 +570,36 @@ RÈGLES STRICTES :
 5. N'utilise JAMAIS d'alias avec espaces (ex: AS Total Montant ← INTERDIT). Utilise AS TotalMontant
 6. Préfixe les colonnes ambiguës : [TableName].[ColName]
 7. Retourne UNIQUEMENT le SQL — sans texte, sans commentaire, sans markdown
+8. RÈGLE CRITIQUE — "dépasse N fois la moyenne" :
+   TOUJOURS utiliser une sous-requête AVG GLOBALE sans filtre :
+   WHERE [col] > N * (SELECT AVG([col]) FROM [table])
+   OU pour GROUP BY :
+   HAVING SUM([col]) > N * (SELECT AVG([col]) FROM [table])
+   JAMAIS filtrer la sous-requête AVG avec une condition sur la même table :
+   ❌ INTERDIT : WHERE col > N * (SELECT AVG(col) FROM t WHERE t.x = t.x)
+   ❌ INTERDIT : HAVING SUM(col) > AVG(SUM(col))
+   ❌ INTERDIT : HAVING SUM(col) > (SELECT AVG(SUM(col)) FROM t GROUP BY x)
+   ✅ CORRECT  : WHERE [CLOSINGBALANCEAMOUNT] > 3 * (SELECT AVG([CLOSINGBALANCEAMOUNT]) FROM [Dernière integration bancaire])
+   ✅ CORRECT  : HAVING SUM([Montant]) > 2 * (SELECT AVG([Montant]) FROM [FINANCEMENT_BI])
+
+EXEMPLES CONCRETS PAR TABLE :
+- "solde bancaire dépasse N fois" → [Dernière integration bancaire] :
+  WHERE [CLOSINGBALANCEAMOUNT] > N * (SELECT AVG([CLOSINGBALANCEAMOUNT]) FROM [Dernière integration bancaire])
+- "financement dépasse N fois" → [FINANCEMENT_BI] avec GROUP BY :
+  SELECT [Société], SUM([Montant]) AS TotalFinancement
+  FROM [FINANCEMENT_BI]
+  GROUP BY [Société]
+  HAVING SUM([Montant]) > N * (SELECT AVG([Montant]) FROM [FINANCEMENT_BI])
+  ORDER BY TotalFinancement DESC
+- "trésorerie dépasse N fois" → [SI_Trésorerie] :
+  WHERE [AMOUNTI] > N * (SELECT AVG([AMOUNTI]) FROM [SI_Trésorerie])
+
+9. RÈGLE CRITIQUE — colonnes SXA :
+   [Dernière integration bancaire] → montant = [CLOSINGBALANCEAMOUNT] (JAMAIS AMOUNTI)
+   [SI_Trésorerie] → montant = [AMOUNTI]
+   [FINANCEMENT_BI] → montant = [Montant]
+10. NEVER use AVG(SUM()) or SUM(AVG()) — INVALID in SQL Server
+    Correct HAVING : HAVING SUM([col]) > N * (SELECT AVG([col]) FROM [table])
 
 Question : {question}
 

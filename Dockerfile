@@ -22,17 +22,26 @@ RUN poetry install --only main --no-root
 COPY . .
 RUN poetry install --only main
 
-# ── Voice packages — installés via pip (pas dans pyproject.toml) ──
-# webrtcvad  : nécessite gcc pour compilation
-# openai-whisper : ne supporte pas PEP 517 via Poetry
-# piper-tts / vosk / soundfile : ajoutés ici pour cohérence
+# ── Tous les packages nécessaires (permanents) ────────────────
 RUN /app/.venv/bin/pip install --no-cache-dir \
-    setuptools \
+    "setuptools>=65.0" \
+    wheel \
+    httpx \
+    pandas \
+    python-pptx \
+    lightgbm \
+    xgboost \
+    openpyxl \
+    python-jose \
+    passlib \
+    bcrypt \
     webrtcvad==2.0.10 \
     piper-tts==1.4.2 \
     vosk==0.3.45 \
     soundfile \
-    openai-whisper==20231117
+    && /app/.venv/bin/pip install --no-cache-dir \
+       openai-whisper \
+    && /app/.venv/bin/python -m spacy download fr_core_news_sm
 
 
 # ── Stage 2 : runtime ─────────────────────────────────────────
@@ -77,7 +86,7 @@ USER onepilot
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=20s --timeout=5s --start-period=15s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=60s --start-period=120s --retries=5 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
 
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

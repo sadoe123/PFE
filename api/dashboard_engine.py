@@ -1542,8 +1542,60 @@ class DashboardGenerator:
                                 })
                             continue  # Ne pas exécuter le SQL simple pour cette table
 
-                # SQL standard
-                sql = self._build_dashboard_sql(tbl, schema[tbl], intent, slots)
+                # ── SQL custom pour tables spéciales (ex: cours marchés) ──
+                import unicodedata as _ud_tbl
+                _tbl_norm_raw = tbl.lower().replace(" ","").replace("-","").replace("_","")
+                _tbl_norm = ''.join(c for c in _ud_tbl.normalize('NFD', _tbl_norm_raw) if _ud_tbl.category(c) != 'Mn')
+                if "coursmarch" in _tbl_norm:
+                    sql = (
+                        f"SELECT TOP 50 [CUR_ID_CURRFROM] AS Devise_Source, "
+                        f"[CUR_ID_CURRTO] AS Devise_Cible, "
+                        f"CAST(AVG([ASK]) AS FLOAT) AS Taux_Moyen, "
+                        f"CAST(MAX([ASK]) AS FLOAT) AS Taux_Max, "
+                        f"CAST(MIN([ASK]) AS FLOAT) AS Taux_Min, "
+                        f"COUNT(*) AS Nb_Cotations "
+                        f"FROM [{tbl}] WITH(NOLOCK) "
+                        f"WHERE [ASK] IS NOT NULL AND [ASK] > 0 "
+                        f"GROUP BY [CUR_ID_CURRFROM], [CUR_ID_CURRTO] "
+                        f"ORDER BY Taux_Moyen DESC"
+                    )
+                elif "gs_cur" in _tbl_norm or "gscur" in _tbl_norm:
+                    sql = (
+                        f"SELECT TOP 50 [CUR_ID] AS Code_Devise, "
+                        f"[DESCRIPTION] AS Libelle, "
+                        f"COUNT(*) AS Nb_Lignes "
+                        f"FROM [{tbl}] WITH(NOLOCK) "
+                        f"GROUP BY [CUR_ID], [DESCRIPTION] "
+                        f"ORDER BY [CUR_ID]"
+                    )
+                elif "th_usr" in _tbl_norm or "thusr" in _tbl_norm:
+                    # TH_USR : colonne société n'existe pas — utiliser FCSCODE comme dimension
+                    sql = (
+                        f"SELECT TOP 100 [FCSCODE] AS Societe, "
+                        f"COUNT(*) AS Nb_Utilisateurs, "
+                        f"SUM(CASE WHEN [ISLOCKED]=0 THEN 1 ELSE 0 END) AS Actifs, "
+                        f"SUM(CASE WHEN [ISLOCKED]=1 THEN 1 ELSE 0 END) AS Bloques "
+                        f"FROM [{tbl}] WITH(NOLOCK) "
+                        f"WHERE [FCSCODE] IS NOT NULL AND [FCSCODE] <> '' "
+                        f"GROUP BY [FCSCODE] "
+                        f"ORDER BY Nb_Utilisateurs DESC"
+                    )
+                elif "derniereintegration" in _tbl_norm or "derniereintegrationbancaire" in _tbl_norm:
+                    # Dernière integration bancaire : vraie colonne = [Devises] (avec majuscule)
+                    # et [CLOSINGBALANCEAMOUNT] comme métrique
+                    sql = (
+                        f"SELECT TOP 50 [Devises], "
+                        f"CAST(SUM([CLOSINGBALANCEAMOUNT]) AS FLOAT) AS Solde_Total, "
+                        f"CAST(AVG([CLOSINGBALANCEAMOUNT]) AS FLOAT) AS Solde_Moyen, "
+                        f"COUNT(*) AS Nb_Comptes "
+                        f"FROM [{tbl}] WITH(NOLOCK) "
+                        f"WHERE [Devises] IS NOT NULL AND [Devises] <> '' "
+                        f"GROUP BY [Devises] "
+                        f"ORDER BY Solde_Total DESC"
+                    )
+                else:
+                    # SQL standard
+                    sql = self._build_dashboard_sql(tbl, schema[tbl], intent, slots)
                 logger.info(f"[Dashboard] Executing SQL for '{tbl}': {sql[:100]}")
                 rows, cols = await self._execute_sql(sql, source_id, pg_pool, connector_factory)
                 logger.info(f"[Dashboard] Result for '{tbl}': {len(rows)} rows, cols={cols[:3]}")
@@ -1662,7 +1714,12 @@ class DashboardGenerator:
                     )
                 logger.info(f"[Dashboard] Geo SQL for {table}.{geo_col}: {sql[:80]}")
                 return sql
-        nf=[f for f in fields if not _isk(f) and any(k in f.lower() for k in _mk)]
+        # Exclure les colonnes contenant "date", "datetime", "time" des métriques numériques
+        # même si leur nom contient un keyword métrique (ex: RATEDATE contient "rate" → faux positif)
+        _date_excl = ["date","datetime","time","periode","period","at","jour","mois","annee"]
+        nf=[f for f in fields if not _isk(f)
+            and any(k in f.lower() for k in _mk)
+            and not any(d in f.lower() for d in _date_excl)]
         cf=[f for f in fields if f not in nf and not _isk(f)][:5]
         df=[f for f in fields if any(k in f.lower() for k in _dk)]
         lh=[f for f in cf if any(h in f.lower() for h in _lk)]
@@ -2128,6 +2185,55 @@ class DashboardGenerator:
         RICH_FRAGMENTS=["orderdetail","detailcommande","detailvente","lignecommande","lignefacture",
                          "saleline","invoiceline","soilv","soinvoice","soinv"]
 
+        # ── SQL custom pour tables spéciales ─────────────────────────────
+        # cours marchés : ASK/BID comme métriques, CUR_ID_CURRFROM comme dimension
+        _norm_q = _norm(q_lower)
+        schema_norm_pre = {_norm(k): k for k in schema.keys()}
+        CUSTOM_SQL_TABLES = {
+            "coursmarch": lambda tbl: (
+                f"SELECT TOP 50 [CUR_ID_CURRFROM] AS Devise_Source, "
+                f"[CUR_ID_CURRTO] AS Devise_Cible, "
+                f"CAST(AVG([ASK]) AS FLOAT) AS Taux_Moyen, "
+                f"CAST(MAX([ASK]) AS FLOAT) AS Taux_Max, "
+                f"CAST(MIN([ASK]) AS FLOAT) AS Taux_Min, "
+                f"COUNT(*) AS Nb_Cotations "
+                f"FROM [{tbl}] WITH(NOLOCK) "
+                f"WHERE [ASK] IS NOT NULL AND [ASK] > 0 "
+                f"GROUP BY [CUR_ID_CURRFROM], [CUR_ID_CURRTO] "
+                f"ORDER BY Taux_Moyen DESC"
+            ),
+        }
+
+        # ── KEYWORD_TABLE SXA — routing prioritaire AVANT is_amount ──────
+        # ORDRE CRITIQUE : les patterns les plus spécifiques en premier
+        # "solde bancaire" AVANT "devise" pour éviter faux positif sur "solde bancaire par devise"
+        KEYWORD_TABLE_PRE_ORDERED = [
+            # Taux de change (très spécifique — 3 mots)
+            ("taux de change", ["coursmarches","coursmarch","gs_cur","gscur"]),
+            ("taux change",    ["coursmarches","coursmarch","gs_cur","gscur"]),
+            ("cours marche",   ["coursmarches","coursmarch"]),
+            ("cours change",   ["coursmarches","coursmarch"]),
+            ("forex",          ["coursmarches","coursmarch","gs_cur"]),
+            # Solde bancaire AVANT devise — pour "solde bancaire par devise"
+            ("solde bancaire", ["derniereintegrationbancaire","dernièreintegrationbancaire"]),
+            ("solde par",      ["derniereintegrationbancaire","dernièreintegrationbancaire"]),
+            # Rapprochement / utilisateurs
+            ("rapprochement",  ["si_bancaire","sibancaire"]),
+            ("utilisateur",    ["th_usr","thusr"]),
+            # Devise SEULEMENT si pas de "solde" dans la question
+            ("devise",         ["gs_cur","gscur","coursmarches"]),
+        ]
+        for kw_pre, frags_pre in KEYWORD_TABLE_PRE_ORDERED:
+            # Pour "devise" : bloquer si la question contient "solde" ou "bancaire"
+            if kw_pre == "devise" and any(w in q_lower for w in ["solde","bancaire","integrat"]):
+                continue
+            if kw_pre in q_lower:
+                for frag_pre in frags_pre:
+                    if frag_pre in schema_norm_pre:
+                        tbl_pre = schema_norm_pre[frag_pre]
+                        logger.info(f"[Dashboard] SXA keyword PRE-route '{kw_pre}' → {tbl_pre}")
+                        return [tbl_pre]
+
         is_amount=any(k in q_lower for k in ["vente","montant","ca","chiffre","évolution","mensuel","revenu","commande","facture",
                                               "tresorerie","trésorerie","solde","bancaire","financement","amortissement","compte","société","société"])
         if is_amount:
@@ -2151,6 +2257,11 @@ class DashboardGenerator:
                 "amortis": ["tableauxdamortissement","amortissement"],
                 "mouvement": ["si_bancaire","sibancaire","si_tresorerie","sitresorerie"],
                 "transaction": ["si_bancaire","sibancaire"],
+                "solde": ["derniereintegrationbancaire","dernièreintegrationbancaire"],
+                "solde bancaire": ["derniereintegrationbancaire","dernièreintegrationbancaire"],
+                "compte": ["comptes"],
+                "encaissement": ["si_tresorerie","sitresorerie"],
+                "decaissement": ["si_tresorerie","sitresorerie"],
             }
             for kw, frags in KEYWORD_TABLE.items():
                 if kw in q_lower:

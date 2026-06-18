@@ -102,13 +102,18 @@ _COMPOSITE_PATTERNS = [
     # Listes de données différentes
     r'\bliste[rz]?\s+.{3,40}\s+et\s+(?:aussi\s+)?(?:les?|la|le)\b',
     r'\baffiche[rz]?\s+.{3,40}\s+et\s+(?:aussi\s+)?(?:les?|la|le)\b',
+    # Patterns "X et leurs Y" / "X et les Y associes" — Sprint 13
+    r'\bet\s+leurs?\s+\w+',
+    r'\bet\s+les\s+\w+\s+associe',
+    r'\bsolde\s+.{3,30}\s+et\s+total\b',
+    r'\bsolde\s+.{3,30}\s+et\s+(?:les?|la|le)\b',
 ]
 
 _COMPOSITE_RE = [re.compile(p, re.IGNORECASE) for p in _COMPOSITE_PATTERNS]
 
 # Séparateurs forts — toujours une question composée
 _STRONG_SEPARATORS = re.compile(
-    r'\b(et\s+(?:aussi|également|en\s+plus)|'
+    r'\b(et\s+(?:aussi|également|en\s+plus|leurs?\s+\w+)|'
     r'ainsi\s+que|'
     r'en\s+plus\s+de\s+(?:ça|cela)|'
     r'vs\.?|versus|'
@@ -149,28 +154,27 @@ def detect_composite_question(question: str) -> Tuple[bool, List[str]]:
 
 
 def _split_composite(question: str, separator: str) -> List[str]:
-    """Découpe une question sur un séparateur fort."""
+    """Découpe une question sur un séparateur fort — supporte N sous-questions."""
     sep_lower = separator.lower().strip()
     q_lower   = question.lower()
 
-    # Cas : séparateur "vs" ou "versus" → split direct
+    # Cas : séparateur "vs" ou "versus" → split récursif sur TOUS les "vs"
+    # Supporte N comparaisons : "BNP vs SG vs Groupama vs BPM" → 4 parties
     if sep_lower in ("vs", "vs.", "versus"):
-        idx = q_lower.find(sep_lower)
-        if idx != -1:
-            part1 = question[:idx].strip().rstrip(',').strip()
-            part2 = question[idx + len(sep_lower):].strip()
-            parts = [p for p in [part1, part2] if len(p.split()) >= 2]
-            if len(parts) >= 2:
-                return parts
+        raw_parts = re.split(r'\s+vs\.?\s+', question, flags=re.IGNORECASE)
+        parts = [p.strip().rstrip(',').strip() for p in raw_parts if len(p.strip().split()) >= 1]
+        if len(parts) >= 2:
+            return parts
         return [question]
 
-    # Cas : "comparer X vs Y" → chercher "vs" dans la question
+    # Cas : "comparer X vs Y [vs Z...]" → split récursif sur tous les "vs"
     if sep_lower.startswith("compar"):
-        vs_match = re.search("vs", question, re.IGNORECASE)
-        if vs_match:
-            part1 = question[:vs_match.start()].strip().rstrip(',').strip()
-            part2 = question[vs_match.end():].strip()
-            parts = [p for p in [part1, part2] if len(p.split()) >= 2]
+        raw_parts = re.split(r'\s+vs\.?\s+', question, flags=re.IGNORECASE)
+        if len(raw_parts) >= 2:
+            # Retirer le préfixe "compare" de la première partie
+            first = re.sub(r'^comparer?\s+', '', raw_parts[0], flags=re.IGNORECASE).strip()
+            rest  = [p.strip() for p in raw_parts[1:]]
+            parts = [p for p in [first] + rest if len(p.split()) >= 1]
             if len(parts) >= 2:
                 return parts
         return [question]
@@ -215,25 +219,109 @@ class Orchestrator:
         self.source_id   = source_id
         self.dialect     = dialect
 
-    async def run(self, question: str) -> OrchestratorResult:
+    async def run(self, question: str, nlu_intent: str = "") -> OrchestratorResult:
         """
         Point d'entrée principal.
         Analyse → Route → Exécute → Retourne.
+
+        Args:
+            question   : question en langage naturel
+            nlu_intent : intent détecté par le NLU en amont (optionnel).
+                         Si llm_explain → l'Orchestrateur refuse de générer du SQL.
+                         list_fields / describe_entity sont autorisés (peuvent donner du SQL utile).
         """
         t0 = time.time()
         logger.info(f"[Orchestrator] Démarrage — question: '{question[:80]}'")
 
-        # ── Étape 0 PRIORITÉ ABSOLUE : Pattern direct connu → bypass tout ──────
-        # Doit être vérifié AVANT _is_complex_question pour éviter que des
-        # patterns SXA connus (ex: "encaissements par banque") soient mal routés
-        # vers Precision/CRAG alors qu'on a un SQL exact disponible.
+        # ── Guard intent NLU : si non-SQL → refus immédiat ──────────────────────
+        # Evite que l'Orchestrateur génère du SQL pour des questions conceptuelles
+        # même si un pattern DirectSQL matche un mot-clé de la question.
+        # Seul llm_explain est non-SQL garanti.
+        # greeting/help retirés : confiance faible (0.5-0.6) peut faussement
+        # classifier des questions courtes comme "utilisateurs bloques".
+        _NON_SQL_INTENTS_ORCH = {"llm_explain"}
+        if nlu_intent in _NON_SQL_INTENTS_ORCH:
+            logger.info(
+                f"[Orchestrator] Refus — intent NLU={nlu_intent} "
+                f"(non-SQL) : '{question[:60]}'"
+            )
+            return OrchestratorResult(
+                success=False,
+                sql="",
+                explanation=(
+                    f"Cette question est de nature explicative (intent={nlu_intent}). "
+                    f"Elle sera traitée par le module LLM_EXPLAIN."
+                ),
+                method="refused_non_sql_intent",
+                agent_type=AgentType.UNKNOWN,
+            )
+
         from .agentic_rag import (
             _find_direct_sql,
             _has_dynamic_filters,
             _tool_execute_sql,
             _tool_validate_result,
             AgentResult,
+            SXA_DIRECT_SQL as _sds_orch,
         )
+
+        # ── Étape 0A PRIORITÉ ABSOLUE : Question composée → MultiQuery ──────
+        # DOIT être avant DirectSQL pour éviter que "compare BNP vs SG vs Groupama"
+        # soit intercepté par le pattern partiel "financements bnp".
+        # Exception : si la question ENTIÈRE matche exactement un pattern DirectSQL
+        # (ex: "compare utilisateurs actifs vs bloques" a un pattern dédié).
+        import unicodedata as _ud_orch, re as _re_orch
+        _q_norm_orch = _ud_orch.normalize('NFD', question.lower().strip())
+        _q_norm_orch = ''.join(c for c in _q_norm_orch if _ud_orch.category(c) != 'Mn')
+        _COMP_ORCH = _re_orch.compile(
+            r'\b(vs\.?|versus|comparer?)\b|\bet\s+(?:leurs?|les\s+\w+\s+associe)',
+            _re_orch.IGNORECASE
+        )
+        _is_comp_orch = bool(_COMP_ORCH.search(question))
+
+        # Chercher un match EXACT (≥ 70% de couverture ET cohérence composé)
+        _exact_direct_orch = None
+        _exact_pat_orch = None
+        if _is_comp_orch:
+            for _pe_o, _se_o in sorted(_sds_orch.items(), key=lambda x: -len(x[0])):
+                _pe_norm_o = _ud_orch.normalize('NFD', _pe_o.lower())
+                _pe_norm_o = ''.join(c for c in _pe_norm_o if _ud_orch.category(c) != 'Mn')
+                _ratio_o = len(_pe_norm_o) / max(len(_q_norm_orch), 1)
+                _pat_comp_o = bool(_COMP_ORCH.search(_pe_norm_o))
+                if _pe_norm_o == _q_norm_orch:
+                    _exact_direct_orch = _se_o
+                    _exact_pat_orch = _pe_o
+                    break
+                elif _pe_norm_o in _q_norm_orch and _ratio_o >= 0.70 and _pat_comp_o:
+                    _exact_direct_orch = _se_o
+                    _exact_pat_orch = _pe_o
+                    break
+
+        if _is_comp_orch and _exact_direct_orch:
+            # Pattern exact composé trouvé → DirectSQL direct
+            logger.info(
+                f"[Orchestrator] Route → DirectSQL exact composé "
+                f"(pattern='{_exact_pat_orch}')"
+            )
+            result = await self._run_direct_sql(
+                question, _exact_direct_orch, _exact_pat_orch, 1.0, t0,
+                _tool_execute_sql, _tool_validate_result
+            )
+            result.duration_ms = int((time.time() - t0) * 1000)
+            return result
+        elif _is_comp_orch:
+            # Question composée SANS pattern exact → MultiQuery
+            is_composite, sub_questions = detect_composite_question(question)
+            if is_composite and len(sub_questions) >= 2:
+                logger.info(
+                    f"[Orchestrator] Question composée détectée — "
+                    f"{len(sub_questions)} sous-questions : {sub_questions}"
+                )
+                result = await self._run_multi_query(question, sub_questions, t0)
+                result.duration_ms = int((time.time() - t0) * 1000)
+                return result
+
+        # ── Étape 0B PRIORITÉ ABSOLUE : Pattern direct connu → bypass tout ──
         matched_pattern, direct_sql, match_score = _find_direct_sql(question)
         if matched_pattern and direct_sql:
             logger.info(
@@ -247,7 +335,7 @@ class Orchestrator:
             result.duration_ms = int((time.time() - t0) * 1000)
             return result
 
-        # ── Étape 0 : Question complexe → Agent Precision (priorité haute) ──
+        # ── Étape 0C : Question complexe → Agent Precision ──────────────────
         is_complex = _is_complex_question(question)
         if is_complex:
             logger.info(f"[Orchestrator] Route → Precision (question complexe)")
@@ -255,9 +343,8 @@ class Orchestrator:
             result.duration_ms = int((time.time() - t0) * 1000)
             return result
 
-        # ── Étape 1A : Question composée ? ───────────────────────────────────
+        # ── Étape 1A : Question composée (non vs/compare) ────────────────────
         is_composite, sub_questions = detect_composite_question(question)
-
         if is_composite and len(sub_questions) >= 2:
             logger.info(
                 f"[Orchestrator] Question composée détectée — "
@@ -449,8 +536,13 @@ def _is_complex_question(question: str) -> bool:
         "par devise et", "et par devise",
         "evolution de", "tendance des", "projection de",
         "superieur a la moyenne", "inferieur a la moyenne",
+        "superieur a", "inferieur a",
+        "depasse", "depassent", "au-dessus de",
+        "fois la moyenne", "fois le montant", "fois la valeur",
+        "solde bancaire depasse", "solde depasse",
+        "financement depasse", "montant depasse",
         "par rapport au", "en proportion",
-        "top 10", "top 5", "les plus", "les moins",
+        "les plus", "les moins",
         "avec leurs", "associes a", "lies a",
         "evolution mensuelle", "cumul annuel",
         "par trimestre", "sur les 12 derniers",
@@ -459,6 +551,8 @@ def _is_complex_question(question: str) -> bool:
         "nombre de financements par",
         "repartition des financements par",
         "evolution des financements par",
+        "repartition des", "analyse de la repartition",
+        "analyse des", "ventilation des",
     ]
     for kw in COMPLEX_KW:
         import unicodedata as _ud
@@ -500,6 +594,7 @@ async def run_orchestrator(
     pg_pool:     asyncpg.Pool,
     source_dict: Dict,
     dialect:     str = "mssql",
+    nlu_intent:  str = "",
 ) -> OrchestratorResult:
     """
     Point d'entrée public — appelé depuis main.py en remplacement de run_agentic_rag.
@@ -510,6 +605,7 @@ async def run_orchestrator(
         pg_pool     : pool PostgreSQL (métadonnées OnePilot)
         source_dict : config de la source
         dialect     : dialecte SQL (mssql, postgresql, mysql, odata)
+        nlu_intent  : intent NLU détecté en amont (évite SQL sur questions explicatives)
 
     Returns:
         OrchestratorResult avec sql, result, method, sub_queries si multi
@@ -520,7 +616,7 @@ async def run_orchestrator(
         source_id=source_id,
         dialect=dialect,
     )
-    return await orchestrator.run(question)
+    return await orchestrator.run(question, nlu_intent=nlu_intent)
 
 
 def orchestrator_result_to_dict(result: OrchestratorResult) -> Dict:

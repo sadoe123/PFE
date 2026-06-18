@@ -1689,6 +1689,29 @@ async def discover_relations(source_id: UUID) -> Dict[str, Any]:
         )
         logger.info(f"[discover] ML-powered: {len(implicit_cands)} relations implicites prédites")
 
+        # ── Heuristiques complémentaires (CDC §2.2.2.B — toujours actives) ──
+        # Conformément au CDC, name_based, fuzzy, value_based et ERP
+        # sont lancés en parallèle du ML pour enrichir la détection.
+        name_cands  = _algo_name_based(entity_index, fields_by_entity)
+        erp_cands   = _algo_erp_heuristics(entity_index, fields_by_entity)
+        fuzzy_cands = _algo_fuzzy_match(entity_index, fields_by_entity)
+        value_cands = await _algo_value_based(conn_info, name_cands)
+        heuristic_cands = _merge_candidates(
+            [], value_cands, name_cands, fuzzy_cands, erp_cands,
+            min_confidence=0.55
+        )
+        logger.info(
+            f"[discover] Heuristiques: {len(name_cands)} name | "
+            f"{len(fuzzy_cands)} fuzzy | {len(value_cands)} value | "
+            f"{len(erp_cands)} erp"
+        )
+        # Fusionner ML + heuristiques (ML prioritaire si doublon)
+        ml_keys = {(c.source_entity, c.source_field, c.target_entity) for c in implicit_cands}
+        for c in heuristic_cands:
+            key = (c.source_entity, c.source_field, c.target_entity)
+            if key not in ml_keys and key not in known_explicit:
+                implicit_cands.append(c)
+
     else:
         # ── Fallback : heuristiques en attendant l'entraînement ──
         # ⚠ NON CONFORME CDC — lancer ml_relation_detector_v6.ipynb

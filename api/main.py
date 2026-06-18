@@ -4,6 +4,52 @@ Universal Data Access Layer – Phase 3
 """
 from __future__ import annotations
 
+async def _validate_sql_quick(sql: str, source_dict: dict, dialect: str = "mssql") -> tuple[bool, str]:
+    """
+    Valide rapidement un SQL en l'exécutant avec SELECT TOP 1 / LIMIT 1.
+    Retourne (is_valid, error_message).
+    Timeout 8 secondes pour ne pas bloquer le stream.
+    """
+    import asyncio as _asyncio
+    from .agentic_rag import _tool_execute_sql
+
+    # Wrapper SELECT TOP 1 pour tester sans récupérer toutes les données
+    _sql_test = sql.strip().rstrip(";")
+    if dialect == "mssql":
+        # Wrapper dans un sous-select avec TOP 1
+        _sql_test = f"SELECT TOP 1 * FROM ({_sql_test}) AS _validation_wrap"
+    else:
+        _sql_test = f"SELECT * FROM ({_sql_test}) AS _validation_wrap LIMIT 1"
+
+    try:
+        result = await _asyncio.wait_for(
+            _tool_execute_sql(_sql_test, source_dict, dialect),
+            timeout=8.0
+        )
+        if result.get("error"):
+            err = str(result["error"])
+            # Ignorer les erreurs de colonnes ambiguës dans le wrapper — SQL lui-même est valide
+            if "ambiguous" in err.lower() or "invalid column name" in err.lower():
+                # Tester sans wrapper
+                try:
+                    result2 = await _asyncio.wait_for(
+                        _tool_execute_sql(sql.strip().rstrip(";"), source_dict, dialect),
+                        timeout=8.0
+                    )
+                    if result2.get("error"):
+                        return False, str(result2["error"])
+                    return True, ""
+                except Exception:
+                    return False, err
+            return False, err
+        return True, ""
+    except _asyncio.TimeoutError:
+        return True, ""  # Timeout = on suppose valide plutôt que bloquer
+    except Exception as e:
+        return False, str(e)
+
+
+
 import asyncio
 import subprocess
 import tempfile
@@ -22,6 +68,24 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+
+# ── Auth / Admin imports ──────────────────────────────────────────────────────
+try:
+    import bcrypt as _bcrypt
+    _BCRYPT_OK = True
+except ImportError:
+    _BCRYPT_OK = False
+
+try:
+    import jwt as _jwt          # PyJWT
+    _JWT_OK = True
+except ImportError:
+    _JWT_OK = False
+
+# Clé secrète JWT — en prod mettre dans .env
+_JWT_SECRET = os.environ.get("JWT_SECRET", "onepilot_jwt_secret_change_in_prod")
+_JWT_ALGO   = "HS256"
+_JWT_EXPIRE = int(os.environ.get("JWT_EXPIRE_HOURS", "24"))
 
 from .connection_service import sync_metadata, test_connection
 from .database import close_connections, get_pg_pool, get_redis, init_schema
@@ -234,6 +298,7 @@ async def lifespan(app: FastAPI):
             logger.info("✅ Migration chat_feedback OK")
         except Exception as e:
             logger.warning(f"Migration chat_feedback (non-bloquant): {e}")
+
 
     except Exception as e:
         logger.error(f"❌ PostgreSQL erreur: {e}")
@@ -473,6 +538,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Phase 10 — Auth & Admin routers ──────────────────────────────────────────
+try:
+    from .routes_auth  import router as auth_router
+    from .routes_admin import router as admin_router
+    app.include_router(auth_router)
+    app.include_router(admin_router)
+    logger.info("✅ Routers Phase 10 (auth, admin) chargés")
+except ImportError as _e:
+    logger.warning(f"⚠️  Routers Phase 10 non disponibles: {_e}")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -2354,13 +2429,33 @@ async def _fix_slots(slots, question: str, schema: dict, known_entities: list,
 
     return slots
 
-async def _build_chat_answer(source_id_str: str, question: str) -> str:
+def _lang_instr(lang: str) -> str:
+    """
+    Retourne l'instruction de langue pour les prompts Ollama.
+    Utilisée dans les blocs llm_explain, CRAG conceptuel et Orchestrateur.
+    """
+    _MAP = {
+        "en":  "Respond in English",
+        "es":  "Réponds en espagnol",
+        "de":  "Antworte auf Deutsch",
+        "ar":  "أجب باللغة العربية",
+        "it":  "Rispondi in italiano",
+        "pt":  "Responda em português",
+    }
+    return _MAP.get((lang or "fr").lower()[:2], "Réponds en français")
+
+
+async def _build_chat_answer(source_id_str: str, question: str, slots=None, lang: str = 'fr') -> str:
     """
     Pipeline complet : NLU → SQLGenerator → SQLValidator → réponse formatée.
     §2.3.3 — remplace l'ancien système if/elif par le vrai moteur.
     """
     import time
     t0 = time.time()
+
+    # ── Variables Ollama — définies ici pour tout le scope de la fonction ────
+    OLLAMA_HOST  = os.environ.get("OLLAMA_HOST",  "http://host.docker.internal:11434")
+    OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5-coder:3b")
 
     # ── Validation source ─────────────────────────────────────────────
     try:
@@ -2384,7 +2479,16 @@ async def _build_chat_answer(source_id_str: str, question: str) -> str:
 
     try:
         relations = await get_relations_for_source(source_id)
-        relations = relations[:5] if relations else []
+        # Si intent GET_RELATIONS avec une table spécifique → filtrer par table
+        if slots and slots.intent == Intent.GET_RELATIONS and slots.table_names:
+            table_filter = slots.table_names[0].upper()
+            relations = [
+                r for r in (relations or [])
+                if table_filter in (r.get('source_entity','') or '').upper()
+                or table_filter in (r.get('target_entity','') or '').upper()
+            ][:20]
+        else:
+            relations = relations[:5] if relations else []
     except Exception:
         relations = []
 
@@ -2581,9 +2685,125 @@ async def _build_chat_answer(source_id_str: str, question: str) -> str:
             slots.table_names = [context.last_table]
             logger.info(f"[Chat] Context injection: last_table='{context.last_table}'")
 
+    # ── PRIORITÉ : si llm_explain → court-circuiter _fix_slots et aller direct ──
+    # _fix_slots peut réassigner l'intent (ex: 'à quoi sert' → profile_entity)
+    # ce qui casse le routing LLM_EXPLAIN. On skip tout et on retourne direct.
+    _incoming_intent_str = (
+        slots.intent if isinstance(slots.intent, str)
+        else slots.intent.value if slots and hasattr(slots.intent, "value")
+        else ""
+    ) if slots else ""
+    _EXPL_PREFIXES_BCA = (
+        # Français
+        "explique", "expliquer", "explication",
+        "comment fonctionne", "comment marche", "comment est",
+        "comment utilise", "comment puis",
+        "c'est quoi", "kesako",
+        "qu'est-ce que", "qu'est ce que", "qu'est-ce qu'",
+        "que signifie", "que veut dire", "que represente",
+        "définition", "définis", "à quoi sert", "a quoi sert",
+        "pourquoi", "dans quel but", "décris", "decris",
+        # Anglais
+        "what is", "what are", "what's", "what does", "what do",
+        "how does", "how do", "how is", "how are",
+        "tell me about", "explain", "describe",
+        "what exactly", "what kind", "what type",
+        "can you explain", "could you explain",
+        "define ", "definition of", "meaning of",
+        "i have a question", "i'd like to know", "i want to know",
+        "i want to understand", "can you tell", "could you tell",
+        "please explain", "please describe",
+        # Allemand
+        "was ist", "was sind", "was bedeutet", "was macht",
+        "wie funktioniert", "wie ist", "erkläre", "erklären",
+        "beschreibe", "was versteht man",
+        "ich habe eine frage", "ich möchte wissen", "ich will wissen",
+        "kannst du erklären", "bitte erkläre", "ich frage mich", "ich habe",
+        # Espagnol
+        "qué es", "qué son", "cómo funciona", "explica",
+    )
+    _q_bca_lower = question.lower().strip()
+    _is_expl_bca = any(_q_bca_lower.startswith(p) for p in _EXPL_PREFIXES_BCA)
+
+    if _incoming_intent_str == "llm_explain" or _is_expl_bca:
+        # Forcer intent llm_explain sur les slots avant de sauter au bloc LLM
+        if slots:
+            slots.intent = "llm_explain"
+        logger.info(f"[Chat] llm_explain prioritaire — skip _fix_slots : '{question[:60]}'")
+        # Sauter directement au bloc LLM_EXPLAIN ci-dessous
+        goto_llm_explain = True
+    else:
+        goto_llm_explain = False
+
+    # ── DirectSQL PreCheck dans _build_chat_answer ───────────────────────────
+    if not goto_llm_explain:
+        import re as _re_bca
+        _bca_intent = _incoming_intent_str
+        _bca_conf = float(slots.confidence) if slots and hasattr(slots, "confidence") and slots.confidence else 0.0
+        _BCA_LOW_CONF = {"correct_sql", "greeting", "help", "unknown", "list_entities",
+                         "profile_entity", "generate_aggregate"}
+
+        # ── Priorité absolue : si la question ENTIÈRE matche un pattern DirectSQL
+        # en passe 1 (score=1.0) → utiliser ce SQL même si c'est une question composée.
+        # Ceci permet à "compare utilisateurs actifs vs bloques" d'utiliser le pattern
+        # exact dédié plutôt que de tomber en CRAG.
+        try:
+            from .agentic_rag import _find_direct_sql as _bca_fds, SXA_DIRECT_SQL as _bca_dict
+            import unicodedata as _bca_ud
+            _q_norm_bca = question.lower().strip()
+            _q_norm_bca = _bca_ud.normalize('NFD', _q_norm_bca)
+            _q_norm_bca = ''.join(c for c in _q_norm_bca if _bca_ud.category(c) != 'Mn')
+            # Chercher un match EXACT de la question dans les patterns
+            _exact_sql = None
+            _exact_pat = None
+            import re as _re_bca_comp
+            _COMP_BCA2 = _re_bca_comp.compile(
+                r'\b(vs\.?|versus|comparer?)\b|\bet\s+leurs?',
+                _re_bca_comp.IGNORECASE
+            )
+            _q_is_comp_bca = bool(_COMP_BCA2.search(question))
+            for _pat, _sql in sorted(_bca_dict.items(), key=lambda x: -len(x[0])):
+                _pat_norm = _bca_ud.normalize('NFD', _pat.lower())
+                _pat_norm = ''.join(c for c in _pat_norm if _bca_ud.category(c) != 'Mn')
+                _ratio_bca = len(_pat_norm) / max(len(_q_norm_bca), 1)
+                _pat_is_comp = bool(_COMP_BCA2.search(_pat_norm))
+                if _pat_norm == _q_norm_bca:
+                    _exact_sql = _sql
+                    _exact_pat = _pat
+                    break
+                elif _pat_norm in _q_norm_bca and _ratio_bca >= 0.70:
+                    if _q_is_comp_bca and not _pat_is_comp:
+                        continue
+                    _exact_sql = _sql
+                    _exact_pat = _pat
+                    break
+            if _exact_sql:
+                logger.info(f"[Chat] DirectSQL Exact → pattern='{_exact_pat}'")
+                return f"```sql\n{_exact_sql}\n```"
+        except Exception as _bca_exact_e:
+            logger.debug(f"[Chat] DirectSQL Exact skip: {_bca_exact_e}")
+
+        # ── Fallback : PreCheck sur intent faible (non-composé)
+        _COMPOSITE_BCA = _re_bca.compile(
+            r'\b(vs\.?|versus|comparer?)\b|\bet\s+(?:leurs?|les\s+\w+\s+associe)',
+            _re_bca.IGNORECASE
+        )
+        _is_composite_bca = bool(_COMPOSITE_BCA.search(question))
+        if _bca_intent in _BCA_LOW_CONF and _bca_conf < 0.75 and not _is_composite_bca:
+            try:
+                _bca_pat, _bca_sql, _bca_score = _bca_fds(question)
+                if _bca_sql and _bca_score >= 0.9:
+                    logger.info(
+                        f"[Chat] DirectSQL PreCheck → pattern='{_bca_pat}' "
+                        f"intent={_bca_intent} conf={_bca_conf:.2f}"
+                    )
+                    return f"```sql\n{_bca_sql}\n```"
+            except Exception as _bca_pre_e:
+                logger.debug(f"[Chat] DirectSQL PreCheck skip: {_bca_pre_e}")
+
     # Correction intents + raw_text via _fix_slots()
     q_low = question.lower()
-    if slots:
+    if slots and not goto_llm_explain:
         _original_intent = slots.intent  # Sauvegarder avant _fix_slots
         slots = await _fix_slots(slots, question, schema, known_entities, source_id_str=source_id_str, pg_pool=None)
         # ── Protéger SHOW_DASHBOARD — priorité absolue ──────────────────
@@ -2770,14 +2990,16 @@ async def _build_chat_answer(source_id_str: str, question: str) -> str:
     # ── Sprint 7C : Routing conceptuel en amont — avant tout pipeline SQL ──
     # Vérification AVANT LIST_ENTITIES pour éviter que "quels sont les ERP ?"
     # soit intercepté comme LIST_ENTITIES et retourne la liste des tables SXA.
+    # SKIP si goto_llm_explain=True — le bloc llm_explain ci-dessous gère déjà
+    # la question proprement avec httpx async (pas de timeout synchrone).
     try:
         from .rag_engine import is_conceptual_question as _is_conceptual_early
-        if _is_conceptual_early(question):
+        if not goto_llm_explain and _is_conceptual_early(question):
             logger.info(f"[CRAG] Routing conceptuel précoce → '{question[:60]}'")
             try:
                 import httpx as _httpx_early
                 _cp = (
-                    f"Tu es un expert ERP. Réponds en français à cette question "
+                    f"Tu es un expert ERP. {_lang_instr(lang)} à cette question "
                     f"de manière concise et informative.\n"
                     f"Question : {question}\n\n"
                     f"Réponds directement sans générer de SQL. "
@@ -3004,21 +3226,76 @@ async def _build_chat_answer(source_id_str: str, question: str) -> str:
         try:
             import httpx as _httpx
             OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://host.docker.internal:11434")
-            # Contexte source pour enrichir la réponse
-            domain_ctx = f"Source active: {name} ({entity_count} entités ERP)." if name else ""
-            prompt = f"""{domain_ctx}
-Tu es OnePilot, un assistant expert en systèmes ERP et données d'entreprise.
-Réponds en français de manière claire et structurée à la question suivante :
+            domain_ctx = f"Source active : {name} ({entity_count} entités ERP)." if name else ""
+            _l = (lang or "fr").lower()[:2]
+            # Prompt entièrement dans la langue cible pour forcer Mistral à répondre
+            # dans la bonne langue. Un seul texte en français + 1 ligne "Respond in X"
+            # est insuffisant — Mistral suit la langue dominante du prompt.
+            _EXPLAIN_PROMPTS = {
+                "en": (
+                    f"You are OnePilot, an expert ERP assistant.\n"
+                    f"The user asks a CONCEPTUAL question. Provide an EXPLANATION, never SQL.\n\n"
+                    f"RULES:\n"
+                    f"- Respond ONLY in English.\n"
+                    f"- Never generate SQL, SELECT queries, scripts or technical code.\n"
+                    f"- Explain the functional or business role concisely (5-10 lines).\n\n"
+                    f"Context: {domain_ctx}\n"
+                    f"Question: {question}\n\nAnswer (English, no SQL):"
+                ),
+                "de": (
+                    f"Du bist OnePilot, ein ERP-Expertenassistent.\n"
+                    f"Der Benutzer stellt eine KONZEPTUELLE Frage. Gib eine ERKLÄRUNG, niemals SQL.\n\n"
+                    f"REGELN:\n"
+                    f"- Antworte NUR auf Deutsch.\n"
+                    f"- Generiere niemals SQL, SELECT-Abfragen, Skripte oder technischen Code.\n"
+                    f"- Erkläre die Rolle prägnant (5-10 Zeilen).\n\n"
+                    f"Kontext: {domain_ctx}\n"
+                    f"Frage: {question}\n\nAntwort (Deutsch, kein SQL):"
+                ),
+                "es": (
+                    f"Eres OnePilot, asistente experto en ERP.\n"
+                    f"El usuario hace una pregunta CONCEPTUAL. Da una EXPLICACIÓN, nunca SQL.\n\n"
+                    f"REGLAS:\n"
+                    f"- Responde SOLO en español.\n"
+                    f"- Nunca generes SQL, SELECT, scripts o código técnico.\n"
+                    f"- Sé conciso (5-10 líneas).\n\n"
+                    f"Contexto: {domain_ctx}\n"
+                    f"Pregunta: {question}\n\nRespuesta (español, sin SQL):"
+                ),
+                "ar": (
+                    f"أنت OnePilot، مساعد خبير في ERP.\n"
+                    f"المستخدم يطرح سؤالاً مفاهيمياً. قدم شرحاً، ليس SQL.\n\n"
+                    f"القواعد:\n"
+                    f"- أجب فقط باللغة العربية.\n"
+                    f"- لا تولِّد SQL أبداً. كن موجزاً (5-10 أسطر).\n\n"
+                    f"السياق: {domain_ctx}\n"
+                    f"السؤال: {question}\n\nالإجابة (عربي، بدون SQL):"
+                ),
+                "fr": (
+                    f"{domain_ctx}\n"
+                    f"Tu es OnePilot, un assistant expert en systèmes ERP.\n"
+                    f"L'utilisateur pose une QUESTION CONCEPTUELLE — il veut une EXPLICATION, pas du SQL.\n\n"
+                    f"RÈGLES ABSOLUES :\n"
+                    f"- NE GÉNÈRE JAMAIS de code SQL, de requête SELECT ou de script.\n"
+                    f"- Réponds UNIQUEMENT en français, de manière claire et structurée.\n"
+                    f"- Si la question porte sur un module ERP, explique son rôle fonctionnel.\n"
+                    f"- Si la question porte sur une table ou entité, décris son rôle métier dans {name}.\n"
+                    f"- Sois concis : 5 à 10 lignes maximum.\n\n"
+                    f"Question : {question}\n\n"
+                    f"Réponse (explication métier uniquement, sans SQL) :"
+                ),
+            }
+            prompt = _EXPLAIN_PROMPTS.get(_l, _EXPLAIN_PROMPTS["fr"])
 
-{question}
-
-Donne une réponse concise (5-10 lignes max), pratique et orientée métier."""
-
-            # Routing intelligent : mistral pour questions NL, qwen pour SQL/code
+            # Routing intelligent : qwen pour questions sur la structure (table, colonne, schéma),
+            # mistral pour questions fonctionnelles / métier.
+            # NB : on exclut 'sql','select','insert' pour ne pas router vers qwen-coder
+            # sur ces mots (risque que qwen génère du SQL au lieu d'expliquer).
             q_lower = question.lower()
             is_technical = any(k in q_lower for k in [
-                'sql','requête','code','script','query','table','colonne',
-                'jointure','select','insert','update','index','schéma'
+                'table', 'colonne', 'entité', 'entite', 'schéma', 'schema',
+                'structure', 'champ', 'champs', 'index', 'clé primaire', 'cle primaire',
+                'jointure', 'relation', 'fk', 'pk',
             ])
             llm_model = "qwen2.5-coder:3b" if is_technical else "mistral:latest"
             logger.info(f"[LLM Explain] model={llm_model} (technical={is_technical})")
@@ -3259,7 +3536,7 @@ Donne une réponse concise (5-10 lignes max), pratique et orientée métier."""
                 try:
                     import httpx as _httpx
                     _conceptual_prompt = (
-                        f"Tu es un expert ERP. Réponds en français à cette question de manière concise et informative.\n"
+                        f"Tu es un expert ERP. {_lang_instr(_response_lang)} à cette question de manière concise et informative.\n"
                         f"Question : {question}\n\n"
                         f"Réponds directement sans générer de SQL. Donne une réponse claire en 2-4 phrases."
                     )
@@ -3299,7 +3576,7 @@ Donne une réponse concise (5-10 lignes max), pratique et orientée métier."""
                                     ORDER  BY created_at DESC
                                     LIMIT  1
                                 )
-                            """, sql, UUID(source_id), question)
+                            """, sql, source_id, question)
                             # Si aucune ligne → INSERT
                             if _upd == "UPDATE 0":
                                 await _sv_conn.execute("""
@@ -3307,7 +3584,7 @@ Donne une réponse concise (5-10 lignes max), pratique et orientée métier."""
                                         (source_id, question, intent, confidence,
                                          sql_generated, created_at)
                                     VALUES ($1,$2,$3,$4,$5,NOW())
-                                """, UUID(source_id), question,
+                                """, source_id, question,
                                    slots.intent if slots else "generate_aggregate",
                                    float(slots.confidence) if slots and slots.confidence else 0.9,
                                    sql)
@@ -3337,7 +3614,7 @@ Donne une réponse concise (5-10 lignes max), pratique et orientée métier."""
         "advanced": "Avancé",
         "simple":   "",
         "moderate": "",
-        "llm_rag": "LLM+RAG",
+        "llm_rag": "",
     }.get(complexity, "")
 
     # Warnings
@@ -3349,13 +3626,9 @@ Donne une réponse concise (5-10 lignes max), pratique et orientée métier."""
     score = validation.get("score", 1.0)
     score_badge = f" score={score}" if score >= 0.9 else f" score={score}"
 
-    badge_line = f"\n*{complexity_badge}{score_badge} — {ms}ms*" if complexity_badge else f"\n*{score_badge} — {ms}ms*"
-
     return (
-        f"**{explanation}**\n\n"
         f"```sql\n{sql}\n```"
         f"{warn_text}"
-        f"{badge_line}"
     )
 
 
@@ -3496,8 +3769,9 @@ async def chat_stream(req: ChatRequest):
     from fastapi.responses import StreamingResponse
     import time as _time
 
-    source_id_str = req.source_id
-    question      = req.question
+    source_id_str  = req.source_id
+    question       = req.question
+    _response_lang = getattr(req, 'lang', None) or 'fr'
 
     if not source_id_str or not question:
         raise HTTPException(status_code=400, detail="Missing source_id or question")
@@ -3520,7 +3794,21 @@ async def chat_stream(req: ChatRequest):
             return
 
         # ── Phase 1 : NLU + préparation schéma ────────────────────────
-        yield await _sse({"type": "thinking", "content": "nlu_analysis"})
+        # Thinking contextuel selon la question
+        _q_low = question.lower()
+        if any(k in _q_low for k in ["dashboard", "graphe", "graph", "chart", "visualis"]):
+            _think1 = "dashboard_gen"
+        elif any(k in _q_low for k in ["prévision", "forecast", "prédiction", "tendance"]):
+            _think1 = "forecast_prep"
+        elif any(k in _q_low for k in ["combien", "total", "somme", "moyenne", "max", "min", "top"]):
+            _think1 = "aggregation_prep"
+        elif any(k in _q_low for k in ["qui", "quels", "liste", "montre", "affiche"]):
+            _think1 = "list_prep"
+        elif any(k in _q_low for k in ["qu'est", "explique", "comment", "pourquoi", "définition"]):
+            _think1 = "explain_prep"
+        else:
+            _think1 = "nlu_analysis"
+        yield await _sse({"type": "thinking", "content": _think1})
 
         try:
             source_id = UUID(source_id_str)
@@ -3733,10 +4021,106 @@ SQL corrigé:"""
             "50000", "100000", "10000", "encaissement", "decaissement",
         ]
         _force_llm_stream = any(kw in question.lower() for kw in _financial_kw_early)
+
+        # ── PRIORITÉ ABSOLUE : llm_explain → toujours _build_chat_answer ────────
+        # Même si _force_llm_stream=True (ex: "trésorerie" dans la question),
+        # une question explicative NE DOIT PAS aller vers l'Orchestrateur/LLM SQL.
+        # _build_chat_answer contient le bloc llm_explain avec le prompt Ollama correct.
+        _q_lower_for_intent = question.lower().strip()
+        _EXPL_PREFIXES_STREAM = (
+            # Français
+            "explique", "expliquer", "explication",
+            "comment fonctionne", "comment marche", "comment est",
+            "comment utilise", "comment puis",
+            "c'est quoi", "kesako",
+            "qu'est-ce que", "qu'est ce que", "qu'est-ce qu'",
+            "que signifie", "que veut dire", "que represente",
+            "définition", "définis", "à quoi sert", "a quoi sert",
+            "pourquoi", "dans quel but", "décris", "decris",
+            # Anglais
+            "what is", "what are", "what's", "what does", "what do",
+            "how does", "how do", "how is", "how are",
+            "tell me about", "explain", "describe",
+            "what exactly", "what kind", "what type",
+            "can you explain", "could you explain",
+            "define ", "definition of", "meaning of",
+        "i have a question", "i'd like to know", "i want to know",
+        "i want to understand", "can you tell", "could you tell",
+        "please explain", "please describe",
+            # Allemand
+            "was ist", "was sind", "was bedeutet", "was macht",
+            "wie funktioniert", "wie ist", "erkläre", "erklären",
+            "beschreibe", "was versteht man",
+        "ich habe eine frage", "ich möchte wissen", "ich will wissen",
+        "kannst du erklären", "bitte erkläre", "ich frage mich", "ich habe",
+            # Espagnol
+            "qué es", "qué son", "cómo funciona", "explica",
+        )
+        _is_expl_stream = any(_q_lower_for_intent.startswith(p) for p in _EXPL_PREFIXES_STREAM)
+        _slots_intent_val = (
+            slots.intent if isinstance(slots.intent, str)
+            else slots.intent.value if hasattr(slots.intent, "value")
+            else ""
+        ) if slots else ""
+
+        # Cas 1 : intent llm_explain (NLU certain) → _build_chat_answer immédiat
+        # Cas 2 : question explicative détectée par préfixe → idem
+        if (slots and _slots_intent_val == "llm_explain") or _is_expl_stream:
+            logger.info(f"[Stream] Route forcée → _build_chat_answer (llm_explain) : '{question[:60]}'")
+            yield await _sse({"type": "thinking", "content": "preparing"})
+            try:
+                answer = await _build_chat_answer(source_id_str, question, slots, lang=_response_lang)
+            except Exception as _e:
+                answer = f"Erreur : {_e}"
+            words = answer.split(" ")
+            for i, word in enumerate(words):
+                token = word + (" " if i < len(words) - 1 else "")
+                yield await _sse({"type": "token", "content": token})
+                await asyncio.sleep(0.015)
+            ms = int((_time.time() - t0) * 1000)
+            yield await _sse({"type": "done", "duration_ms": ms})
+            yield "data: [DONE]\n\n"
+            return
+
+        # ── Pré-check DirectSQL avant _NON_SQL_INTENTS ─────────────────────
+        # Si le NLU classifie greeting/help avec faible confiance (<0.7) mais
+        # qu'un pattern DirectSQL matche → priorité au SQL.
+        # Evite que "utilisateurs bloques" (greeting conf=0.59) retourne l'accueil.
+        # _is_explicative_question initialisé ici — redéfini plus bas avec la vraie valeur.
+        _is_explicative_question = False
+        _pre_direct_sql = None
+        _pre_direct_pat = None
+        _slots_intent_for_pre = (
+            slots.intent if isinstance(slots.intent, str)
+            else slots.intent.value if slots and hasattr(slots.intent, "value")
+            else ""
+        ) if slots else ""
+        _low_conf_intents = {"greeting", "help", "correct_sql", "unknown"}
+        _slots_conf = float(slots.confidence) if slots and hasattr(slots, "confidence") and slots.confidence else 0.0
+        if (_slots_intent_for_pre in _low_conf_intents and _slots_conf < 0.75
+                and not _is_explicative_question):
+            try:
+                from .agentic_rag import _find_direct_sql as _fds_pre
+                _pre_pat, _pre_sql, _pre_score = _fds_pre(question)
+                if _pre_sql and _pre_score >= 0.9:
+                    _pre_direct_sql = _pre_sql
+                    _pre_direct_pat = _pre_pat
+                    # Forcer l'intent → contourne le bloc _NON_SQL_INTENTS
+                    # et laisse DirectSQL Early (plus bas) gérer l'exécution
+                    if slots:
+                        slots.intent = "generate_aggregate"
+                    logger.info(
+                        f"[DirectSQL PreCheck] intent={_slots_intent_for_pre} "
+                        f"conf={_slots_conf:.2f} → override generate_aggregate "
+                        f"pattern='{_pre_pat}'"
+                    )
+            except Exception as _pre_e:
+                logger.debug(f"[DirectSQL PreCheck] skip: {_pre_e}")
+
         if slots and slots.intent in _NON_SQL_INTENTS and not _force_llm_stream:
             yield await _sse({"type": "thinking", "content": "preparing"})
             try:
-                answer = await _build_chat_answer(source_id_str, question)
+                answer = await _build_chat_answer(source_id_str, question, slots, lang=_response_lang)
             except Exception as _e:
                 answer = f"Erreur : {_e}"
             # Stream la réponse mot par mot (délai minimal)
@@ -3848,10 +4232,131 @@ SQL corrigé:"""
             # ── PRIORITÉ ABSOLUE : Pattern Direct SQL connu → bypass CRAG+LLM ─
             # Intercepte AVANT _is_complex_question et AVANT _use_agent_stream
             # Ex: "encaissements par banque", "flux trésorerie par banque", etc.
-            if not _is_dashboard_question:
+
+            # ── Guard explicatif : questions conceptuelles → ne PAS chercher DirectSQL ──
+            # Si la question commence par un préfixe explicatif, on laisse le NLU
+            # router vers llm_explain ou CRAG conceptuel — jamais vers DirectSQL.
+            _EXPLICATIVE_PREFIXES = (
+                # Français
+                "explique", "expliquer", "explication",
+                "comment fonctionne", "comment marche", "comment est",
+                "comment utilise", "comment puis",
+                "c'est quoi", "c'est quoi", "kesako",
+                "qu'est-ce que", "qu'est ce que",
+                "qu'est-ce qu'", "qu est ce que",
+                "que signifie", "que veut dire", "que represente",
+                "définition", "définis", "définis moi", "défini",
+                "dis-moi ce que", "dis moi ce que",
+                "à quoi sert", "a quoi sert",
+                "pourquoi", "dans quel but",
+                "présente-moi", "presente moi",
+                "décris", "décris-moi", "decris",
+                # Anglais
+                "what is", "what are", "what's", "what does", "what do",
+                "how does", "how do", "how is", "how are",
+                "tell me about", "explain", "describe",
+                "what exactly", "what kind", "what type",
+                "can you explain", "could you explain",
+                "define ", "definition of", "meaning of",
+        "i have a question", "i'd like to know", "i want to know",
+        "i want to understand", "can you tell", "could you tell",
+        "please explain", "please describe",
+                # Allemand
+                "was ist", "was sind", "was bedeutet", "was macht",
+                "wie funktioniert", "wie ist", "erkläre", "erklären",
+                "beschreibe", "was versteht man",
+        "ich habe eine frage", "ich möchte wissen", "ich will wissen",
+        "kannst du erklären", "bitte erkläre", "ich frage mich", "ich habe",
+                # Espagnol
+                "qué es", "qué son", "cómo funciona", "explica",
+            )
+            _q_stripped_lower = _q_lower_stream.strip()
+            _is_explicative_question = any(
+                _q_stripped_lower.startswith(pfx) for pfx in _EXPLICATIVE_PREFIXES
+            )
+
+            # ── Guard intent NLU : llm_explain uniquement ──────────────────────
+            # list_fields / describe_entity peuvent légitimement générer du SQL.
+            # Seul llm_explain est garanti non-SQL (questions conceptuelles pures).
+            # Seul llm_explain est garanti non-SQL (questions conceptuelles).
+            # greeting/help retirés : une question courte peut être classée
+            # greeting par erreur (ex: "utilisateurs bloques" → greeting 0.59)
+            # mais matcher un pattern DirectSQL valide — on laisse passer.
+            _NON_SQL_INTENTS_EARLY = {"llm_explain"}
+            _slots_intent_str = (
+                slots.intent if isinstance(slots.intent, str)
+                else slots.intent.value if hasattr(slots.intent, "value")
+                else ""
+            ) if slots else ""
+            _is_nlu_non_sql = _slots_intent_str in _NON_SQL_INTENTS_EARLY
+
+            if _is_explicative_question or _is_nlu_non_sql:
+                _reason = "question explicative" if _is_explicative_question else f"intent NLU={_slots_intent_str}"
+                logger.info(f"[DirectSQL Early] Ignoré — {_reason} : '{question[:60]}'")
+
+            logger.info(
+                f"[DirectSQL Gate] dashboard={_is_dashboard_question} "
+                f"explicative={_is_explicative_question} "
+                f"non_sql={_is_nlu_non_sql} "
+                f"pre_sql={'OUI' if _pre_direct_sql else 'NON'}"
+            )
+            # Détecter les questions composées dans le stream
+            import re as _re_stream_comp
+            _COMPOSITE_EARLY = _re_stream_comp.compile(
+                r'\b(vs\.?|versus|comparer?)\b|\bet\s+(?:leurs?|les\s+\w+\s+associe)',
+                _re_stream_comp.IGNORECASE
+            )
+            _is_composite_early = bool(_COMPOSITE_EARLY.search(question))
+
+            if not _is_dashboard_question and not _is_explicative_question and not _is_nlu_non_sql:
                 try:
-                    from .agentic_rag import _find_direct_sql, _tool_execute_sql
-                    _matched_pat, _direct_sql_early, _match_score_early = _find_direct_sql(question)
+                    from .agentic_rag import _find_direct_sql, _tool_execute_sql, SXA_DIRECT_SQL as _sds
+                    import unicodedata as _ud_early
+
+                    # ── Match exact sur la question complète → priorité absolue
+                    # Permet aux patterns composés (vs/et leurs) d'être trouvés
+                    # même si la question serait normalement bloquée comme composée
+                    _q_norm_early = question.lower().strip()
+                    _q_norm_early = _ud_early.normalize('NFD', _q_norm_early)
+                    _q_norm_early = ''.join(c for c in _q_norm_early if _ud_early.category(c) != 'Mn')
+                    _exact_pat_e, _exact_sql_e = None, None
+                    for _pe, _se in sorted(_sds.items(), key=lambda x: -len(x[0])):
+                        _pe_norm = _ud_early.normalize('NFD', _pe.lower())
+                        _pe_norm = ''.join(c for c in _pe_norm if _ud_early.category(c) != 'Mn')
+                        # Match STRICT : le pattern doit couvrir ≥ 70% de la question
+                        # ET si la question est composée (vs/et) le pattern doit aussi l'être
+                        _ratio = len(_pe_norm) / max(len(_q_norm_early), 1)
+                        _pat_has_vs = bool(_re_stream_comp.search(_pe_norm))
+                        _q_has_vs = _is_composite_early
+                        # Accepter seulement si :
+                        # - match exact total (pattern = question)
+                        # - OU pattern couvre ≥ 70% ET cohérence composé/simple
+                        if _pe_norm == _q_norm_early:
+                            _exact_pat_e, _exact_sql_e = _pe, _se
+                            break
+                        elif _pe_norm in _q_norm_early and _ratio >= 0.70:
+                            # Si question composée → pattern doit aussi être composé
+                            if _q_has_vs and not _pat_has_vs:
+                                continue  # pattern court dans question composée → skip
+                            _exact_pat_e, _exact_sql_e = _pe, _se
+                            break
+                    if _exact_sql_e:
+                        _matched_pat = _exact_pat_e
+                        _direct_sql_early = _exact_sql_e
+                        _match_score_early = 1.0
+                        logger.info(f"[DirectSQL Early] Match exact → pattern='{_exact_pat_e}'")
+                    # ── Si question composée sans match exact → laisser l'Orchestrateur
+                    elif _is_composite_early and not _pre_direct_sql:
+                        logger.info(f"[DirectSQL Early] Ignoré — question composée sans match exact")
+                        _matched_pat, _direct_sql_early, _match_score_early = None, None, 0.0
+                    # ── Sinon PreCheck ou recherche normale
+                    elif _pre_direct_sql and _pre_direct_pat:
+                        _matched_pat, _direct_sql_early, _match_score_early = (
+                            _pre_direct_pat, _pre_direct_sql, 1.0
+                        )
+                        logger.info(f"[DirectSQL Early] Injecté depuis PreCheck — pattern='{_pre_direct_pat}'")
+                    else:
+                        _matched_pat, _direct_sql_early, _match_score_early = _find_direct_sql(question)
                     if _matched_pat and _direct_sql_early:
                         logger.info(f"[DirectSQL Early] Pattern='{_matched_pat}' score={_match_score_early:.2f}")
                         _src_dict_early = {
@@ -3947,9 +4452,17 @@ SQL corrigé:"""
                         pass
 
                     yield await _sse({"type": "thinking", "content": "🤖 Orchestrateur Multi-Agent — analyse en cours…"})
+                    # Passer l'intent NLU à l'Orchestrateur pour bloquer
+                    # DirectSQL interne sur les questions conceptuelles
+                    _nlu_intent_for_orch = (
+                        slots.intent if isinstance(slots.intent, str)
+                        else slots.intent.value if slots and hasattr(slots.intent, "value")
+                        else ""
+                    ) if slots else ""
                     _orch_res = await run_orchestrator(
                         question=question, source_id=source_id,
                         pg_pool=_pool_agent, source_dict=_src_dict_stream, dialect=dialect,
+                        nlu_intent=_nlu_intent_for_orch,
                     )
                     if _orch_res.success and _orch_res.sql:
                         logger.info(
@@ -3970,7 +4483,10 @@ SQL corrigé:"""
                         else:
                             yield await _sse({"type": "sql", "content": _orch_res.sql, "method": _orch_res.method})
                         if _orch_res.warnings:
-                            for w in _orch_res.warnings:
+                            # Filtrer les warnings techniques non pertinents pour l'utilisateur
+                            _TECH_PREFIXES = ("amounts:", "years:", "filtres dynamiques", "Jaccard", "score=", "pattern=")
+                            _user_warnings = [w for w in _orch_res.warnings if not any(w.startswith(p) for p in _TECH_PREFIXES)]
+                            for w in _user_warnings:
                                 yield await _sse({"type": "warning", "content": w})
                         # ── Sauvegarde SQL pour correction interactive ────────
                         if _orch_res.sql:
@@ -4000,7 +4516,33 @@ SQL corrigé:"""
                         yield "data: [DONE]\n\n"
                         return
                     else:
-                        logger.info(f"[AgentRAG] Pas de résultat — fallback LLM")
+                        # ── Si refus intent non-SQL → _build_chat_answer, pas CRAG ──
+                        # L'Orchestrateur refuse via method="refused_non_sql_intent"
+                        # quand intent=llm_explain (questions conceptuelles).
+                        # Dans ce cas on doit router vers _build_chat_answer qui gère
+                        # proprement ces intents (liste champs, explication, etc.)
+                        if (hasattr(_orch_res, "method") and
+                                _orch_res.method == "refused_non_sql_intent"):
+                            logger.info(
+                                f"[AgentRAG] Refus non-SQL → _build_chat_answer "
+                                f"(intent={_nlu_intent_for_orch})"
+                            )
+                            yield await _sse({"type": "thinking", "content": "preparing"})
+                            try:
+                                _bca_answer = await _build_chat_answer(
+                                    source_id_str, question, slots
+                                )
+                            except Exception as _bca_e:
+                                _bca_answer = f"Erreur : {_bca_e}"
+                            for _bca_w in _bca_answer.split(" "):
+                                yield await _sse({"type": "token", "content": _bca_w + " "})
+                                await asyncio.sleep(0.015)
+                            ms = int((_time.time() - t0) * 1000)
+                            yield await _sse({"type": "done", "duration_ms": ms})
+                            yield "data: [DONE]\n\n"
+                            return
+                        else:
+                            logger.info(f"[AgentRAG] Pas de résultat — fallback LLM")
                 except Exception as _ae:
                     logger.warning(f"[AgentRAG] Échec stream, fallback LLM : {_ae}", exc_info=True)
 
@@ -4083,7 +4625,7 @@ SQL corrigé:"""
                         import httpx as _hx
                         _cp = (
                             f"Tu es un expert ERP et systèmes d'information. "
-                            f"Réponds en français à cette question de manière concise.\n"
+                            f"{_lang_instr(_response_lang)} à cette question de manière concise.\n"
                             f"Question : {event.get('content', question)}\n\n"
                             f"Réponds directement sans générer de SQL. 2-4 phrases maximum."
                         )
@@ -4118,6 +4660,20 @@ SQL corrigé:"""
                         skip_next_lang = False
                         continue
                     skip_next_lang = False
+                    # Filtrer les tokens descriptifs parasites générés par le LLM
+                    # avant le bloc SQL (ex: "SQL", "SUM de X groupé par Y", "Sélection des données...")
+                    import re as _re_tok
+                    _tok_low = tok_stripped.lower()
+                    _skip_desc = (
+                        _tok_low in ("sql", "sql:", "") or
+                        _re_tok.match(r'^(sum|count|avg|max|min)\s+de\s+', _tok_low) or
+                        _re_tok.match(r'^s[eé]lection\s+des\s+donn', _tok_low) or
+                        _re_tok.match(r'^(liste|affiche|montre|s[eé]lection)\s+de', _tok_low) or
+                        (_re_tok.search(r'group[eé]\s+par|groupé\s+par', _tok_low) and len(tok_stripped) < 120) or
+                        (_re_tok.search(r'[—–\-]\s*(top|s[eé]lection)', _tok_low) and len(tok_stripped) < 120)
+                    )
+                    if _skip_desc:
+                        continue
                     # Envoie le token au client
                     yield await _sse({"type": "token", "content": tok})
                 elif etype == "sql":
@@ -4126,7 +4682,7 @@ SQL corrigé:"""
                 elif etype == "error":
                     # LLM indisponible → fallback vers _build_chat_answer
                     yield await _sse({"type": "thinking", "content": "llm_offline"})
-                    answer = await _build_chat_answer(source_id_str, question)
+                    answer = await _build_chat_answer(source_id_str, question, slots, lang=_response_lang)
                     words = answer.split(" ")
                     for i, word in enumerate(words):
                         yield await _sse({"type": "token", "content": word + (" " if i < len(words)-1 else "")})
@@ -4138,11 +4694,74 @@ SQL corrigé:"""
                 elif etype == "done":
                     pass  # On envoie notre propre done après
 
-            # SQL final — on remplace tout ce qui a été affiché par le SQL propre
+            # ── Option D : Validation SQL avant affichage ────────────────
             ms = int((_time.time() - t0) * 1000)
             if collected_sql:
-                badge = "LLM+RAG" if "rag" in (method or "") else "LLM"
-                # Efface les tokens bruts et affiche le SQL nettoyé final
+                # Récupérer source_dict pour la validation
+                _val_src_dict = None
+                try:
+                    _val_src_dict = {
+                        "id":             source_id_str,
+                        "connector_type": source.connector_type.value if hasattr(source.connector_type, "value") else str(source.connector_type),
+                        "host":           source.host,
+                        "port":           source.port,
+                        "database_name":  source.database_name,
+                        "username":       source.username,
+                        "base_url":       getattr(source, "base_url", ""),
+                        "password":       "",
+                    }
+                    _val_pool = await get_pg_pool()
+                    async with _val_pool.acquire() as _vc:
+                        _vsec = await _vc.fetchrow(
+                            "SELECT secret_value FROM connection_secrets WHERE source_id=$1 AND secret_key='password'",
+                            source_id
+                        )
+                        if _vsec:
+                            _val_src_dict["password"] = _vsec["secret_value"]
+                except Exception as _ve:
+                    logger.debug(f"[Validation] source_dict error: {_ve}")
+
+                # Valider le SQL
+                _sql_ok = True
+                _sql_err = ""
+                if _val_src_dict:
+                    _sql_ok, _sql_err = await _validate_sql_quick(collected_sql, _val_src_dict, dialect)
+                    logger.info(f"[Validation] valid={_sql_ok} err={_sql_err[:100] if _sql_err else ''}")
+
+                # Si invalide → retry LLM avec le message d'erreur (max 2 retry)
+                _retry_count = 0
+                while not _sql_ok and _retry_count < 2 and _val_src_dict:
+                    _retry_count += 1
+                    logger.info(f"[Validation] Retry {_retry_count}/2 — erreur: {_sql_err[:120]}")
+                    yield await _sse({"type": "thinking", "content": "correction"})
+                    # Relancer le LLM avec l'erreur dans le contexte
+                    try:
+                        from .llm_engine import generate_sql_stream as _gss_retry
+                        _retry_sql = None
+                        _retry_q = f"{question}\n\n[CORRECTION] Le SQL précédent a échoué avec l'erreur: {_sql_err[:300]}\nSQL fautif: {collected_sql[:500]}\nGénère un SQL corrigé."
+                        async for _rev in _gss_retry(
+                            question=_retry_q, schema=schema, dialect=dialect,
+                            table_names=table_names_hint, pg_pool=pool,
+                            source_id=source_id_str, rag_context=None,
+                        ):
+                            if _rev.get("type") == "sql":
+                                _retry_sql = _rev.get("content", "")
+                            elif _rev.get("type") == "token":
+                                pass  # Ignorer les tokens du retry
+                        if _retry_sql and len(_retry_sql) > 10:
+                            _sql_ok2, _sql_err2 = await _validate_sql_quick(_retry_sql, _val_src_dict, dialect)
+                            if _sql_ok2:
+                                collected_sql = _retry_sql
+                                _sql_ok = True
+                                logger.info(f"[Validation] Retry {_retry_count} → succès")
+                            else:
+                                _sql_err = _sql_err2
+                                collected_sql = _retry_sql  # Garder quand même le dernier SQL
+                    except Exception as _re:
+                        logger.warning(f"[Validation] Retry error: {_re}")
+                        break
+
+                # Efface les tokens bruts et affiche le SQL validé
                 yield await _sse({"type": "replace", "content": f"```sql\n{collected_sql}\n```"})
 
             # ── Sprint 13 : Enregistrement résultat A/B ──────────────────────
@@ -4210,7 +4829,7 @@ SQL corrigé:"""
         # ── Phase 2 alt : Template SQLGenerator (requête simple) ──────
         yield await _sse({"type": "thinking", "content": "sql_template"})
         try:
-            answer = await _build_chat_answer(source_id_str, question)
+            answer = await _build_chat_answer(source_id_str, question, slots, lang=_response_lang)
         except Exception as _e:
             answer = f"Erreur : {_e}"
 

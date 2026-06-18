@@ -108,10 +108,14 @@ SXA_DIRECT_SQL = {
 
 
 
-    # ── Fix utilisateurs actifs + cov société générale ───────────────────────
+    # ── Fix utilisateurs actifs + bloqués ───────────────────────────────────
+    # NB : "utilisateurs bloqués" (avec accent) est normalisé en "utilisateurs bloques"
+    # et matche automatiquement via passe 2 (direction unique) → pas besoin de doublon.
     "utilisateurs actifs":               "SELECT TOP 100 [USR_ID], [CODE], [DESCRIPTION], [NAME], [EMAIL], [ISLOCKED], [FCSCODE] FROM [TH_USR] WHERE [ISLOCKED] = 0 ORDER BY [CODE]",
+    "utilisateurs bloques":              "SELECT TOP 100 [USR_ID], [CODE], [DESCRIPTION], [NAME], [EMAIL], [ISLOCKED], [FCSCODE] FROM [TH_USR] WHERE [ISLOCKED] = 1 ORDER BY [CODE]",
     "utilisateurs non bloques":          "SELECT TOP 100 [USR_ID], [CODE], [DESCRIPTION], [NAME], [EMAIL], [ISLOCKED], [FCSCODE] FROM [TH_USR] WHERE [ISLOCKED] = 0 ORDER BY [CODE]",
     "liste les utilisateurs actifs":     "SELECT TOP 100 [USR_ID], [CODE], [DESCRIPTION], [NAME], [EMAIL], [ISLOCKED], [FCSCODE] FROM [TH_USR] WHERE [ISLOCKED] = 0 ORDER BY [CODE]",
+    "liste les utilisateurs bloques":    "SELECT TOP 100 [USR_ID], [CODE], [DESCRIPTION], [NAME], [EMAIL], [ISLOCKED], [FCSCODE] FROM [TH_USR] WHERE [ISLOCKED] = 1 ORDER BY [CODE]",
 
     # ── Fix droits d'accès utilisateurs ─────────────────────────────────────
     "droits d'accès":                    "SELECT TOP 100 V.[USERCODE] AS Utilisateur, V.[COMPANYCODE] AS Société, U.[DESCRIPTION], U.[ISLOCKED] FROM [VDTSSXACOMPANYRIGHT] V JOIN [TH_USR] U ON V.[USERCODE] = U.[FCSCODE] ORDER BY V.[USERCODE]",
@@ -146,6 +150,12 @@ SXA_DIRECT_SQL = {
     "financements société générale":     "SELECT TOP 100 [TRN_ID], [Société], [Banque], [Montant], [type_transaction], [maturité], [état], [Date début], [Date fin] FROM [FINANCEMENT_BI] WHERE [Banque] LIKE '%Société Générale%' ORDER BY [Montant] DESC",
     "financements societe generale":     "SELECT TOP 100 [TRN_ID], [Société], [Banque], [Montant], [type_transaction], [maturité], [état], [Date début], [Date fin] FROM [FINANCEMENT_BI] WHERE [Banque] LIKE '%Société Générale%' ORDER BY [Montant] DESC",
     "financements sg":                   "SELECT TOP 100 [TRN_ID], [Société], [Banque], [Montant], [type_transaction], [maturité], [état], [Date début], [Date fin] FROM [FINANCEMENT_BI] WHERE [Banque] LIKE '%Société Générale%' ORDER BY [Montant] DESC",
+    "financements groupama":             "SELECT TOP 100 [TRN_ID], [Société], [Banque], [Montant], [type_transaction], [maturité], [état], [Date début], [Date fin] FROM [FINANCEMENT_BI] WHERE [Banque] LIKE '%Groupama%' ORDER BY [Montant] DESC",
+    "financements groupama banque":      "SELECT TOP 100 [TRN_ID], [Société], [Banque], [Montant], [type_transaction], [maturité], [état], [Date début], [Date fin] FROM [FINANCEMENT_BI] WHERE [Banque] LIKE '%Groupama%' ORDER BY [Montant] DESC",
+    "financements banque postale":       "SELECT TOP 100 [TRN_ID], [Société], [Banque], [Montant], [type_transaction], [maturité], [état], [Date début], [Date fin] FROM [FINANCEMENT_BI] WHERE [Banque] LIKE '%Banque Postale%' ORDER BY [Montant] DESC",
+    "financements la banque postale":    "SELECT TOP 100 [TRN_ID], [Société], [Banque], [Montant], [type_transaction], [maturité], [état], [Date début], [Date fin] FROM [FINANCEMENT_BI] WHERE [Banque] LIKE '%Banque Postale%' ORDER BY [Montant] DESC",
+    "financements banque populaire":     "SELECT TOP 100 [TRN_ID], [Société], [Banque], [Montant], [type_transaction], [maturité], [état], [Date début], [Date fin] FROM [FINANCEMENT_BI] WHERE [Banque] LIKE '%Banque Populaire%' ORDER BY [Montant] DESC",
+    "financements bpm":                  "SELECT TOP 100 [TRN_ID], [Société], [Banque], [Montant], [type_transaction], [maturité], [état], [Date début], [Date fin] FROM [FINANCEMENT_BI] WHERE [Banque] LIKE '%Banque Populaire%' ORDER BY [Montant] DESC",
 
     # ── Problème 3 fix : utilisateurs bloqués + sociétés ────────────────────
     "utilisateurs bloques et leurs societes": "SELECT TOP 100 U.[CODE], U.[DESCRIPTION], U.[ISLOCKED], V.[COMPANYCODE] AS Société FROM [TH_USR] U JOIN [VDTSSXACOMPANYRIGHT] V ON U.[FCSCODE] = V.[USERCODE] WHERE U.[ISLOCKED] = 1 ORDER BY U.[CODE]",
@@ -236,7 +246,19 @@ SXA_DIRECT_SQL = {
 
     # ── Utilisateurs — bonne table TH_USR
     "utilisateurs avec acces a sage":                   "SELECT TOP 100 V.[COMPANYCODE] AS Société, V.[USERCODE] AS Utilisateur, U.[CODE], U.[DESCRIPTION], U.[ISLOCKED] FROM [VDTSSXACOMPANYRIGHT] V JOIN [TH_USR] U ON V.[USERCODE] = U.[FCSCODE] WHERE V.[COMPANYCODE] = 'SAGE' ORDER BY V.[USERCODE]",
-    "utilisateurs crees apres 2024":                    "SELECT TOP 100 V.[COMPANYCODE] AS Société, V.[USERCODE] AS Utilisateur, U.[CODE], U.[DESCRIPTION] FROM [VDTSSXACOMPANYRIGHT] V JOIN [TH_USR] U ON V.[USERCODE] = U.[FCSCODE] ORDER BY V.[USERCODE]",
+    "utilisateurs crees apres 2024": "SELECT TOP 100 [USR_ID],[CODE],[NAME],[EMAIL],[CREATIONDATETIME] FROM [TH_USR] WHERE YEAR([CREATIONDATETIME]) >= 2024 ORDER BY [CREATIONDATETIME] DESC",
+    "utilisateurs crees apres janvier 2024": "SELECT TOP 100 [USR_ID],[CODE],[NAME],[EMAIL],[CREATIONDATETIME] FROM [TH_USR] WHERE [CREATIONDATETIME] >= CONVERT(datetime,'20240101') ORDER BY [CREATIONDATETIME] DESC",
+    "utilisateurs crees en 2022":            "SELECT TOP 100 [USR_ID],[CODE],[NAME],[EMAIL],[CREATIONDATETIME] FROM [TH_USR] WHERE YEAR([CREATIONDATETIME]) = 2022 ORDER BY [CREATIONDATETIME] DESC",
+    "utilisateurs crees en 2023":            "SELECT TOP 100 [USR_ID],[CODE],[NAME],[EMAIL],[CREATIONDATETIME] FROM [TH_USR] WHERE YEAR([CREATIONDATETIME]) = 2023 ORDER BY [CREATIONDATETIME] DESC",
+    "utilisateurs crees en 2024":            "SELECT TOP 100 [USR_ID],[CODE],[NAME],[EMAIL],[CREATIONDATETIME] FROM [TH_USR] WHERE YEAR([CREATIONDATETIME]) = 2024 ORDER BY [CREATIONDATETIME] DESC",
+    "utilisateurs crees en 2025":            "SELECT TOP 100 [USR_ID],[CODE],[NAME],[EMAIL],[CREATIONDATETIME] FROM [TH_USR] WHERE YEAR([CREATIONDATETIME]) = 2025 ORDER BY [CREATIONDATETIME] DESC",
+    "utilisateurs crees apres 2021":         "SELECT TOP 100 [USR_ID],[CODE],[NAME],[EMAIL],[CREATIONDATETIME] FROM [TH_USR] WHERE YEAR([CREATIONDATETIME]) >= 2021 ORDER BY [CREATIONDATETIME] DESC",
+    "utilisateurs crees apres 2022":         "SELECT TOP 100 [USR_ID],[CODE],[NAME],[EMAIL],[CREATIONDATETIME] FROM [TH_USR] WHERE YEAR([CREATIONDATETIME]) >= 2022 ORDER BY [CREATIONDATETIME] DESC",
+    "utilisateurs crees apres 2023":         "SELECT TOP 100 [USR_ID],[CODE],[NAME],[EMAIL],[CREATIONDATETIME] FROM [TH_USR] WHERE YEAR([CREATIONDATETIME]) >= 2023 ORDER BY [CREATIONDATETIME] DESC",
+    "utilisateurs créés en 2022":            "SELECT TOP 100 [USR_ID],[CODE],[NAME],[EMAIL],[CREATIONDATETIME] FROM [TH_USR] WHERE YEAR([CREATIONDATETIME]) = 2022 ORDER BY [CREATIONDATETIME] DESC",
+    "utilisateurs créés en 2023":            "SELECT TOP 100 [USR_ID],[CODE],[NAME],[EMAIL],[CREATIONDATETIME] FROM [TH_USR] WHERE YEAR([CREATIONDATETIME]) = 2023 ORDER BY [CREATIONDATETIME] DESC",
+    "utilisateurs créés après 2021":         "SELECT TOP 100 [USR_ID],[CODE],[NAME],[EMAIL],[CREATIONDATETIME] FROM [TH_USR] WHERE YEAR([CREATIONDATETIME]) >= 2021 ORDER BY [CREATIONDATETIME] DESC",
+    "utilisateurs créés après 2022":         "SELECT TOP 100 [USR_ID],[CODE],[NAME],[EMAIL],[CREATIONDATETIME] FROM [TH_USR] WHERE YEAR([CREATIONDATETIME]) >= 2022 ORDER BY [CREATIONDATETIME] DESC",
 
     # ── Q3 fix : utilisateurs avec accès à plus d'une société ────────────────
     # Tables valides : VDTSSXACOMPANYRIGHT (V) + TH_USR (U)
@@ -257,10 +279,276 @@ SXA_DIRECT_SQL = {
     "financements dont la maturité dépasse 5 ans par banque et groupe de sociétés": "SELECT TOP 100 [Banque], [Groupe_Sociétés], [Société], [Montant], [maturité], [Date début], [Date fin] FROM [FINANCEMENT_BI] WHERE DATEDIFF(YEAR, [Date début], [Date fin]) > 5 ORDER BY [Banque], [Groupe_Sociétés]",
     "utilisateurs créés après janvier 2024 avec accès à sage et profil admin": "SELECT TOP 100 V.[COMPANYCODE] AS Société, V.[USERCODE] AS Utilisateur, U.[CODE], U.[DESCRIPTION], U.[ISLOCKED] FROM [VDTSSXACOMPANYRIGHT] V JOIN [TH_USR] U ON V.[USERCODE] = U.[FCSCODE] WHERE V.[COMPANYCODE] = 'SAGE' ORDER BY V.[USERCODE]",
         "financements actifs":                 "SELECT TOP 100 [TRN_ID], [Société], [Banque], [Montant], [type_transaction], [état], [Date début], [Date fin] FROM [FINANCEMENT_BI] WHERE [état] = 'ouvert' ORDER BY [Date début] DESC",
-    "financements par banque":             "SELECT TOP 100 [Banque], COUNT(*) AS Nb_Financements, SUM([Montant]) AS Montant_Total FROM [FINANCEMENT_BI] GROUP BY [Banque] ORDER BY Montant_Total DESC",
+    "financements par banque":                    "SELECT TOP 100 [Banque], COUNT(*) AS Nb_Financements, SUM([Montant]) AS Montant_Total FROM [FINANCEMENT_BI] GROUP BY [Banque] ORDER BY Montant_Total DESC",
+    "financements par banque et par societe":     "SELECT TOP 100 [Banque], [Société], COUNT(*) AS Nb_Financements, SUM([Montant]) AS Montant_Total FROM [FINANCEMENT_BI] GROUP BY [Banque], [Société] ORDER BY Montant_Total DESC",
+    "financements par banque et par société":     "SELECT TOP 100 [Banque], [Société], COUNT(*) AS Nb_Financements, SUM([Montant]) AS Montant_Total FROM [FINANCEMENT_BI] GROUP BY [Banque], [Société] ORDER BY Montant_Total DESC",
+    "financements par banque et par type":        "SELECT TOP 100 [Banque], [type_transaction], COUNT(*) AS Nb_Financements, SUM([Montant]) AS Montant_Total FROM [FINANCEMENT_BI] GROUP BY [Banque], [type_transaction] ORDER BY Montant_Total DESC",
+    "top 10 financements par banque et par type": "SELECT TOP 10 [Banque], [type_transaction], COUNT(*) AS Nb_Financements, SUM([Montant]) AS Montant_Total FROM [FINANCEMENT_BI] GROUP BY [Banque], [type_transaction] ORDER BY Montant_Total DESC",
+    "top 10 financements par banque":             "SELECT TOP 10 [Banque], COUNT(*) AS Nb_Financements, SUM([Montant]) AS Montant_Total FROM [FINANCEMENT_BI] GROUP BY [Banque] ORDER BY Montant_Total DESC",
+
+    # ── Top N banques / sociétés ──────────────────────────────────────────────
+    "top 5 banques par montant total de financements actifs":  "SELECT TOP 5 [Banque], COUNT(*) AS Nb_Financements, SUM([Montant]) AS Montant_Total FROM [FINANCEMENT_BI] WHERE [état] = 'ouvert' GROUP BY [Banque] ORDER BY Montant_Total DESC",
+    "top 5 banques par montant total":                         "SELECT TOP 5 [Banque], SUM([Montant]) AS Montant_Total FROM [FINANCEMENT_BI] GROUP BY [Banque] ORDER BY Montant_Total DESC",
+    "top 5 banques par montant":                               "SELECT TOP 5 [Banque], SUM([Montant]) AS Montant_Total FROM [FINANCEMENT_BI] GROUP BY [Banque] ORDER BY Montant_Total DESC",
+    "top 5 banques financements actifs":                       "SELECT TOP 5 [Banque], COUNT(*) AS Nb_Financements, SUM([Montant]) AS Montant_Total FROM [FINANCEMENT_BI] WHERE [état] = 'ouvert' GROUP BY [Banque] ORDER BY Montant_Total DESC",
+    "top 3 banques par montant":                               "SELECT TOP 3 [Banque], SUM([Montant]) AS Montant_Total FROM [FINANCEMENT_BI] GROUP BY [Banque] ORDER BY Montant_Total DESC",
+    "top 10 banques par montant":                              "SELECT TOP 10 [Banque], SUM([Montant]) AS Montant_Total FROM [FINANCEMENT_BI] GROUP BY [Banque] ORDER BY Montant_Total DESC",
+
+    # ── Sous-requêtes avancées ────────────────────────────────────────────────
+    "financements dont le montant est superieur a la moyenne":  "SELECT TOP 100 [TRN_ID], [Banque], [Société], [Montant], [type_transaction], [état], [Date début], [Date fin] FROM [FINANCEMENT_BI] WHERE [Montant] > (SELECT AVG([Montant]) FROM [FINANCEMENT_BI]) ORDER BY [Montant] DESC",
+    "financements superieur a la moyenne":                      "SELECT TOP 100 [TRN_ID], [Banque], [Société], [Montant], [type_transaction], [état] FROM [FINANCEMENT_BI] WHERE [Montant] > (SELECT AVG([Montant]) FROM [FINANCEMENT_BI]) ORDER BY [Montant] DESC",
+    "financements au dessus de la moyenne":                     "SELECT TOP 100 [TRN_ID], [Banque], [Société], [Montant], [type_transaction], [état] FROM [FINANCEMENT_BI] WHERE [Montant] > (SELECT AVG([Montant]) FROM [FINANCEMENT_BI]) ORDER BY [Montant] DESC",
+    "montant superieur a la moyenne financement":               "SELECT TOP 100 [TRN_ID], [Banque], [Société], [Montant], [type_transaction], [état] FROM [FINANCEMENT_BI] WHERE [Montant] > (SELECT AVG([Montant]) FROM [FINANCEMENT_BI]) ORDER BY [Montant] DESC",
+    "financements dont la maturite depasse la duree moyenne":   "SELECT TOP 100 f.[TRN_ID], f.[Banque], f.[Société], f.[Montant], f.[type_transaction], f.[maturité], f.[état] FROM [FINANCEMENT_BI] f WHERE f.[maturité] > (SELECT AVG([maturité]) FROM [FINANCEMENT_BI]) ORDER BY f.[maturité] DESC",
+    "financements dont la maturite depasse la moyenne":         "SELECT TOP 100 f.[TRN_ID], f.[Banque], f.[Société], f.[Montant], f.[type_transaction], f.[maturité], f.[état] FROM [FINANCEMENT_BI] f WHERE f.[maturité] > (SELECT AVG([maturité]) FROM [FINANCEMENT_BI]) ORDER BY f.[maturité] DESC",
+    "maturite superieure a la moyenne":                         "SELECT TOP 100 [TRN_ID], [Banque], [Société], [Montant], [type_transaction], [maturité], [état] FROM [FINANCEMENT_BI] WHERE [maturité] > (SELECT AVG([maturité]) FROM [FINANCEMENT_BI]) ORDER BY [maturité] DESC",
+    "quels sont les financements dont la maturite depasse la duree moyenne des financements bnp": "SELECT TOP 100 f.[TRN_ID], f.[Banque], f.[Société], f.[Montant], f.[type_transaction], f.[maturité] FROM [FINANCEMENT_BI] f WHERE f.[maturité] > (SELECT AVG(b.[maturité]) FROM [FINANCEMENT_BI] b WHERE b.[Banque] LIKE '%BNP%') ORDER BY f.[maturité] DESC",
+    "repartition des financements par banque et par type": "SELECT TOP 100 [Banque], [type_transaction], COUNT(*) AS Nb_Financements, SUM([Montant]) AS Montant_Total FROM [FINANCEMENT_BI] GROUP BY [Banque], [type_transaction] ORDER BY [Banque], Montant_Total DESC",
+    "nombre de financements par banque et par societe":    "SELECT TOP 100 [Banque], [Société], COUNT(*) AS Nb_Financements FROM [FINANCEMENT_BI] GROUP BY [Banque], [Société] ORDER BY Nb_Financements DESC",
+    "evolution des financements par banque sur 2024":      "SELECT TOP 100 [Banque], MONTH([Date début]) AS Mois, COUNT(*) AS Nb_Financements, SUM([Montant]) AS Montant_Total FROM [FINANCEMENT_BI] WHERE YEAR([Date début]) = 2024 GROUP BY [Banque], MONTH([Date début]) ORDER BY [Banque], Mois",
+    "financements par banque et par devise en 2025":       "SELECT TOP 100 [Banque], [Devises du compte], SUM([Montant]) AS TotalMontant FROM [FINANCEMENT_BI] WHERE YEAR([Date début]) = 2025 GROUP BY [Banque], [Devises du compte] ORDER BY TotalMontant DESC",
     "groupe de financement":               "SELECT TOP 100 [Société], [Groupe_Sociétés], SUM([Montant]) AS Total FROM [FINANCEMENT_BI] GROUP BY [Société], [Groupe_Sociétés] ORDER BY Total DESC",
     "groupe des sociétés financement":       "SELECT TOP 100 [Groupe_Sociétés], [Société], SUM([Montant]) AS Total FROM [FINANCEMENT_BI] GROUP BY [Groupe_Sociétés], [Société] ORDER BY [Groupe_Sociétés], Total DESC",
     "toutes les banques":              "SELECT DISTINCT [Banque] FROM [Comptes] ORDER BY [Banque]",
+
+    # ── Patterns Multi-query composées ──────────────────────────────────────
+    # Ces patterns couvrent les questions composées avec vs / et leurs / et les
+    # Ils sont gérés via AgentRAG directement (pas l'Orchestrateur MultiQuery)
+
+    # Q1 : compare utilisateurs actifs vs bloques → résultat unifié COUNT par ISLOCKED
+    "compare les utilisateurs actifs vs les utilisateurs bloques": (
+        "SELECT [ISLOCKED] AS Statut_Numerique, "
+        "CASE WHEN [ISLOCKED]=0 THEN 'Actifs' ELSE 'Bloques' END AS Statut, "
+        "COUNT(*) AS Nombre "
+        "FROM [TH_USR] "
+        "GROUP BY [ISLOCKED] "
+        "ORDER BY [ISLOCKED]"
+    ),
+    "utilisateurs actifs vs utilisateurs bloques": (
+        "SELECT CASE WHEN [ISLOCKED]=0 THEN 'Actifs' ELSE 'Bloques' END AS Statut, "
+        "COUNT(*) AS Nombre "
+        "FROM [TH_USR] "
+        "GROUP BY [ISLOCKED] "
+        "ORDER BY [ISLOCKED]"
+    ),
+    "compare utilisateurs actifs vs bloques": (
+        "SELECT CASE WHEN [ISLOCKED]=0 THEN 'Actifs' ELSE 'Bloques' END AS Statut, "
+        "COUNT(*) AS Nombre "
+        "FROM [TH_USR] "
+        "GROUP BY [ISLOCKED] "
+        "ORDER BY [ISLOCKED]"
+    ),
+    "utilisateurs actifs vs bloques": (
+        "SELECT CASE WHEN [ISLOCKED]=0 THEN 'Actifs' ELSE 'Bloques' END AS Statut, "
+        "COUNT(*) AS Nombre "
+        "FROM [TH_USR] "
+        "GROUP BY [ISLOCKED] "
+        "ORDER BY [ISLOCKED]"
+    ),
+
+    # Q2 : compare financements ouverts vs clotures → UNION ou GROUP BY état
+    "compare les financements ouverts vs les financements clotures": (
+        "SELECT [état], COUNT(*) AS Nombre, SUM([Montant]) AS Total, "
+        "AVG([Montant]) AS Moyenne "
+        "FROM [FINANCEMENT_BI] "
+        "WHERE [état] IN ('ouvert', 'clôturé') "
+        "GROUP BY [état] "
+        "ORDER BY [état]"
+    ),
+    "financements ouverts vs financements clotures": (
+        "SELECT [état], COUNT(*) AS Nombre, SUM([Montant]) AS Total "
+        "FROM [FINANCEMENT_BI] "
+        "WHERE [état] IN ('ouvert', 'clôturé') "
+        "GROUP BY [état] "
+        "ORDER BY [état]"
+    ),
+    "financements ouverts vs clotures": (
+        "SELECT [état], COUNT(*) AS Nombre, SUM([Montant]) AS Total "
+        "FROM [FINANCEMENT_BI] "
+        "WHERE [état] IN ('ouvert', 'clôturé') "
+        "GROUP BY [état] "
+        "ORDER BY [état]"
+    ),
+
+    # Q4 : utilisateurs actifs et leurs droits d'accès → JOIN VDTSSXACOMPANYRIGHT
+    "utilisateurs actifs et leurs droits d'acces": (
+        "SELECT TOP 100 U.[CODE], U.[NAME], U.[EMAIL], "
+        "V.[COMPANYCODE] AS Societe, U.[ISLOCKED] "
+        "FROM [TH_USR] U "
+        "LEFT JOIN [VDTSSXACOMPANYRIGHT] V ON U.[FCSCODE] = V.[USERCODE] "
+        "WHERE U.[ISLOCKED] = 0 "
+        "ORDER BY U.[CODE]"
+    ),
+    "utilisateurs actifs et leurs droits": (
+        "SELECT TOP 100 U.[CODE], U.[NAME], U.[EMAIL], "
+        "V.[COMPANYCODE] AS Societe, U.[ISLOCKED] "
+        "FROM [TH_USR] U "
+        "LEFT JOIN [VDTSSXACOMPANYRIGHT] V ON U.[FCSCODE] = V.[USERCODE] "
+        "WHERE U.[ISLOCKED] = 0 "
+        "ORDER BY U.[CODE]"
+    ),
+
+    # Q5 : solde EUR et total transactions USD → UNION ALL
+    "solde des comptes eur et total des transactions usd": (
+        "SELECT 'Solde EUR' AS Type, [Société], [Banque], "
+        "SUM([CLOSINGBALANCEAMOUNT]) AS Montant "
+        "FROM [Dernière integration bancaire] "
+        "WHERE [Devises] = 'EUR' "
+        "GROUP BY [Société], [Banque] "
+        "UNION ALL "
+        "SELECT 'Total USD' AS Type, [Société], [Banque], "
+        "SUM([AMOUNT]) AS Montant "
+        "FROM [Transactions bancaires] "
+        "WHERE [CUR_ID_TRNCURRENCY] = 'USD' "
+        "GROUP BY [Société], [Banque] "
+        "ORDER BY Type, Montant DESC"
+    ),
+    "solde comptes eur et total transactions usd": (
+        "SELECT 'Solde EUR' AS Type, [Société], [Banque], "
+        "SUM([CLOSINGBALANCEAMOUNT]) AS Montant "
+        "FROM [Dernière integration bancaire] "
+        "WHERE [Devises] = 'EUR' "
+        "GROUP BY [Société], [Banque] "
+        "UNION ALL "
+        "SELECT 'Total USD' AS Type, [Société], [Banque], "
+        "SUM([AMOUNT]) AS Montant "
+        "FROM [Transactions bancaires] "
+        "WHERE [CUR_ID_TRNCURRENCY] = 'USD' "
+        "GROUP BY [Société], [Banque] "
+        "ORDER BY Type, Montant DESC"
+    ),
+
+    # Q6 : financements actifs et les comptes associés → LEFT JOIN
+    "financements actifs et les comptes associes": (
+        "SELECT TOP 100 F.[TRN_ID], F.[Banque], F.[Société], "
+        "F.[Montant], F.[type_transaction], F.[état], "
+        "C.[CODE] AS Compte, C.[DESCRIPTION] AS Desc_Compte "
+        "FROM [FINANCEMENT_BI] F "
+        "LEFT JOIN [Comptes] C ON F.[Banque] = C.[Banque] AND F.[Société] = C.[Société] "
+        "WHERE F.[état] = 'ouvert' "
+        "ORDER BY F.[Montant] DESC"
+    ),
+    "financements actifs et comptes associes": (
+        "SELECT TOP 100 F.[TRN_ID], F.[Banque], F.[Société], "
+        "F.[Montant], F.[type_transaction], "
+        "C.[CODE] AS Compte "
+        "FROM [FINANCEMENT_BI] F "
+        "LEFT JOIN [Comptes] C ON F.[Banque] = C.[Banque] AND F.[Société] = C.[Société] "
+        "WHERE F.[état] = 'ouvert' "
+        "ORDER BY F.[Montant] DESC"
+    ),
+
+    # Q7 : banques et devises associées
+    "liste les banques et les devises associees": (
+        "SELECT DISTINCT [Banque], [Devises] "
+        "FROM [Comptes] "
+        "ORDER BY [Banque], [Devises]"
+    ),
+    "banques et les devises associees": (
+        "SELECT DISTINCT [Banque], [Devises] "
+        "FROM [Comptes] "
+        "ORDER BY [Banque], [Devises]"
+    ),
+    "banques et devises": (
+        "SELECT DISTINCT [Banque], [Devises] "
+        "FROM [Comptes] "
+        "ORDER BY [Banque], [Devises]"
+    ),
+
+    # ── Sous-requêtes avancées — patterns spécifiques manquants ─────────────
+    # Ces patterns doivent être AVANT les patterns courts pour éviter les faux positifs
+
+    # Q5 : financements dont le montant dépasse la moyenne PAR BANQUE (partition)
+    "financements dont le montant depasse la moyenne par banque": (
+        "SELECT TOP 100 f.[TRN_ID], f.[Banque], f.[Société], f.[Montant], "
+        "f.[type_transaction], f.[état] FROM [FINANCEMENT_BI] f "
+        "WHERE f.[Montant] > (SELECT AVG(f2.[Montant]) FROM [FINANCEMENT_BI] f2 "
+        "WHERE f2.[Banque] = f.[Banque]) ORDER BY f.[Banque], f.[Montant] DESC"
+    ),
+    "financements montant superieur moyenne par banque": (
+        "SELECT TOP 100 f.[TRN_ID], f.[Banque], f.[Société], f.[Montant], "
+        "f.[type_transaction], f.[état] FROM [FINANCEMENT_BI] f "
+        "WHERE f.[Montant] > (SELECT AVG(f2.[Montant]) FROM [FINANCEMENT_BI] f2 "
+        "WHERE f2.[Banque] = f.[Banque]) ORDER BY f.[Banque], f.[Montant] DESC"
+    ),
+
+    # Q6 : sociétés avec solde supérieur à la médiane (approximée par PERCENTILE_CONT)
+    "societes avec un solde superieur a la mediane": (
+        "SELECT [Société], AVG([CLOSINGBALANCEAMOUNT]) AS SoldeMoyen "
+        "FROM [Dernière integration bancaire] "
+        "GROUP BY [Société] "
+        "HAVING AVG([CLOSINGBALANCEAMOUNT]) > ("
+        "SELECT AVG([CLOSINGBALANCEAMOUNT]) FROM [Dernière integration bancaire]) "
+        "ORDER BY SoldeMoyen DESC"
+    ),
+    "societes solde superieur mediane": (
+        "SELECT [Société], AVG([CLOSINGBALANCEAMOUNT]) AS SoldeMoyen "
+        "FROM [Dernière integration bancaire] "
+        "GROUP BY [Société] "
+        "HAVING AVG([CLOSINGBALANCEAMOUNT]) > ("
+        "SELECT AVG([CLOSINGBALANCEAMOUNT]) FROM [Dernière integration bancaire]) "
+        "ORDER BY SoldeMoyen DESC"
+    ),
+    "solde superieur a la mediane": (
+        "SELECT [Société], AVG([CLOSINGBALANCEAMOUNT]) AS SoldeMoyen "
+        "FROM [Dernière integration bancaire] "
+        "GROUP BY [Société] "
+        "HAVING AVG([CLOSINGBALANCEAMOUNT]) > ("
+        "SELECT AVG([CLOSINGBALANCEAMOUNT]) FROM [Dernière integration bancaire]) "
+        "ORDER BY SoldeMoyen DESC"
+    ),
+
+    # Q7 : banques dont le nombre de financements actifs dépasse la moyenne globale
+    "banques dont le nombre de financements actifs depasse la moyenne globale": (
+        "SELECT [Banque], COUNT(*) AS Nb_Financements_Actifs "
+        "FROM [FINANCEMENT_BI] WHERE [état] = 'ouvert' "
+        "GROUP BY [Banque] "
+        "HAVING COUNT(*) > (SELECT AVG(cnt) FROM ("
+        "SELECT COUNT(*) AS cnt FROM [FINANCEMENT_BI] WHERE [état] = 'ouvert' "
+        "GROUP BY [Banque]) AS sub) "
+        "ORDER BY Nb_Financements_Actifs DESC"
+    ),
+    "banques nombre financements actifs depasse moyenne": (
+        "SELECT [Banque], COUNT(*) AS Nb_Financements_Actifs "
+        "FROM [FINANCEMENT_BI] WHERE [état] = 'ouvert' "
+        "GROUP BY [Banque] "
+        "HAVING COUNT(*) > (SELECT AVG(cnt) FROM ("
+        "SELECT COUNT(*) AS cnt FROM [FINANCEMENT_BI] WHERE [état] = 'ouvert' "
+        "GROUP BY [Banque]) AS sub) "
+        "ORDER BY Nb_Financements_Actifs DESC"
+    ),
+    "nombre de financements actifs depasse la moyenne": (
+        "SELECT [Banque], COUNT(*) AS Nb_Financements_Actifs "
+        "FROM [FINANCEMENT_BI] WHERE [état] = 'ouvert' "
+        "GROUP BY [Banque] "
+        "HAVING COUNT(*) > (SELECT AVG(cnt) FROM ("
+        "SELECT COUNT(*) AS cnt FROM [FINANCEMENT_BI] WHERE [état] = 'ouvert' "
+        "GROUP BY [Banque]) AS sub) "
+        "ORDER BY Nb_Financements_Actifs DESC"
+    ),
+
+    # Q8 : top 3 types de transactions par montant moyen
+    "top 3 types de transactions par montant moyen": (
+        "SELECT TOP 3 [type_transaction], "
+        "AVG([Montant]) AS Montant_Moyen, COUNT(*) AS Nb, SUM([Montant]) AS Total "
+        "FROM [FINANCEMENT_BI] "
+        "GROUP BY [type_transaction] "
+        "ORDER BY Montant_Moyen DESC"
+    ),
+    "top 3 types transactions montant moyen": (
+        "SELECT TOP 3 [type_transaction], "
+        "AVG([Montant]) AS Montant_Moyen, COUNT(*) AS Nb, SUM([Montant]) AS Total "
+        "FROM [FINANCEMENT_BI] "
+        "GROUP BY [type_transaction] "
+        "ORDER BY Montant_Moyen DESC"
+    ),
+    "types de transactions par montant moyen": (
+        "SELECT TOP 10 [type_transaction], "
+        "AVG([Montant]) AS Montant_Moyen, COUNT(*) AS Nb "
+        "FROM [FINANCEMENT_BI] "
+        "GROUP BY [type_transaction] "
+        "ORDER BY Montant_Moyen DESC"
+    ),
 
     # ── Requêtes agrégées fréquentes — évite hallucination colonnes ──────────
     "nombre de comptes par banque":        "SELECT [Banque], COUNT(*) AS Nombre_Comptes FROM [Comptes] GROUP BY [Banque] ORDER BY Nombre_Comptes DESC",
@@ -494,7 +782,110 @@ def _jaccard(a: set, b: set) -> float:
     return inter / union if union > 0 else 0.0
 
 
-def _find_direct_sql(question: str, threshold: float = 0.35) -> tuple[str | None, str | None, float]:
+def _parse_date_filter(q: str):
+    """Parse dynamiquement les questions de type 'utilisateurs créés après [mois] [année]'."""
+    import re, unicodedata
+
+    def _n(s):
+        s = unicodedata.normalize("NFD", s.lower())
+        return "".join(c for c in s if unicodedata.category(c) != "Mn")
+
+    MOIS = {
+        "janvier":"01","fevrier":"02","mars":"03","avril":"04",
+        "mai":"05","juin":"06","juillet":"07","aout":"08",
+        "septembre":"09","octobre":"10","novembre":"11","decembre":"12"
+    }
+    qn = _n(q)
+    BASE = "SELECT TOP 100 [USR_ID],[CODE],[NAME],[EMAIL],[CREATIONDATETIME] FROM [TH_USR]"
+
+    # "créés après mars 2023"
+    m = re.search(r"crees? apres? ([a-z]+) (\d{4})", qn)
+    if m:
+        mois = MOIS.get(m.group(1), "01")
+        annee = m.group(2)
+        return f"{BASE} WHERE [CREATIONDATETIME] >= CONVERT(datetime,\'{annee}{mois}01\') ORDER BY [CREATIONDATETIME] DESC"
+
+    # "créés en 2023"
+    m = re.search(r"crees? en (\d{4})", qn)
+    if m:
+        return f"{BASE} WHERE YEAR([CREATIONDATETIME]) = {m.group(1)} ORDER BY [CREATIONDATETIME] DESC"
+
+    # "créés après 2023"
+    m = re.search(r"crees? apres? (\d{4})", qn)
+    if m:
+        return f"{BASE} WHERE YEAR([CREATIONDATETIME]) >= {m.group(1)} ORDER BY [CREATIONDATETIME] DESC"
+
+    # ── Patterns génériques FINANCEMENT_BI ───────────────────────────────────
+
+    # "evolution des financements par banque sur [année]"
+    m = re.search(r"evolution.{0,20}financements?.{0,20}banque.{0,20}(?:sur|en|pour|de) (\d{4})", qn)
+    if m:
+        annee = m.group(1)
+        return (f"SELECT TOP 100 [Banque], MONTH([Date début]) AS Mois, "
+                f"COUNT(*) AS Nb_Financements, SUM([Montant]) AS Montant_Total "
+                f"FROM [FINANCEMENT_BI] WHERE YEAR([Date début]) = {annee} "
+                f"GROUP BY [Banque], MONTH([Date début]) ORDER BY [Banque], Mois")
+
+    # "financements par banque et par devise en [année]"
+    m = re.search(r"financements?.{0,20}banque.{0,20}devise.{0,10}(?:en|sur|pour|de) (\d{4})", qn)
+    if m:
+        annee = m.group(1)
+        return (f"SELECT TOP 100 [Banque], [Devises du compte], SUM([Montant]) AS TotalMontant "
+                f"FROM [FINANCEMENT_BI] WHERE YEAR([Date début]) = {annee} "
+                f"GROUP BY [Banque], [Devises du compte] ORDER BY TotalMontant DESC")
+
+    # "total des financements par banque et par devise en [année]"
+    m = re.search(r"total.{0,20}financements?.{0,20}banque.{0,20}devise.{0,10}(?:en|sur|pour|de) (\d{4})", qn)
+    if m:
+        annee = m.group(1)
+        return (f"SELECT TOP 100 [Banque], [Devises du compte], SUM([Montant]) AS TotalMontant "
+                f"FROM [FINANCEMENT_BI] WHERE YEAR([Date début]) = {annee} "
+                f"GROUP BY [Banque], [Devises du compte] ORDER BY TotalMontant DESC")
+
+    # "total des financements par banque et par type en [année]" / "sur [année]"
+    m = re.search(r"(?:total|repartition).{0,20}financements?.{0,20}banque.{0,20}type.{0,10}(?:en|sur|pour|de) (\d{4})", qn)
+    if m:
+        annee = m.group(1)
+        return (f"SELECT TOP 100 [Banque], [type_transaction], COUNT(*) AS Nb, SUM([Montant]) AS Total "
+                f"FROM [FINANCEMENT_BI] WHERE YEAR([Date début]) = {annee} "
+                f"GROUP BY [Banque], [type_transaction] ORDER BY Total DESC")
+
+    return None
+
+
+# Mots-clés indiquant une question complexe qui ne doit PAS être interceptée par Direct SQL
+_COMPLEX_KEYWORDS = [
+    "répartition", "repartition", "analyse", "distribution", "ventilation",
+    "dépasse", "depasse", "supérieur", "superieur", "inférieur", "inferieur",
+    "moyenne", "fois la", "fois le", "x fois", "seuil",
+    "tendance", "évolution", "evolution", "trimestre", "quarter",
+    "corrélation", "correlation", "comparaison", "compare",
+    "par devise et", "par société et", "par banque et",
+    "groupe par", "groupé par", "having", "sous-requête",
+    "maximum", "minimum", "rang", "classement", "percentile",
+]
+
+def _is_complex_question(question: str) -> bool:
+    """Détecte si une question est trop complexe pour Direct SQL."""
+    q_lower = question.lower()
+    # Question avec plusieurs dimensions ET un verbe d'analyse
+    has_analysis = any(k in q_lower for k in [
+        "répartition", "repartition", "analyse", "tendance", "évolution",
+        "distribution", "ventilation", "dépasse", "depasse", "fois la",
+        "moyenne sectorielle", "corrélation"
+    ])
+    # Question avec HAVING implicite
+    has_having = any(k in q_lower for k in [
+        "dépasse", "depasse", "supérieur à la moyenne", "superieur a la moyenne",
+        "fois la moyenne", "au-dessus", "en dessous", "seuil"
+    ])
+    # Question avec agrégation multiple (par X et par Y)
+    has_multi_group = bool(
+        __import__('re').search(r'par\s+\w+\s+et\s+par\s+\w+', q_lower)
+    )
+    return has_analysis or has_having or has_multi_group
+
+def _find_direct_sql(question: str, threshold: float = 0.55) -> tuple[str | None, str | None, float]:
     """
     Cherche le meilleur pattern SXA_DIRECT_SQL pour une question.
 
@@ -512,9 +903,22 @@ def _find_direct_sql(question: str, threshold: float = 0.35) -> tuple[str | None
     Returns:
         (pattern_matched, sql, score)  — sql=None si aucun match ou filtres dynamiques
     """
+    # ── Garde complexité : questions analytiques → bypass Direct SQL ──────
+    if _is_complex_question(question):
+        import logging as _log
+        _log.getLogger(__name__).debug(
+            f"[DirectSQL] Question complexe détectée → bypass: '{question[:60]}'"
+        )
+        return None, None, 0.0
+
     import re as _re_cov
     q_lower = question.lower()
     q_norm  = _normalize_question(question)
+
+    # ── Parsing dynamique dates (créés après/en [mois] [année]) ─────────────
+    _date_sql = _parse_date_filter(question)
+    if _date_sql:
+        return "utilisateurs_date_dynamique", _date_sql, 1.0
 
     # ── Garde-fou : détecter les filtres dynamiques ──────────────────────────
     has_dynamic, dynamic_reasons = _has_dynamic_filters(question)
@@ -615,8 +1019,25 @@ def _find_direct_sql(question: str, threshold: float = 0.35) -> tuple[str | None
             pass
 
     # ── Passe 1 : exact substring (comportement Sprint 8 original) ──────────
+    # Garde-fou : les patterns très courts (<= 15 chars) sont bloqués si la question
+    # contient des mots sous-requête — risque de faux positif (ex: "financement" dans
+    # "financements dont le montant dépasse la moyenne par banque")
+    _SUBQUERY_KW = {
+        "depasse", "superieur", "superieure", "inferieur", "inferieure",
+        "moyenne", "mediane", "median", "percentile", "having", "partition",
+        "dont le montant", "dont la maturite", "dont le nombre",
+    }
+    _has_subquery_kw = any(kw in q_norm for kw in _SUBQUERY_KW)
+
     for pattern, sql in sorted(SXA_DIRECT_SQL.items(), key=lambda x: -len(x[0])):
         if pattern in q_lower:
+            # Bloquer les patterns courts si la question est une sous-requête complexe
+            if _has_subquery_kw and len(pattern) <= 15:
+                logger.debug(
+                    f"[AgentRAG] P1 bloqué — pattern court '{pattern}' "
+                    f"sur question sous-requête complexe"
+                )
+                continue
             if _pattern_covers_filters(pattern):
                 return pattern, sql, 1.0
             else:
@@ -627,9 +1048,15 @@ def _find_direct_sql(question: str, threshold: float = 0.35) -> tuple[str | None
                 return None, None, 0.0  # filtres dynamiques → ReAct obligatoire
 
     # ── Passe 2 : substring après normalisation des synonymes ───────────────
+    # RÈGLE : le pattern doit être contenu dans la question (pas l'inverse).
+    # On trie par longueur décroissante → le pattern le plus spécifique gagne.
+    # On exclut les patterns beaucoup plus longs que la question (faux positifs
+    # du type "utilisateurs bloques et leurs societes" qui contient "utilisateurs bloques").
     for pattern, sql in sorted(SXA_DIRECT_SQL.items(), key=lambda x: -len(x[0])):
         pat_norm = _normalize_question(pattern)
-        if pat_norm and (pat_norm in q_norm or q_norm in pat_norm):
+        # Le pattern doit être contenu dans la question (direction unique)
+        # ET ne doit pas être beaucoup plus long que la question (évite faux positifs)
+        if pat_norm and pat_norm in q_norm and len(pat_norm) <= len(q_norm) + 5:
             if _pattern_covers_filters(pattern):
                 return pattern, sql, 0.95
             else:

@@ -66,7 +66,7 @@ class MultiQueryAgent:
 
         # ── Exécution parallèle ───────────────────────────────────────────────
         tasks = [
-            self._run_sub_query(sq_text, idx)
+            self._run_sub_query(sq_text, idx, original_question=original_question)
             for idx, sq_text in enumerate(sub_questions)
         ]
         sub_results: List[SubQuery] = await asyncio.gather(*tasks)
@@ -82,7 +82,9 @@ class MultiQueryAgent:
         )
         return fused
 
-    async def _run_sub_query(self, question: str, idx: int) -> SubQuery:
+    async def _run_sub_query(
+        self, question: str, idx: int, original_question: str = ""
+    ) -> SubQuery:
         """
         Exécute une sous-question individuelle.
         Essaie DirectSQL d'abord, puis ReAct avec max 3 itérations.
@@ -96,6 +98,40 @@ class MultiQueryAgent:
             r'^(compare[rz]?\s+|comparer\s+)',
             '', question.strip(), flags=re.IGNORECASE
         ).strip()
+
+        # ── Enrichissement des sous-questions trop courtes ──────────────────
+        # Ex : "compare financements BNP vs SG vs Groupama vs BPM"
+        #      → sous-questions ["financements BNP", "SG", "Groupama", "BPM"]
+        # "SG" seul est ambigu → enrichir avec le SUJET GÉNÉRIQUE (sans nom propre)
+        # Stratégie : extraire les mots communs (minuscules) de la première sous-question
+        if len(question.split()) < 3 and original_question:
+            # Extraire le sujet générique = mots en minuscules avant le premier nom propre
+            # Ex: "financements BNP" → "financements" (BNP est majuscule = nom propre)
+            # Ex: "comptes BNP" → "comptes"
+            _first_sub = re.sub(
+                r'^(?:compare[rz]?\s+)', '', original_question.strip(), flags=re.IGNORECASE
+            ).split()[0] if original_question else ""
+            # Chercher les mots génériques (non-capitalisés) avant le premier vs
+            _subj_match = re.match(
+                r'^(?:compare[rz]?\s+)?([a-zàâäéèêëîïôùûü][a-zàâäéèêëîïôùûü\s]{1,20}?)(?:\s+[A-Z]|\s+(?:vs\.?|versus))',
+                original_question, re.IGNORECASE
+            )
+            if _subj_match:
+                _subj = _subj_match.group(1).strip()
+                # Retirer les mots introducteurs
+                _subj = re.sub(r'^(?:compare[rz]?|les|des|le|la)\s+', '', _subj, flags=re.IGNORECASE).strip()
+                if _subj and _subj.lower() not in question.lower() and len(_subj) > 2:
+                    question = f"{_subj} {question}"
+                    logger.info(
+                        f"[MultiQuery] SQ{idx+1} enrichie : '{question[:60]}'"
+                    )
+            elif _first_sub and len(_first_sub) > 2 and _first_sub.islower():
+                # Fallback : premier mot en minuscule
+                if _first_sub not in question.lower():
+                    question = f"{_first_sub} {question}"
+                    logger.info(
+                        f"[MultiQuery] SQ{idx+1} enrichie (fallback) : '{question[:60]}'"
+                    )
 
         sq = SubQuery(text=question)
 

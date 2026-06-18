@@ -636,7 +636,15 @@ async def profile_entity(source_id: UUID, entity_name: str,
             _sync_profile_file, source_dict, entity_name, fields, sample_size)
         # PATCH P9 — enrichissement métadonnées Excel
         if result and not result.get("error"):
-            file_path = (source_dict.get("options") or {}).get("file_path") or                         source_dict.get("base_url", "")
+            # FIX — options peut être un string JSON (asyncpg jsonb → str)
+            _opts = source_dict.get("options") or {}
+            if isinstance(_opts, str):
+                import json as _json
+                try:
+                    _opts = _json.loads(_opts)
+                except Exception:
+                    _opts = {}
+            file_path = _opts.get("file_path") or source_dict.get("base_url", "")
             if file_path and file_path.lower().endswith((".xlsx", ".xlsm", ".xls")):
                 try:
                     excel_meta = extract_excel_metadata(file_path)

@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OnePilot — Connexion</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ── Variables — identiques à chat.html ── */
+:root {
+  --bg-0:#060a0e;--bg-1:#0a0f16;--bg-2:#0d1520;--bg-3:#111c29;--bg-4:#172435;
+  --border:#182336;--border-hi:#1f2f45;
+  --text-0:#f0f6fa;--text-1:#a8c8dc;--text-2:#5a7d96;--text-3:#324d63;
+  --accent:#00c8f5;--accent-dim:#0088bb;--accent-glow:rgba(0,200,245,0.12);
+  --accent2:#2d72ff;--accent2-glow:rgba(45,114,255,0.1);
+  --red:#f87171;--green:#34d399;
+  --font-sans:"Inter",-apple-system,BlinkMacSystemFont,sans-serif;
+  --font-mono:"JetBrains Mono",monospace;
+  --r:10px;--transition:all .15s ease;
+}
+html.light {
+  --bg-0:#eef2f7;--bg-1:#f8fafc;--bg-2:#f1f5f9;--bg-3:#e4edf6;--bg-4:#d6e4f0;
+  --border:#c5d8e8;--border-hi:#a6bdd1;
+  --text-0:#0a0d10;--text-1:#1a2e3d;--text-2:#3d5a70;--text-3:#6a8fa6;
+  --accent:#006eb8;--accent-dim:#005590;--accent-glow:rgba(0,110,184,.09);
+  --accent2:#2860d6;--accent2-glow:rgba(40,96,214,.09);
+  --red:#dc2626;--green:#059669;
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+
+html,body {
+  height:100%;
+  background:var(--bg-0);
+  color:var(--text-0);
+  font-family:var(--font-sans);
+  font-size:14px;
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ── Background animé ── */
+.bg-canvas {
+  position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:0;
+}
+.bg-dot {
+  position:absolute;border-radius:50%;
+  background:radial-gradient(circle,rgba(0,200,245,.08) 0%,transparent 70%);
+  animation:pulse 8s ease-in-out infinite;
+}
+.bg-dot:nth-child(1){width:600px;height:600px;top:-200px;left:-200px;animation-delay:0s;}
+.bg-dot:nth-child(2){width:400px;height:400px;bottom:-100px;right:-100px;animation-delay:3s;}
+.bg-dot:nth-child(3){width:300px;height:300px;top:40%;left:50%;transform:translate(-50%,-50%);animation-delay:6s;}
+@keyframes pulse{0%,100%{opacity:.5;transform:scale(1);}50%{opacity:1;transform:scale(1.08);}}
+
+/* Grid de lignes tech en fond */
+.bg-grid {
+  position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:
+    linear-gradient(rgba(0,200,245,.03) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,200,245,.03) 1px,transparent 1px);
+  background-size:48px 48px;
+}
+
+/* ── Layout centré ── */
+.page {
+  position:relative;z-index:1;
+  min-height:100vh;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  padding:20px;
+}
+
+/* ── Card login — même style .lc de chat.html ── */
+.lc {
+  width:100%;max-width:390px;
+  background:var(--bg-1);
+  border:1px solid var(--border);
+  border-radius:18px;
+  padding:38px 34px;
+  box-shadow:0 28px 70px rgba(0,0,0,.65);
+  position:relative;
+  overflow:hidden;
+}
+/* Ligne accent en haut de la card */
+.lc::before {
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent 5%,var(--accent) 35%,var(--accent2) 65%,transparent 95%);
+  opacity:.7;
+}
+
+/* ── Logo ── */
+.lc-logo {
+  display:flex;align-items:center;gap:10px;
+  justify-content:center;margin-bottom:30px;
+}
+.lc-logo img {
+  width:40px;height:40px;object-fit:contain;
+  filter:drop-shadow(0 0 14px rgba(0,200,245,.65));
+}
+.lc-logo-text {display:flex;flex-direction:column;gap:3px;}
+.lc-logo-name {
+  font-family:var(--font-mono);font-size:15px;font-weight:600;letter-spacing:.08em;
+}
+.lc-logo-chip {
+  font-size:9px;font-weight:700;letter-spacing:.18em;
+  color:var(--accent);background:var(--accent-glow);
+  padding:2px 7px;border-radius:8px;
+  border:1px solid rgba(0,200,245,.22);text-transform:uppercase;
+  align-self:flex-start;
+}
+
+/* ── Titre ── */
+.lc-h   {font-size:21px;font-weight:800;text-align:center;margin-bottom:5px;letter-spacing:-.02em;}
+.lc-sub {font-size:12px;color:var(--text-2);text-align:center;margin-bottom:26px;}
+
+/* ── Champs ── */
+.lc-field  {margin-bottom:15px;}
+.lc-lbl {
+  font-size:10.5px;font-weight:600;color:var(--text-2);
+  margin-bottom:6px;display:block;
+  letter-spacing:.05em;text-transform:uppercase;
+}
+.lc-inp-wrap {position:relative;}
+.lc-inp {
+  width:100%;padding:10px 13px;
+  background:var(--bg-2);border:1px solid var(--border);
+  border-radius:var(--r);font-size:13px;
+  font-family:var(--font-sans);color:var(--text-0);
+  outline:none;transition:var(--transition);
+}
+.lc-inp:focus {
+  border-color:rgba(0,200,245,.4);
+  box-shadow:0 0 0 3px rgba(0,200,245,.06);
+}
+.lc-inp.error {border-color:var(--red);}
+
+/* Bouton toggle password */
+.pw-toggle {
+  position:absolute;right:11px;top:50%;transform:translateY(-50%);
+  background:none;border:none;cursor:pointer;
+  color:var(--text-2);padding:2px;line-height:0;
+  transition:color .15s;
+}
+.pw-toggle:hover {color:var(--text-0);}
+
+/* ── Bouton submit ── */
+.lc-btn {
+  width:100%;padding:11px;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  color:#040e1a;border:none;border-radius:var(--r);
+  font-size:13px;font-weight:700;cursor:pointer;
+  margin-top:8px;transition:var(--transition);
+  letter-spacing:.02em;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+}
+.lc-btn:hover:not(:disabled){filter:brightness(1.1);transform:translateY(-1px);}
+.lc-btn:disabled{opacity:.5;cursor:not-allowed;transform:none;}
+
+/* Spinner dans le bouton */
+.spin {
+  width:14px;height:14px;border:2px solid rgba(4,14,26,.3);
+  border-top-color:#040e1a;border-radius:50%;
+  animation:spin .7s linear infinite;display:none;
+}
+.lc-btn.loading .spin {display:block;}
+.lc-btn.loading .btn-text {opacity:.7;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* ── Messages ── */
+.lc-err {
+  color:var(--red);font-size:11.5px;
+  text-align:center;margin-top:9px;min-height:18px;
+  display:flex;align-items:center;justify-content:center;gap:5px;
+}
+.lc-ok {
+  color:var(--green);font-size:11.5px;
+  text-align:center;margin-top:9px;min-height:18px;
+  display:flex;align-items:center;justify-content:center;gap:5px;
+}
+
+/* ── Footer ── */
+.lc-hint {
+  font-size:10px;color:var(--text-3);
+  text-align:center;margin-top:18px;line-height:1.7;
+}
+
+/* ── Thème toggle ── */
+.theme-btn {
+  position:fixed;top:16px;right:16px;z-index:10;
+  background:var(--bg-2);border:1px solid var(--border);
+  border-radius:20px;padding:6px 12px;cursor:pointer;
+  font-family:var(--font-mono);font-size:11px;color:var(--text-2);
+  transition:var(--transition);
+}
+.theme-btn:hover {background:var(--bg-3);color:var(--text-0);}
+</style>
+</head>
+<body>
+
+<!-- Background -->
+<div class="bg-grid"></div>
+<div class="bg-canvas">
+  <div class="bg-dot"></div>
+  <div class="bg-dot"></div>
+  <div class="bg-dot"></div>
+</div>
+
+<!-- Thème toggle -->
+<button class="theme-btn" onclick="toggleTheme()" title="Changer le thème">
+  <span id="themeIcon">☀️</span>
+</button>
+
+<!-- Page -->
+<div class="page">
+  <div class="lc">
+
+    <!-- Logo -->
+    <div class="lc-logo">
+      <img src="/logo-onepilot-removebg-preview.png" alt="OnePilot"
+           onerror="this.style.display='none'">
+      <div class="lc-logo-text">
+        <span class="lc-logo-name">OnePilot</span>
+        <span class="lc-logo-chip">Enterprise AI</span>
+      </div>
+    </div>
+
+    <!-- Titre -->
+    <div class="lc-h">Connexion</div>
+    <div class="lc-sub">Accédez à votre espace de travail IA</div>
+
+    <!-- Formulaire -->
+    <form id="loginForm" onsubmit="handleLogin(event)" novalidate>
+
+      <!-- Email -->
+      <div class="lc-field">
+        <label class="lc-lbl" for="email">Adresse email</label>
+        <div class="lc-inp-wrap">
+          <input class="lc-inp" type="email" id="email"
+                 placeholder="admin@onepilot.local"
+                 autocomplete="email" autocapitalize="none"
+                 required>
+        </div>
+      </div>
+
+      <!-- Mot de passe -->
+      <div class="lc-field">
+        <label class="lc-lbl" for="password">Mot de passe</label>
+        <div class="lc-inp-wrap">
+          <input class="lc-inp" type="password" id="password"
+                 placeholder="••••••••••••"
+                 autocomplete="current-password"
+                 required>
+          <button type="button" class="pw-toggle" onclick="togglePw()" title="Voir/masquer">
+            <svg id="eyeIcon" width="16" height="16" viewBox="0 0 16 16" fill="none"
+                 stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+              <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/>
+              <circle cx="8" cy="8" r="2"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Message erreur / succès -->
+      <div class="lc-err" id="errMsg"></div>
+      <div class="lc-ok"  id="okMsg"  style="display:none"></div>
+
+      <!-- Bouton -->
+      <button class="lc-btn" type="submit" id="submitBtn">
+        <div class="spin"></div>
+        <span class="btn-text">Se connecter</span>
+      </button>
+
+    </form>
+
+    <div class="lc-hint">
+      OnePilot v1.0 &mdash; Phase 10<br>
+      Accès réservé aux utilisateurs autorisés
+    </div>
+
+  </div>
+</div>
+
+<script src="/op_auth.js"></script>
+<script>
+// ── Si déjà connecté → redirect direct ──────────────────────
+if (OpAuth.isLoggedIn()) {
+  OpAuth.redirectAfterLogin();
+}
+
+// ── Thème ────────────────────────────────────────────────────
+function toggleTheme() {
+  const isLight = document.documentElement.classList.toggle('light');
+  localStorage.setItem('op_theme', isLight ? 'light' : 'dark');
+  document.getElementById('themeIcon').textContent = isLight ? '🌙' : '☀️';
+}
+if (localStorage.getItem('op_theme') === 'light') {
+  document.documentElement.classList.add('light');
+  document.getElementById('themeIcon').textContent = '🌙';
+}
+
+// ── Toggle password visibility ────────────────────────────────
+function togglePw() {
+  const inp = document.getElementById('password');
+  const icon = document.getElementById('eyeIcon');
+  if (inp.type === 'password') {
+    inp.type = 'text';
+    icon.innerHTML = `<path d="M2 2l12 12M6.5 6.6A2 2 0 0 0 8 10a2 2 0 0 0 1.4-3.4"/>
+      <path d="M9.9 9.9C9.3 10.6 8.7 11 8 11c-4.5 0-7-5-7-5a12.5 12.5 0 0 1 3.1-3.9"/>
+      <path d="M5.5 3.4A9 9 0 0 1 8 3c4.5 0 7 5 7 5a12.5 12.5 0 0 1-1.8 2.6"/>`;
+  } else {
+    inp.type = 'password';
+    icon.innerHTML = `<path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/>
+      <circle cx="8" cy="8" r="2"/>`;
+  }
+}
+
+// ── Effacer erreur quand l'utilisateur tape ───────────────────
+document.getElementById('email').addEventListener('input',    clearErr);
+document.getElementById('password').addEventListener('input', clearErr);
+function clearErr() {
+  document.getElementById('errMsg').textContent = '';
+  document.getElementById('email').classList.remove('error');
+  document.getElementById('password').classList.remove('error');
+}
+
+// ── Submit login ──────────────────────────────────────────────
+async function handleLogin(e) {
+  e.preventDefault();
+  const email    = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const btn      = document.getElementById('submitBtn');
+  const errEl    = document.getElementById('errMsg');
+  const okEl     = document.getElementById('okMsg');
+
+  // Validation basique
+  if (!email || !password) {
+    errEl.textContent = 'Veuillez remplir tous les champs.';
+    return;
+  }
+
+  // État loading
+  btn.disabled = true;
+  btn.classList.add('loading');
+  btn.querySelector('.btn-text').textContent = 'Connexion…';
+  errEl.textContent = '';
+  okEl.style.display = 'none';
+
+  // Appel via OpAuth
+  const result = await OpAuth.login(email, password);
+
+  if (result.ok) {
+    okEl.style.display   = 'flex';
+    okEl.textContent     = '✓ Connexion réussie — redirection…';
+    btn.querySelector('.btn-text').textContent = '✓ Connecté';
+    btn.classList.remove('loading');
+
+    // Redirection selon rôle (petit délai pour voir le message)
+    setTimeout(() => OpAuth.redirectAfterLogin(), 600);
+
+  } else {
+    // Erreur
+    btn.disabled = false;
+    btn.classList.remove('loading');
+    btn.querySelector('.btn-text').textContent = 'Se connecter';
+
+    errEl.textContent = result.error;
+    document.getElementById('email').classList.add('error');
+    document.getElementById('password').classList.add('error');
+    document.getElementById('password').value = '';
+    document.getElementById('password').focus();
+  }
+}
+
+// ── Enter sur le champ email → focus password ─────────────────
+document.getElementById('email').addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    document.getElementById('password').focus();
+  }
+});
+</script>
+</body>
+</html>

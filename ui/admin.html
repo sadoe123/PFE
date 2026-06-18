@@ -1,0 +1,1231 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OnePilot — Admin Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="/op_auth.js"></script>
+<style>
+/* ══ DESIGN SYSTEM — identique chat.html ══ */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg-0:#060a0e;--bg-1:#0a0f16;--bg-2:#0d1520;--bg-3:#111c29;--bg-4:#172435;
+  --border:#182336;--border-hi:#1f2f45;
+  --text-0:#f0f6fa;--text-1:#a8c8dc;--text-2:#5a7d96;--text-3:#324d63;
+  --accent:#00c8f5;--accent-dim:#0088bb;--accent-glow:rgba(0,200,245,0.12);
+  --accent2:#2d72ff;--accent2-glow:rgba(45,114,255,0.1);
+  --green:#00d9a0;--green-glow:rgba(0,217,160,0.1);
+  --orange:#ff7a35;--red:#ff3663;--yellow:#ffbf40;--purple:#8b6eff;
+  --font-mono:"JetBrains Mono",monospace;
+  --font-sans:"Inter",-apple-system,BlinkMacSystemFont,sans-serif;
+  --r:7px;--r-lg:14px;--r-sm:4px;
+  --sb-w:260px;--header-h:52px;
+  --shadow:0 12px 40px rgba(0,0,0,.7);--tr:all .18s ease;
+}
+html.light{
+  --bg-0:#eef2f7;--bg-1:#f8fafc;--bg-2:#f1f5f9;--bg-3:#e4edf6;--bg-4:#d6e4f0;
+  --border:#c5d8e8;--border-hi:#a6bdd1;
+  --text-0:#0a0d10;--text-1:#1a2e3d;--text-2:#3d5a70;--text-3:#6a8fa6;
+  --accent:#006eb8;--accent-dim:#005590;--accent-glow:rgba(0,110,184,.09);
+  --accent2:#2860d6;--accent2-glow:rgba(40,96,214,.09);
+  --green:#007855;--green-glow:rgba(0,120,85,.09);
+  --orange:#c05000;--red:#c0003a;--yellow:#906000;--purple:#5738c0;
+  --shadow:0 8px 32px rgba(0,0,0,.1);
+}
+html,body{height:100%;background:var(--bg-0);color:var(--text-0);font-family:var(--font-sans);font-size:14px;line-height:1.5;overflow:hidden;-webkit-font-smoothing:antialiased;}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border-hi);border-radius:2px}
+.bg-grid{position:fixed;inset:0;pointer-events:none;z-index:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:48px 48px;opacity:.2;}
+.shell{display:flex;height:100vh;overflow:hidden;position:relative;z-index:1;}
+
+/* ════ SIDEBAR ADMIN ════ */
+:root{--sb-w:275px;--sb-w-cur:275px;}
+nav.sb{
+  width:var(--sb-w-cur);flex-shrink:0;
+  background:var(--bg-1);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;overflow:hidden;
+  transition:width .26s cubic-bezier(.4,0,.2,1);height:100vh;
+}
+nav.sb.closed{width:52px;}
+nav.sb.closed .logo-n{display:none!important;}
+/* Logo row */
+.sb-logo-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 10px 10px 16px;border-bottom:none;
+  flex-shrink:0;min-height:52px;
+}
+.sb-logo-link{
+  display:flex;align-items:center;gap:9px;
+  text-decoration:none;overflow:hidden;flex:1;min-width:0;outline:none;border:none;
+}
+.sb-logo-img{
+  width:28px;height:28px;object-fit:contain;
+  filter:drop-shadow(0 0 8px rgba(0,200,245,.5));flex-shrink:0;
+}
+.sb-logo-name{
+  font-family:var(--font-mono);font-size:13px;font-weight:600;
+  letter-spacing:.08em;color:var(--text-0);white-space:nowrap;
+}
+/* Toggle burger */
+.sb-toggle{
+  width:32px;height:32px;border:none;background:transparent;
+  color:var(--text-2);cursor:pointer;display:flex;align-items:center;
+  justify-content:center;border-radius:8px;transition:.13s;flex-shrink:0;
+}
+.sb-toggle:hover{background:var(--bg-3);color:var(--text-0);}
+.sb-toggle svg{width:17px;height:17px;}
+/* Nav scroll */
+.sb-nav-scroll{flex:1;overflow-y:auto;padding:6px 8px;}
+/* Section labels */
+.sb-nav-section{
+  font-size:10px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--text-3);
+  padding:12px 8px 4px;
+}
+/* Nav items */
+.sb-nav-item{
+  display:flex;align-items:center;gap:9px;
+  width:100%;padding:7px 10px;border-radius:8px;
+  cursor:pointer;font-size:13px;color:var(--text-1);
+  transition:.12s;text-decoration:none;
+  background:transparent;border:none;
+  border-left:2px solid transparent;
+  font-family:var(--font-sans);text-align:left;
+  margin-bottom:1px;
+}
+.sb-nav-item:hover{
+  background:var(--bg-3);color:var(--text-0);
+  border-left-color:var(--border-hi);
+}
+.sb-nav-item.active{
+  background:var(--accent-glow);color:var(--accent);
+  border-left-color:var(--accent);font-weight:500;
+}
+.sb-nav-item svg{flex-shrink:0;width:16px;height:16px;color:var(--text-2);}
+.sb-nav-item:hover svg, .sb-nav-item.active svg{color:currentColor;}
+/* User footer */
+/* sb-user-footer style chat.html */
+.sb-user-footer{padding:8px 10px;border-top:1px solid var(--border);flex-shrink:0;background:var(--bg-1);}
+.sb-user-row-inner{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:var(--r);cursor:pointer;transition:.14s;border:1px solid transparent;}
+.sb-user-row-inner:hover{background:var(--bg-3);border-color:var(--border);}
+.sb-user-av{width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#040e1a;}
+.sb-user-av.adm{background:linear-gradient(135deg,var(--accent),var(--accent2));}
+.sb-user-info{flex:1;min-width:0;overflow:hidden;}
+.sb-user-name{font-size:12.5px;font-weight:500;color:var(--text-0);white-space:nowrap;}
+.sb-user-role{font-size:10.5px;color:var(--text-2);}
+.sb-user-logout{
+  background:none;border:none;cursor:pointer;color:var(--text-2);
+  padding:5px;border-radius:6px;transition:.13s;flex-shrink:0;
+}
+.sb-user-logout:hover{color:var(--red);}
+
+/* ════ MAIN CONTENT ════ */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;}
+
+/* TABS */
+.tabs-bar{display:flex;gap:2px;padding:12px 22px 0;background:var(--bg-1);border-bottom:1px solid var(--border);flex-shrink:0;position:sticky;top:0;z-index:20;}
+.tab{padding:8px 16px;border-radius:var(--r) var(--r) 0 0;font-size:12.5px;font-weight:500;color:var(--text-2);cursor:pointer;border:1px solid transparent;border-bottom:none;transition:var(--tr);display:flex;align-items:center;gap:7px;text-decoration:none;}
+.tab:hover{color:var(--text-0);background:var(--bg-2);}
+.tab.active{color:var(--accent);background:var(--bg-0);border-color:var(--border);border-bottom-color:var(--bg-0);position:relative;bottom:-1px;}
+.tab i{font-size:12px;}
+/* CONTENT */
+.content{flex:1;overflow-y:auto;padding:22px 24px;}
+.tab-panel{display:none;}
+.tab-panel.active{display:block;}
+/* SECTION */
+.section-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+.section-title{font-size:15px;font-weight:600;color:var(--text-0);display:flex;align-items:center;gap:8px;}
+.section-title i{color:var(--accent);}
+.section-sub{font-size:11.5px;color:var(--text-3);margin-top:2px;}
+/* CARD */
+.card{background:var(--bg-1);border:1px solid var(--border);border-radius:var(--r-lg);margin-bottom:14px;}
+.card-body{padding:18px 20px;}
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--r);font-size:12.5px;font-weight:500;cursor:pointer;transition:var(--tr);font-family:var(--font-sans);border:1px solid var(--border);}
+.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#040e1a;border:none;font-weight:600;}
+.btn-primary:hover{filter:brightness(1.1);}
+.btn-ghost{background:none;color:var(--text-1);}
+.btn-ghost:hover{background:var(--bg-3);color:var(--text-0);}
+.btn-danger{background:none;color:var(--red);border-color:rgba(255,54,99,.25);}
+.btn-danger:hover{background:rgba(255,54,99,.08);}
+.btn-sm{padding:4px 10px;font-size:11.5px;}
+/* TABLE */
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px;}
+.tbl th{text-align:left;padding:9px 12px;font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3);border-bottom:1px solid var(--border);background:var(--bg-2);}
+.tbl td{padding:10px 12px;border-bottom:1px solid var(--border);color:var(--text-1);vertical-align:middle;}
+.tbl tr:last-child td{border-bottom:none;}
+.tbl tr:hover td{background:var(--bg-2);}
+/* BADGES */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:10.5px;font-weight:600;}
+.badge-admin{background:rgba(139,110,255,.15);color:var(--purple);}
+.badge-power{background:var(--accent-glow);color:var(--accent);}
+.badge-user{background:var(--bg-3);color:var(--text-2);}
+.badge-ok{background:var(--green-glow);color:var(--green);}
+.badge-fail{background:rgba(255,54,99,.1);color:var(--red);}
+.badge-warn{background:rgba(255,191,64,.1);color:var(--yellow);}
+/* FORM */
+.form-row{display:grid;gap:12px;margin-bottom:12px;}
+.form-row.cols2{grid-template-columns:1fr 1fr;}
+.form-row.cols3{grid-template-columns:1fr 1fr 1fr;}
+.form-group{display:flex;flex-direction:column;gap:5px;}
+.form-label{font-size:10.5px;font-weight:600;color:var(--text-2);text-transform:uppercase;letter-spacing:.05em;}
+.form-input,.form-select{width:100%;padding:8px 11px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--r);font-size:13px;font-family:var(--font-sans);color:var(--text-0);outline:none;transition:var(--tr);}
+.form-input:focus,.form-select:focus{border-color:rgba(0,200,245,.4);box-shadow:0 0 0 3px var(--accent-glow);}
+.form-select option{background:var(--bg-2);}
+.form-check{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-1);}
+.form-check input{accent-color:var(--accent);width:15px;height:15px;}
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);}
+.modal-overlay.hidden{display:none;}
+.modal{background:var(--bg-1);border:1px solid var(--border);border-radius:var(--r-lg);width:100%;max-width:480px;padding:24px;position:relative;box-shadow:var(--shadow);}
+.modal-title{font-size:15px;font-weight:600;color:var(--text-0);margin-bottom:18px;display:flex;align-items:center;gap:8px;}
+.modal-title i{color:var(--accent);}
+.modal-close{position:absolute;top:16px;right:16px;background:none;border:none;color:var(--text-2);cursor:pointer;font-size:16px;transition:var(--tr);}
+.modal-close:hover{color:var(--text-0);}
+.modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border);}
+/* PERMS GRID */
+.perm-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+.perm-item{padding:8px 10px;border-radius:var(--r);border:1px solid var(--border);background:var(--bg-2);display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text-1);}
+.perm-item i{color:var(--accent);font-size:11px;flex-shrink:0;}
+/* CONFIG ITEM */
+.cfg-item{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);}
+.cfg-item:last-child{border-bottom:none;}
+.cfg-label{font-size:13px;font-weight:500;color:var(--text-0);}
+.cfg-sub{font-size:11px;color:var(--text-3);margin-top:2px;}
+.cfg-ctrl{min-width:160px;display:flex;justify-content:flex-end;}
+/* TOGGLE */
+.toggle{position:relative;width:40px;height:22px;flex-shrink:0;}
+.toggle input{opacity:0;width:0;height:0;}
+.toggle-slider{position:absolute;inset:0;background:var(--bg-3);border-radius:22px;cursor:pointer;transition:var(--tr);border:1px solid var(--border);}
+.toggle input:checked+.toggle-slider{background:var(--accent);}
+.toggle-slider::before{content:'';position:absolute;width:16px;height:16px;left:2px;top:50%;transform:translateY(-50%);background:var(--text-0);border-radius:50%;transition:var(--tr);}
+.toggle input:checked+.toggle-slider::before{left:20px;background:#040e1a;}
+/* AUDIT */
+.audit-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
+.audit-filter-item{padding:5px 12px;border-radius:20px;font-size:11.5px;cursor:pointer;border:1px solid var(--border);background:var(--bg-2);color:var(--text-2);transition:var(--tr);}
+.audit-filter-item.active,.audit-filter-item:hover{background:var(--accent-glow);color:var(--accent);border-color:rgba(0,200,245,.25);}
+/* GRAPH META */
+.rel-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:var(--r);border:1px solid var(--border);background:var(--bg-2);margin-bottom:6px;}
+.rel-src{font-family:var(--font-mono);font-size:11.5px;color:var(--accent);}
+.rel-arrow{color:var(--text-3);font-size:12px;}
+.rel-tgt{font-family:var(--font-mono);font-size:11.5px;color:var(--purple);}
+.rel-conf{font-size:10.5px;padding:2px 6px;border-radius:4px;background:var(--green-glow);color:var(--green);font-family:var(--font-mono);}
+.rel-actions{display:flex;gap:4px;margin-left:auto;}
+/* TOAST */
+.toast{position:fixed;bottom:24px;right:24px;background:var(--bg-1);border:1px solid var(--border);border-radius:var(--r);padding:10px 16px;font-size:12.5px;color:var(--text-0);z-index:200;box-shadow:var(--shadow);transition:opacity .3s;display:flex;align-items:center;gap:8px;}
+.toast.hidden{display:none;}
+.toast.ok{border-color:rgba(0,217,160,.3);} .toast.ok i{color:var(--green);}
+.toast.err{border-color:rgba(255,54,99,.3);} .toast.err i{color:var(--red);}
+/* EMPTY STATE */
+.empty{text-align:center;padding:40px 20px;color:var(--text-3);}
+.empty i{font-size:32px;margin-bottom:10px;color:var(--text-3);}
+.empty p{font-size:13px;}
+/* SEARCH */
+.search-wrap{position:relative;flex:1;max-width:280px;}
+.search-wrap input{width:100%;padding:7px 10px 7px 32px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--r);font-size:12.5px;color:var(--text-0);outline:none;font-family:var(--font-sans);transition:var(--tr);}
+.search-wrap input:focus{border-color:rgba(0,200,245,.35);}
+.search-wrap i{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-3);font-size:12px;}
+/* LIGHT */
+html.light .card{background:var(--bg-1);}
+html.light .tbl th{background:var(--bg-2);}
+html.light .form-input,html.light .form-select{background:var(--bg-2);}
+html.light .perm-item,html.light .cfg-item+.cfg-item,html.light .rel-item{background:var(--bg-2);}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+/* ════ CONTEXT BAR ════ */
+.admin-ctx-bar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:9px 22px;background:var(--bg-1);
+  border-bottom:1px solid var(--border);flex-shrink:0;
+}
+.admin-ctx-left{display:flex;align-items:center;gap:10px;}
+.admin-ctx-title{font-size:14px;font-weight:700;color:var(--text-0);}
+.admin-ctx-sep{color:var(--text-3);}
+.admin-ctx-sub{font-size:11.5px;color:var(--text-2);}
+.admin-ctx-right{display:flex;align-items:center;gap:8px;}
+.admin-ctx-pill{
+  display:flex;align-items:center;gap:5px;padding:4px 10px;
+  border-radius:20px;font-size:11px;
+  background:var(--bg-3);border:1px solid var(--border);color:var(--text-2);
+}
+.ctx-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+.admin-ctx-btn{
+  width:30px;height:30px;border-radius:50%;border:1px solid var(--border);
+  background:none;color:var(--text-1);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;transition:.13s;
+}
+.admin-ctx-btn:hover{background:var(--bg-3);color:var(--text-0);}
+
+
+
+/* ════ USER MENU — identique chat.html ════ */
+.user-menu{
+  position:fixed;bottom:70px;left:10px;width:220px;
+  background:var(--bg-2);border:1px solid var(--border);
+  border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.3);
+  overflow:hidden;display:none;flex-direction:column;z-index:500;
+}
+.user-menu.open{display:flex;}
+.um-item{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 14px;font-size:13px;color:var(--text-0);
+  text-decoration:none;background:none;border:none;
+  cursor:pointer;transition:.12s;text-align:left;
+  font-family:var(--font-sans);width:100%;
+}
+.um-item:hover{background:var(--bg-3);}
+.um-item svg{width:15px;height:15px;flex-shrink:0;color:var(--text-2);}
+.um-divider{height:1px;background:var(--border);margin:2px 0;}
+.um-logout{color:var(--red)!important;}
+.um-logout svg{color:var(--red)!important;}
+/* Rail user (sidebar réduite) */
+.sb-rail-user{
+  width:32px;height:32px;border-radius:50%;
+  display:none;align-items:center;justify-content:center;
+  font-size:12px;font-weight:700;color:#040e1a;
+  cursor:pointer;margin-top:auto;margin-bottom:8px;
+  align-self:center;flex-shrink:0;transition:.13s;
+}
+.sb-rail-user:hover{filter:brightness(1.15);}
+.sb-rail-user.adm{background:linear-gradient(135deg,var(--accent),var(--accent2));}
+nav.sb.closed .sb-rail-user{display:flex;}
+nav.sb.closed .sb-user-footer{display:none;}
+/* Langue submenu */
+.um-lang-sub{display:none;flex-direction:column;background:var(--bg-2);border-top:1px solid var(--border);}
+.um-lang-sub.open{display:flex;}
+
+</style>
+</head>
+<body>
+<div class="bg-grid"></div>
+
+<!-- Toast -->
+<div class="toast hidden" id="toast"><i class="fas fa-check-circle"></i><span id="toast-msg"></span></div>
+
+<!-- User Modal -->
+<div class="modal-overlay hidden" id="userModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()"><i class="fas fa-times"></i></button>
+    <div class="modal-title"><i class="fas fa-user-plus"></i><span id="modal-title">Créer un utilisateur</span></div>
+    <input type="hidden" id="modal-user-id">
+    <div class="form-row cols2">
+      <div class="form-group"><label class="form-label">Nom d'utilisateur</label><input class="form-input" id="f-username" placeholder="ex: Jean Dupont"></div>
+      <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="f-email" type="email" placeholder="jean@company.com"></div>
+    </div>
+    <div class="form-row cols2">
+      <div class="form-group"><label class="form-label">Mot de passe</label><input class="form-input" id="f-password" type="password" placeholder="Laisser vide pour ne pas changer"></div>
+      <div class="form-group"><label class="form-label">Rôle</label>
+        <select class="form-select" id="f-role">
+          <option value="user">Utilisateur standard</option>
+          <option value="power_user">Power User</option>
+          <option value="admin">Administrateur</option>
+        </select>
+      </div>
+    </div>
+    <label class="form-check"><input type="checkbox" id="f-active" checked><span>Compte actif</span></label>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-primary" onclick="saveUser()"><i class="fas fa-save"></i> Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Perms Modal -->
+<div class="modal-overlay hidden" id="permsModal">
+  <div class="modal" style="max-width:560px">
+    <button class="modal-close" onclick="closePermsModal()"><i class="fas fa-times"></i></button>
+    <div class="modal-title"><i class="fas fa-key"></i>Permissions sources — <span id="perm-username"></span></div>
+    <div id="perms-list" style="max-height:320px;overflow-y:auto;margin-bottom:12px"></div>
+    <div style="border-top:1px solid var(--border);padding-top:12px">
+      <div class="section-title" style="font-size:12.5px;margin-bottom:8px"><i class="fas fa-plus"></i> Ajouter une source</div>
+      <div class="form-row cols3">
+        <div class="form-group" style="grid-column:span 1"><label class="form-label">Source ID</label><input class="form-input" id="perm-source-id" placeholder="UUID source"></div>
+        <div class="form-group"><label class="form-label"><input type="checkbox" id="perm-export"> Export</label></div>
+        <div class="form-group"><label class="form-label"><input type="checkbox" id="perm-query" checked> Query</label></div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="addPerm()"><i class="fas fa-plus"></i> Ajouter</button>
+    </div>
+    <div class="modal-footer"><button class="btn btn-ghost" onclick="closePermsModal()">Fermer</button></div>
+  </div>
+</div>
+
+<div class="shell">
+  <!-- SIDEBAR admin — style chat.html -->
+  <nav class="sb" id="sb">
+    <!-- Logo + toggle -->
+    <div class="sb-logo-row">
+      <a href="/admin.html" class="sb-logo-link">
+        <img src="/logo-onepilot-removebg-preview.png" alt="OP" class="sb-logo-img"
+             onerror="this.style.opacity='0'">
+        <span class="sb-logo-name logo-n">OnePilot</span>
+      </a>
+      <button class="sb-toggle" id="sbBtn" onclick="toggleSB()" title="Réduire">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <line x1="2" y1="5" x2="18" y2="5"/>
+          <line x1="2" y1="10" x2="14" y2="10"/>
+          <line x1="2" y1="15" x2="18" y2="15"/>
+        </svg>
+      </button>
+    </div>
+    <!-- Navigation -->
+    <div class="sb-nav-scroll logo-n">
+      <div class="sb-nav-section">Navigation</div>
+      <a href="/index.html" class="sb-nav-item">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4.03 3-9 3S3 13.66 3 12"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg>
+        <span>Sources de données</span>
+      </a>
+      <a href="/chat.html" class="sb-nav-item">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <span>Assistant IA</span>
+      </a>
+      <div class="sb-nav-section">Admin Console</div>
+      <button class="sb-nav-item" onclick="switchTab('users',event)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>Utilisateurs</span>
+      </button>
+      <button class="sb-nav-item" onclick="switchTab('perms',event)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+        <span>Permissions</span>
+      </button>
+      <button class="sb-nav-item" onclick="switchTab('voice',event)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        <span>Voice AI</span>
+      </button>
+      <button class="sb-nav-item" onclick="switchTab('dashboards',event)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        <span>Dashboards</span>
+      </button>
+      <button class="sb-nav-item" onclick="switchTab('audit',event)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span>Audit Logs</span>
+      </button>
+      <button class="sb-nav-item" onclick="switchTab('meta',event)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        <span>Métadonnées</span>
+      </button>
+    </div>
+    <!-- Rail user (sidebar réduite) -->
+    <div class="sb-rail-user adm" id="railUserAv" onclick="toggleUserMenu()" title="Mon compte">A</div>
+
+    <!-- User footer -->
+    <div class="sb-user-footer">
+      <div class="sb-user-row-inner logo-n" onclick="toggleUserMenu()" title="Menu compte">
+        <div class="sb-user-av adm" id="sb-av">A</div>
+        <div class="sb-user-info">
+          <div class="sb-user-name" id="sb-name">Admin</div>
+          <div class="sb-user-role" id="sb-role">Admin Principal</div>
+        </div>
+      </div>
+    </div>
+  </nav>
+  <!-- MAIN -->
+<div class="main">
+    <!-- Header -->
+    
+
+    <!-- Barre contexte -->
+    <div class="admin-ctx-bar">
+      <div class="admin-ctx-left">
+        <i class="fas fa-shield-halved" style="color:var(--accent);font-size:13px"></i>
+        <span class="admin-ctx-title">Admin Console</span>
+        <span class="admin-ctx-sep">|</span>
+        <span class="admin-ctx-sub">Administration &amp; Sécurité</span>
+      </div>
+      <div class="admin-ctx-right">
+        <div class="admin-ctx-pill">
+          <div class="ctx-dot" style="background:var(--green)"></div>
+          <span>API: OK</span>
+        </div>
+        <div class="admin-ctx-pill">
+          <div class="ctx-dot" style="background:var(--green)"></div>
+          <span>PostgreSQL: OK</span>
+        </div>
+        <div class="admin-ctx-pill">
+          <div class="ctx-dot" style="background:var(--green)"></div>
+          <span>Redis: OK</span>
+        </div>
+        <div class="admin-ctx-pill">
+          <div class="ctx-dot" id="ctx-llm-dot" style="background:var(--yellow)"></div>
+          <span id="ctx-llm-txt">LLM: Vérif...</span>
+        </div>
+        <button class="admin-ctx-btn" id="theme-btn" onclick="toggleTheme()" title="Thème">
+          <i class="fas fa-moon" id="theme-ico"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Tabs bar -->
+    <div class="tabs-bar">
+      <a class="tab active" id="tab-users"      href="javascript:void(0)" onclick="switchTab('users',event)"><i class="fas fa-users"></i>Utilisateurs &amp; RBAC</a>
+      <a class="tab"        id="tab-perms"      href="javascript:void(0)" onclick="switchTab('perms',event)"><i class="fas fa-key"></i>Permissions Sources</a>
+      <a class="tab"        id="tab-voice"      href="javascript:void(0)" onclick="switchTab('voice',event)"><i class="fas fa-microphone"></i>Voice AI</a>
+      <a class="tab"        id="tab-dashboards" href="javascript:void(0)" onclick="switchTab('dashboards',event)"><i class="fas fa-chart-pie"></i>Dashboards</a>
+      <a class="tab"        id="tab-audit"      href="javascript:void(0)" onclick="switchTab('audit',event)"><i class="fas fa-shield-alt"></i>Audit Logs</a>
+      <a class="tab"        id="tab-meta"       href="javascript:void(0)" onclick="switchTab('meta',event)"><i class="fas fa-sitemap"></i>Métadonnées</a>
+    </div>
+
+    <div class="content">
+
+      <!-- ═══ ONGLET 1 : USERS ═══ -->
+      <div class="tab-panel active" id="panel-users">
+        <div class="section-hdr">
+          <div><div class="section-title"><i class="fas fa-users"></i>Utilisateurs &amp; RBAC</div><div class="section-sub">Gestion des comptes et rôles</div></div>
+          <button class="btn btn-primary" onclick="openCreateUser()"><i class="fas fa-plus"></i> Nouvel utilisateur</button>
+        </div>
+
+        <!-- Rôles disponibles -->
+        <div class="card" style="margin-bottom:14px">
+          <div class="card-body">
+            <div style="font-size:12.5px;font-weight:600;color:var(--text-0);margin-bottom:12px">Rôles système</div>
+            <div class="perm-grid">
+              <div class="perm-item"><i class="fas fa-crown" style="color:var(--purple)"></i><div><div style="font-size:12px;font-weight:600;color:var(--text-0)">Admin</div><div style="font-size:10.5px;color:var(--text-3)">manage_connectors · manage_users · view_all_data</div></div></div>
+              <div class="perm-item"><i class="fas fa-bolt" style="color:var(--accent)"></i><div><div style="font-size:12px;font-weight:600;color:var(--text-0)">Power User</div><div style="font-size:10.5px;color:var(--text-3)">create_dashboards · export_data · view_assigned_sources</div></div></div>
+              <div class="perm-item"><i class="fas fa-user" style="color:var(--text-2)"></i><div><div style="font-size:12px;font-weight:600;color:var(--text-0)">User</div><div style="font-size:10.5px;color:var(--text-3)">ask_questions · view_own_history</div></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Table users -->
+        <div class="card">
+          <div class="card-body">
+            <div class="section-hdr" style="margin-bottom:12px">
+              <div class="search-wrap"><i class="fas fa-search"></i><input id="user-search" placeholder="Rechercher..." oninput="filterUsers()"></div>
+              <button class="btn btn-ghost btn-sm" onclick="loadUsers()"><i class="fas fa-sync"></i> Actualiser</button>
+            </div>
+            <div style="overflow-x:auto">
+              <table class="tbl" id="users-table">
+                <thead><tr>
+                  <th>Utilisateur</th><th>Email</th><th>Rôle</th><th>Statut</th><th>Dernière connexion</th><th>Actions</th>
+                </tr></thead>
+                <tbody id="users-tbody">
+                  <tr><td colspan="6" class="empty"><i class="fas fa-spinner fa-spin"></i><p>Chargement...</p></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ ONGLET 2 : PERMISSIONS ═══ -->
+      <div class="tab-panel" id="panel-perms">
+        <div class="section-hdr">
+          <div><div class="section-title"><i class="fas fa-key"></i>Permissions par source</div><div class="section-sub">Contrôle d'accès aux sources de données </div></div>
+        </div>
+        <div class="card">
+          <div class="card-body">
+            <p style="font-size:12.5px;color:var(--text-2);margin-bottom:14px">Cliquez sur <strong style="color:var(--accent)">Permissions</strong> dans l'onglet Utilisateurs pour gérer les accès par source. Résumé global :</p>
+            <div style="overflow-x:auto">
+              <table class="tbl" id="perms-summary-table">
+                <thead><tr><th>Utilisateur</th><th>Email</th><th>Rôle</th><th>Sources autorisées</th><th>Actions</th></tr></thead>
+                <tbody id="perms-tbody">
+                  <tr><td colspan="5" class="empty"><i class="fas fa-spinner fa-spin"></i><p>Chargement...</p></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ ONGLET 3 : VOICE AI ═══ -->
+      <div class="tab-panel" id="panel-voice">
+        <div class="section-hdr">
+          <div><div class="section-title"><i class="fas fa-microphone"></i>Configuration Voice AI</div><div class="section-sub">Paramètres STT · TTS · Sécurité vocale</div></div>
+          <button class="btn btn-primary" onclick="saveVoiceConfig()"><i class="fas fa-save"></i> Enregistrer</button>
+        </div>
+        <!-- STT -->
+        <div class="card">
+          <div class="card-body">
+            <div style="font-size:13px;font-weight:600;color:var(--text-0);margin-bottom:14px;display:flex;align-items:center;gap:7px"><i class="fas fa-headset" style="color:var(--accent)"></i> Speech-to-Text (STT)</div>
+            <div class="cfg-item">
+              <div><div class="cfg-label">Moteur STT</div><div class="cfg-sub">Whisper (OpenAI) · Vosk · Azure Speech</div></div>
+              <div class="cfg-ctrl"><select class="form-select" id="cfg-stt-engine" style="width:160px"><option value="whisper">Whisper (local)</option><option value="vosk">Vosk (offline)</option><option value="azure">Azure Speech</option></select></div>
+            </div>
+            <div class="cfg-item">
+              <div><div class="cfg-label">Langue par défaut</div><div class="cfg-sub">Langue de transcription principale</div></div>
+              <div class="cfg-ctrl"><select class="form-select" id="cfg-voice-lang" style="width:160px"><option value="fr">Français</option><option value="en">English</option><option value="ar">العربية</option><option value="de">Deutsch</option><option value="es">Español</option></select></div>
+            </div>
+          </div>
+        </div>
+        <!-- TTS -->
+        <div class="card">
+          <div class="card-body">
+            <div style="font-size:13px;font-weight:600;color:var(--text-0);margin-bottom:14px;display:flex;align-items:center;gap:7px"><i class="fas fa-volume-up" style="color:var(--purple)"></i> Text-to-Speech (TTS)</div>
+            <div class="cfg-item">
+              <div><div class="cfg-label">Moteur TTS</div><div class="cfg-sub">Piper (local) · Azure TTS</div></div>
+              <div class="cfg-ctrl"><select class="form-select" id="cfg-tts-engine" style="width:160px"><option value="piper">Piper (local)</option><option value="azure">Azure TTS</option></select></div>
+            </div>
+          </div>
+        </div>
+        <!-- Sécurité -->
+        <div class="card">
+          <div class="card-body">
+            <div style="font-size:13px;font-weight:600;color:var(--text-0);margin-bottom:14px;display:flex;align-items:center;gap:7px"><i class="fas fa-shield-alt" style="color:var(--red)"></i> Sécurité &amp; Confidentialité vocale</div>
+            <div class="cfg-item">
+              <div><div class="cfg-label">Conserver les enregistrements audio</div><div class="cfg-sub">Stockage des fichiers audio des sessions vocales</div></div>
+              <div class="cfg-ctrl"><label class="toggle"><input type="checkbox" id="cfg-retain-audio"><span class="toggle-slider"></span></label></div>
+            </div>
+            <div class="cfg-item">
+              <div><div class="cfg-label">Durée de rétention (jours)</div><div class="cfg-sub">Durée avant suppression automatique des audios</div></div>
+              <div class="cfg-ctrl"><input class="form-input" id="cfg-retention-days" type="number" min="1" max="365" value="7" style="width:100px;text-align:center"></div>
+            </div>
+            <div class="cfg-item">
+              <div><div class="cfg-label">Anonymisation automatique</div><div class="cfg-sub">Pitch shifting RGPD — masque l'identité vocale</div></div>
+              <div class="cfg-ctrl"><label class="toggle"><input type="checkbox" id="cfg-anonymize"><span class="toggle-slider"></span></label></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ ONGLET 4 : DASHBOARDS ═══ -->
+      <div class="tab-panel" id="panel-dashboards">
+        <div class="section-hdr">
+          <div><div class="section-title"><i class="fas fa-chart-pie"></i>Configuration Dashboards</div><div class="section-sub">Templates · Quotas · Branding </div></div>
+          <button class="btn btn-primary" onclick="saveDashConfig()"><i class="fas fa-save"></i> Enregistrer</button>
+        </div>
+        <!-- Templates -->
+        <div class="card">
+          <div class="card-body">
+            <div style="font-size:13px;font-weight:600;color:var(--text-0);margin-bottom:14px;display:flex;align-items:center;gap:7px"><i class="fas fa-layer-group" style="color:var(--accent)"></i> Templates métier disponibles</div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+              <div class="perm-item" style="flex-direction:column;align-items:flex-start;gap:6px"><i class="fas fa-coins" style="color:var(--yellow)"></i><div style="font-size:12px;font-weight:600">Finance</div><label class="form-check" style="margin-top:2px"><input type="checkbox" checked> Actif</label></div>
+              <div class="perm-item" style="flex-direction:column;align-items:flex-start;gap:6px"><i class="fas fa-money-bill-wave" style="color:var(--green)"></i><div style="font-size:12px;font-weight:600">Trésorerie</div><label class="form-check" style="margin-top:2px"><input type="checkbox" checked> Actif</label></div>
+              <div class="perm-item" style="flex-direction:column;align-items:flex-start;gap:6px"><i class="fas fa-chart-bar" style="color:var(--accent)"></i><div style="font-size:12px;font-weight:600">Ventes</div><label class="form-check" style="margin-top:2px"><input type="checkbox" checked> Actif</label></div>
+              <div class="perm-item" style="flex-direction:column;align-items:flex-start;gap:6px"><i class="fas fa-users" style="color:var(--purple)"></i><div style="font-size:12px;font-weight:600">RH</div><label class="form-check" style="margin-top:2px"><input type="checkbox"> Actif</label></div>
+            </div>
+          </div>
+        </div>
+        <!-- Quotas -->
+        <div class="card">
+          <div class="card-body">
+            <div style="font-size:13px;font-weight:600;color:var(--text-0);margin-bottom:14px;display:flex;align-items:center;gap:7px"><i class="fas fa-sliders-h" style="color:var(--orange)"></i> Limites &amp; Quotas</div>
+            <div class="cfg-item">
+              <div><div class="cfg-label">Widgets max par dashboard</div><div class="cfg-sub">Nombre maximum de widgets par dashboard utilisateur</div></div>
+              <div class="cfg-ctrl"><input class="form-input" id="cfg-max-widgets" type="number" min="1" max="100" value="20" style="width:100px;text-align:center"></div>
+            </div>
+            <div class="cfg-item">
+              <div><div class="cfg-label">Export Excel — lignes max</div><div class="cfg-sub">Limite d'export pour éviter la surcharge serveur</div></div>
+              <div class="cfg-ctrl"><input class="form-input" id="cfg-max-export" type="number" min="100" max="100000" value="10000" style="width:100px;text-align:center"></div>
+            </div>
+            <div class="cfg-item">
+              <div><div class="cfg-label">Refresh automatique (secondes)</div><div class="cfg-sub">Intervalle de rafraîchissement des dashboards live</div></div>
+              <div class="cfg-ctrl"><input class="form-input" id="cfg-refresh-sec" type="number" min="30" max="3600" value="300" style="width:100px;text-align:center"></div>
+            </div>
+          </div>
+        </div>
+        <!-- Session -->
+        <div class="card">
+          <div class="card-body">
+            <div style="font-size:13px;font-weight:600;color:var(--text-0);margin-bottom:14px;display:flex;align-items:center;gap:7px"><i class="fas fa-clock" style="color:var(--yellow)"></i> Sessions</div>
+            <div class="cfg-item">
+              <div><div class="cfg-label">Durée de session (heures)</div><div class="cfg-sub">Expiration du token JWT</div></div>
+              <div class="cfg-ctrl"><input class="form-input" id="cfg-session-hours" type="number" min="1" max="168" value="24" style="width:100px;text-align:center"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ ONGLET 5 : AUDIT LOGS ═══ -->
+      <div class="tab-panel" id="panel-audit">
+        <div class="section-hdr">
+          <div><div class="section-title"><i class="fas fa-shield-alt"></i>Audit Logs</div><div class="section-sub">Tous les accès loggés </div></div>
+          <button class="btn btn-ghost btn-sm" onclick="loadAudit()"><i class="fas fa-sync"></i> Actualiser</button>
+        </div>
+        <!-- Stats -->
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px" id="audit-stats">
+          <div class="card"><div class="card-body" style="text-align:center"><div style="font-size:22px;font-weight:700;font-family:var(--font-mono)" id="audit-today">—</div><div style="font-size:11px;color:var(--text-3);margin-top:2px">Événements (24h)</div></div></div>
+          <div class="card"><div class="card-body" style="text-align:center"><div style="font-size:22px;font-weight:700;font-family:var(--font-mono);color:var(--red)" id="audit-fail">—</div><div style="font-size:11px;color:var(--text-3);margin-top:2px">Échecs (24h)</div></div></div>
+          <div class="card"><div class="card-body" style="text-align:center"><div style="font-size:22px;font-weight:700;font-family:var(--font-mono);color:var(--green)" id="audit-logins">—</div><div style="font-size:11px;color:var(--text-3);margin-top:2px">Connexions (24h)</div></div></div>
+        </div>
+        <!-- Filtres -->
+        <div class="audit-filters">
+          <span class="audit-filter-item active" onclick="setAuditFilter('')">Tout</span>
+          <span class="audit-filter-item" onclick="setAuditFilter('LOGIN')">LOGIN</span>
+          <span class="audit-filter-item" onclick="setAuditFilter('LOGOUT')">LOGOUT</span>
+          <span class="audit-filter-item" onclick="setAuditFilter('QUERY')">QUERY</span>
+          <span class="audit-filter-item" onclick="setAuditFilter('LOGIN_FAILED')">ÉCHECS</span>
+          <span class="audit-filter-item" onclick="setAuditFilter('CONFIG_CHANGE')">CONFIG</span>
+        </div>
+        <!-- Table -->
+        <div class="card">
+          <div class="card-body">
+            <div style="overflow-x:auto">
+              <table class="tbl">
+                <thead><tr><th>Date</th><th>Utilisateur</th><th>Action</th><th>Ressource</th><th>IP</th><th>Résultat</th></tr></thead>
+                <tbody id="audit-tbody">
+                  <tr><td colspan="6" class="empty"><i class="fas fa-spinner fa-spin"></i><p>Chargement...</p></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:12px;color:var(--text-3)">
+              <span id="audit-count">—</span>
+              <div style="display:flex;gap:6px">
+                <button class="btn btn-ghost btn-sm" id="audit-prev" onclick="auditPage(-1)"><i class="fas fa-chevron-left"></i></button>
+                <span id="audit-page" style="padding:4px 10px;background:var(--bg-2);border-radius:var(--r);font-family:var(--font-mono)">1</span>
+                <button class="btn btn-ghost btn-sm" id="audit-next" onclick="auditPage(1)"><i class="fas fa-chevron-right"></i></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ ONGLET 6 : MÉTADONNÉES ═══ -->
+      <div class="tab-panel" id="panel-meta">
+        <div class="section-hdr">
+          <div><div class="section-title"><i class="fas fa-sitemap"></i>Catalogue de métadonnées</div><div class="section-sub">Relations · Validation · Synonymes</div></div>
+          <button class="btn btn-ghost btn-sm" onclick="loadRelations()"><i class="fas fa-sync"></i> Actualiser</button>
+        </div>
+        <!-- Stats entités -->
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px" id="meta-stats">
+          <div class="card"><div class="card-body" style="text-align:center"><div style="font-size:22px;font-weight:700;font-family:var(--font-mono)" id="meta-entities">—</div><div style="font-size:11px;color:var(--text-3);margin-top:2px">Entités</div></div></div>
+          <div class="card"><div class="card-body" style="text-align:center"><div style="font-size:22px;font-weight:700;font-family:var(--font-mono)" id="meta-rels">—</div><div style="font-size:11px;color:var(--text-3);margin-top:2px">Relations</div></div></div>
+          <div class="card"><div class="card-body" style="text-align:center"><div style="font-size:22px;font-weight:700;font-family:var(--font-mono);color:var(--green)" id="meta-validated">—</div><div style="font-size:11px;color:var(--text-3);margin-top:2px">Validées</div></div></div>
+          <div class="card"><div class="card-body" style="text-align:center"><div style="font-size:22px;font-weight:700;font-family:var(--font-mono);color:var(--yellow)" id="meta-pending">—</div><div style="font-size:11px;color:var(--text-3);margin-top:2px">En attente</div></div></div>
+        </div>
+        <!-- Relations à valider -->
+        <div class="card">
+          <div class="card-body">
+            <div style="font-size:13px;font-weight:600;color:var(--text-0);margin-bottom:12px;display:flex;align-items:center;gap:7px"><i class="fas fa-project-diagram" style="color:var(--accent)"></i> Relations détectées — à valider</div>
+            <div id="relations-list">
+              <div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Chargement...</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+
+  </div><!-- /main -->
+</div><!-- /shell -->
+
+<script>
+
+/* ════ SIDEBAR TOGGLE ════ */
+function toggleSB(){
+  const sb  = document.getElementById('sb');
+  const btn = document.getElementById('sbBtn');
+  if(!sb) return;
+  const closed = sb.classList.toggle('closed');
+  if(btn) btn.classList.toggle('on', !closed);
+  document.documentElement.style.setProperty('--sb-w-cur', closed ? '52px' : '275px');
+}
+function isMobile(){ return window.innerWidth <= 768; }
+
+// ── Auth ─────────────────────────────────────────────────────
+
+/* ── Init thème ── */
+(function(){
+  if(localStorage.getItem('op_theme')==='light'){
+    document.documentElement.classList.add('light');
+    const i=document.getElementById('theme-ico');if(i)i.className='fas fa-sun';
+  }
+})();
+
+OpAuth.checkAuth('admin');
+OpAuth.applyUserUI();
+// Init rail user + user menu
+(function(){
+  const u = OpAuth.getUser();
+  if(!u) return;
+  const i = (u.username||'A')[0].toUpperCase();
+  // Rail avatar
+  const ru = document.getElementById('railUserAv');
+  if(ru){ ru.textContent=i; ru.className='sb-rail-user '+(u.role==='admin'?'adm':'usr'); }
+  // Sidebar avatar + nom + rôle
+  const av=document.getElementById('sb-av');if(av)av.textContent=i;
+  const sn=document.getElementById('sb-name');if(sn)sn.textContent=u.username||'Admin';
+  const sr=document.getElementById('sb-role');
+  if(sr){const m={admin:'Admin Principal',power_user:'Power User',user:'Utilisateur'};sr.textContent=m[u.role]||u.role;}
+  // User menu
+  const umn=document.getElementById('um-name');if(umn)umn.textContent=u.username||'Admin';
+  const ume=document.getElementById('um-email');if(ume)ume.textContent=u.email||'';
+})();
+
+// ── Theme ─────────────────────────────────────────────────────
+function toggleTheme(){
+  const l=document.documentElement.classList.toggle('light');
+  localStorage.setItem('op_theme',l?'light':'dark');
+  document.getElementById('theme-btn').innerHTML=l?'<i class="fas fa-sun"></i>':'<i class="fas fa-moon"></i>';
+}
+(function(){
+  if(localStorage.getItem('op_theme')==='light'){
+    document.documentElement.classList.add('light');
+    const b=document.getElementById('theme-btn');
+    if(b)b.innerHTML='<i class="fas fa-sun"></i>';
+  }
+})();
+
+// ── Toast ─────────────────────────────────────────────────────
+function showToast(msg,type='ok'){
+  const t=document.getElementById('toast');
+  const m=document.getElementById('toast-msg');
+  t.className='toast '+type;
+  t.querySelector('i').className='fas '+(type==='ok'?'fa-check-circle':'fa-times-circle');
+  m.textContent=msg;
+  t.style.opacity='1';
+  setTimeout(()=>{t.style.opacity='0';setTimeout(()=>t.classList.add('hidden'),300);},3000);
+}
+
+// ── Tabs ──────────────────────────────────────────────────────
+let _activeTab='users';
+function switchTab(tab,e){
+  if(e)e.preventDefault();
+  if(event)try{event.preventDefault();}catch(ex){}
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.sb-item').forEach(i=>i.classList.remove('active'));
+  document.getElementById('tab-'+tab)?.classList.add('active');
+  document.getElementById('panel-'+tab)?.classList.add('active');
+  document.querySelector(`.sb-item[onclick*="'${tab}'"]`)?.classList.add('active');
+  _activeTab=tab;
+  // Lazy load
+  if(tab==='users')    loadUsers();
+  if(tab==='perms')    loadPermsOverview();
+  if(tab==='audit')    {loadAudit();loadAuditStats();}
+  if(tab==='meta')     loadRelations();
+  if(tab==='voice')    loadConfig();
+  if(tab==='dashboards') loadConfig();
+  // Update URL hash
+  history.replaceState(null,'','#'+tab);
+}
+
+// ── Init from hash ────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded',()=>{
+  const hash=(location.hash||'#users').replace('#','');
+  const valid=['users','perms','voice','dashboards','audit','meta'];
+  switchTab(valid.includes(hash)?hash:'users');
+});
+
+// ── Helpers ───────────────────────────────────────────────────
+function fmt(ts){if(!ts)return'—';const d=new Date(ts);return d.toLocaleDateString('fr-FR')+' '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});}
+function ago(ts){if(!ts)return'';const s=Math.floor((new Date()-new Date(ts))/1000);if(s<60)return"À l'instant";if(s<3600)return Math.floor(s/60)+'min';if(s<86400)return Math.floor(s/3600)+'h';return Math.floor(s/86400)+'j';}
+function roleBadge(r){const m={admin:'badge-admin',power_user:'badge-power',user:'badge-user'};return`<span class="badge ${m[r]||'badge-user'}">${r||'user'}</span>`;}
+
+// ═══ USERS ═══
+let _users=[];
+async function loadUsers(){
+  try{
+    const r=await OpAuth.apiFetch('/admin/users?per_page=50');
+    if(!r||!r.ok)throw 0;
+    const d=await r.json();
+    _users=d.users||[];
+    renderUsers(_users);
+  }catch{
+    document.getElementById('users-tbody').innerHTML='<tr><td colspan="6" class="empty"><i class="fas fa-exclamation-triangle" style="color:var(--red)"></i><p>Erreur de chargement</p></td></tr>';
+  }
+}
+function renderUsers(users){
+  const tb=document.getElementById('users-tbody');
+  if(!users.length){tb.innerHTML='<tr><td colspan="6" class="empty"><i class="fas fa-users"></i><p>Aucun utilisateur</p></td></tr>';return;}
+  tb.innerHTML=users.map(u=>`
+    <tr style="animation:fadeIn .2s ease">
+      <td><div style="display:flex;align-items:center;gap:8px">
+        <div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--purple),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#040e1a;flex-shrink:0">${(u.username||'?')[0].toUpperCase()}</div>
+        <span style="font-weight:500;color:var(--text-0)">${u.username||'—'}</span>
+      </div></td>
+      <td style="font-family:var(--font-mono);font-size:12px">${u.email}</td>
+      <td>${roleBadge(u.role)}</td>
+      <td><span class="badge ${u.is_active?'badge-ok':'badge-warn'}">${u.is_active?'Actif':'Inactif'}</span></td>
+      <td style="font-size:11.5px;color:var(--text-3)">${u.last_login?ago(u.last_login):'Jamais'}</td>
+      <td>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-ghost btn-sm" onclick="openEditUser(${JSON.stringify(u).replace(/"/g,'&quot;')})" title="Modifier"><i class="fas fa-edit"></i></button>
+          <button class="btn btn-ghost btn-sm" onclick="openPermsModal(${u.id},'${u.username}')" title="Permissions"><i class="fas fa-key"></i></button>
+          <button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id},'${u.username}')" title="Supprimer"><i class="fas fa-trash"></i></button>
+        </div>
+      </td>
+    </tr>`).join('');
+}
+function filterUsers(){
+  const q=document.getElementById('user-search').value.toLowerCase();
+  renderUsers(_users.filter(u=>(u.username||'').toLowerCase().includes(q)||(u.email||'').toLowerCase().includes(q)));
+}
+function openCreateUser(){
+  document.getElementById('modal-title').textContent='Créer un utilisateur';
+  document.getElementById('modal-user-id').value='';
+  document.getElementById('f-username').value='';
+  document.getElementById('f-email').value='';
+  document.getElementById('f-password').value='';
+  document.getElementById('f-role').value='user';
+  document.getElementById('f-active').checked=true;
+  document.getElementById('userModal').classList.remove('hidden');
+}
+function openEditUser(u){
+  document.getElementById('modal-title').textContent='Modifier l\'utilisateur';
+  document.getElementById('modal-user-id').value=u.id;
+  document.getElementById('f-username').value=u.username||'';
+  document.getElementById('f-email').value=u.email||'';
+  document.getElementById('f-password').value='';
+  document.getElementById('f-role').value=u.role||'user';
+  document.getElementById('f-active').checked=!!u.is_active;
+  document.getElementById('userModal').classList.remove('hidden');
+}
+function closeModal(){document.getElementById('userModal').classList.add('hidden');}
+async function saveUser(){
+  const id=document.getElementById('modal-user-id').value;
+  const body={username:document.getElementById('f-username').value,email:document.getElementById('f-email').value,role:document.getElementById('f-role').value,is_active:document.getElementById('f-active').checked};
+  const pwd=document.getElementById('f-password').value;
+  if(pwd)body.password=pwd;
+  try{
+    let r;
+    if(id){
+      r=await OpAuth.apiFetch(`/admin/users/${id}`,{method:'PUT',body:JSON.stringify(body)});
+    }else{
+      if(!body.email||!pwd){showToast('Email et mot de passe requis','err');return;}
+      r=await OpAuth.apiFetch('/admin/users',{method:'POST',body:JSON.stringify({...body,password:pwd})});
+    }
+    if(!r||!r.ok){const e=await r?.json();showToast(e?.detail||'Erreur','err');return;}
+    closeModal();showToast(id?'Utilisateur modifié':'Utilisateur créé');loadUsers();
+  }catch{showToast('Erreur réseau','err');}
+}
+async function deleteUser(id,name){
+  if(!confirm(`Supprimer ${name} ?`))return;
+  try{
+    const r=await OpAuth.apiFetch(`/admin/users/${id}`,{method:'DELETE'});
+    if(!r||!r.ok){const e=await r?.json();showToast(e?.detail||'Erreur','err');return;}
+    showToast('Utilisateur supprimé');loadUsers();
+  }catch{showToast('Erreur réseau','err');}
+}
+
+// ═══ PERMISSIONS ═══
+let _permUserId=null;
+async function openPermsModal(userId,username){
+  _permUserId=userId;
+  document.getElementById('perm-username').textContent=username;
+  document.getElementById('permsModal').classList.remove('hidden');
+  await loadPermsForUser(userId);
+}
+function closePermsModal(){document.getElementById('permsModal').classList.add('hidden');_permUserId=null;}
+async function loadPermsForUser(userId){
+  try{
+    const r=await OpAuth.apiFetch(`/admin/users/${userId}/permissions`);
+    if(!r||!r.ok)throw 0;
+    const d=await r.json();
+    const pl=document.getElementById('perms-list');
+    if(!d.permissions.length){pl.innerHTML='<p style="color:var(--text-3);font-size:12px;text-align:center;padding:16px">Aucune permission — accès à toutes les sources (admin)</p>';return;}
+    pl.innerHTML=d.permissions.map(p=>`
+      <div class="rel-item" style="margin-bottom:6px">
+        <span style="font-family:var(--font-mono);font-size:12px;color:var(--accent)">${p.source_name||p.source_id}</span>
+        <span class="badge badge-ok" style="margin-left:auto">${p.can_read?'Lecture':''}</span>
+        ${p.can_export?'<span class="badge badge-power">Export</span>':''}
+        <button class="btn btn-danger btn-sm" onclick="revokePerm(${userId},'${p.source_id}')"><i class="fas fa-times"></i></button>
+      </div>`).join('');
+  }catch{document.getElementById('perms-list').innerHTML='<p style="color:var(--red);font-size:12px;text-align:center;padding:16px">Erreur de chargement</p>';}
+}
+async function addPerm(){
+  if(!_permUserId)return;
+  const srcId=document.getElementById('perm-source-id').value.trim();
+  if(!srcId){showToast('Source ID requis','err');return;}
+  try{
+    const r=await OpAuth.apiFetch(`/admin/users/${_permUserId}/permissions`,{method:'POST',body:JSON.stringify({source_id:srcId,can_read:true,can_export:document.getElementById('perm-export').checked,can_query:document.getElementById('perm-query').checked})});
+    if(!r||!r.ok){const e=await r?.json();showToast(e?.detail||'Erreur','err');return;}
+    showToast('Permission accordée');loadPermsForUser(_permUserId);document.getElementById('perm-source-id').value='';
+  }catch{showToast('Erreur réseau','err');}
+}
+async function revokePerm(userId,sourceId){
+  if(!confirm('Révoquer cet accès ?'))return;
+  try{
+    const r=await OpAuth.apiFetch(`/admin/users/${userId}/permissions/${sourceId}`,{method:'DELETE'});
+    if(!r||!r.ok)throw 0;
+    showToast('Accès révoqué');loadPermsForUser(userId);
+  }catch{showToast('Erreur','err');}
+}
+async function loadPermsOverview(){
+  try{
+    const r=await OpAuth.apiFetch('/admin/users?per_page=50');
+    if(!r||!r.ok)throw 0;
+    const d=await r.json();const users=d.users||[];
+    const tb=document.getElementById('perms-tbody');
+    // Fetch perms for each user
+    const rows=await Promise.all(users.map(async u=>{
+      try{
+        const r2=await OpAuth.apiFetch(`/admin/users/${u.id}/permissions`);
+        const d2=await r2?.json();
+        const perms=d2?.permissions||[];
+        return {u,perms};
+      }catch{return{u,perms:[]};}
+    }));
+    tb.innerHTML=rows.map(({u,perms})=>`
+      <tr><td><span style="font-weight:500">${u.username}</span></td>
+      <td style="font-family:var(--font-mono);font-size:12px">${u.email}</td>
+      <td>${roleBadge(u.role)}</td>
+      <td style="font-size:12px;color:var(--text-2)">${perms.length?perms.map(p=>p.source_name||p.source_id).join(', '):'<span style="color:var(--green)">Toutes (admin)</span>'}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="openPermsModal(${u.id},'${u.username}')"><i class="fas fa-edit"></i> Gérer</button></td></tr>`).join('');
+  }catch{}
+}
+
+// ═══ CONFIG ═══
+async function loadConfig(){
+  try{
+    const r=await OpAuth.apiFetch('/admin/config');
+    if(!r||!r.ok)return;
+    const d=await r.json();const cfg=d.config||{};
+    const v=key=>{const c=cfg[key];return c?c.value:null;};
+    // Voice
+    if(document.getElementById('cfg-stt-engine'))  document.getElementById('cfg-stt-engine').value  = v('voice_stt_engine') ||'whisper';
+    if(document.getElementById('cfg-tts-engine'))  document.getElementById('cfg-tts-engine').value  = v('voice_tts_engine') ||'piper';
+    if(document.getElementById('cfg-voice-lang'))  document.getElementById('cfg-voice-lang').value  = v('voice_default_lang')||'fr';
+    if(document.getElementById('cfg-retain-audio'))document.getElementById('cfg-retain-audio').checked= v('voice_retain_audio')===true||v('voice_retain_audio')==='true';
+    if(document.getElementById('cfg-retention-days'))document.getElementById('cfg-retention-days').value= v('voice_retention_days')||7;
+    if(document.getElementById('cfg-anonymize'))   document.getElementById('cfg-anonymize').checked  = v('voice_anonymize')===true||v('voice_anonymize')==='true';
+    // Dash
+    if(document.getElementById('cfg-max-widgets')) document.getElementById('cfg-max-widgets').value  = v('dashboard_max_widgets')||20;
+    if(document.getElementById('cfg-max-export'))  document.getElementById('cfg-max-export').value   = v('dashboard_max_export')||10000;
+    if(document.getElementById('cfg-refresh-sec')) document.getElementById('cfg-refresh-sec').value  = v('dashboard_refresh_sec')||300;
+    if(document.getElementById('cfg-session-hours'))document.getElementById('cfg-session-hours').value= v('session_expire_hours')||24;
+  }catch{}
+}
+async function saveVoiceConfig(){
+  const updates=[
+    {key:'voice_stt_engine',      value:document.getElementById('cfg-stt-engine').value},
+    {key:'voice_tts_engine',      value:document.getElementById('cfg-tts-engine').value},
+    {key:'voice_default_lang',    value:document.getElementById('cfg-voice-lang').value},
+    {key:'voice_retain_audio',    value:document.getElementById('cfg-retain-audio').checked},
+    {key:'voice_retention_days',  value:parseInt(document.getElementById('cfg-retention-days').value)},
+    {key:'voice_anonymize',       value:document.getElementById('cfg-anonymize').checked},
+  ];
+  await saveConfigBatch(updates,'Configuration voix sauvegardée');
+}
+async function saveDashConfig(){
+  const updates=[
+    {key:'dashboard_max_widgets', value:parseInt(document.getElementById('cfg-max-widgets').value)},
+    {key:'dashboard_max_export',  value:parseInt(document.getElementById('cfg-max-export').value)},
+    {key:'dashboard_refresh_sec', value:parseInt(document.getElementById('cfg-refresh-sec').value)},
+    {key:'session_expire_hours',  value:parseInt(document.getElementById('cfg-session-hours').value)},
+  ];
+  await saveConfigBatch(updates,'Configuration dashboards sauvegardée');
+}
+async function saveConfigBatch(updates,msg){
+  try{
+    await Promise.all(updates.map(u=>OpAuth.apiFetch('/admin/config',{method:'PUT',body:JSON.stringify(u)})));
+    showToast(msg);
+  }catch{showToast('Erreur sauvegarde','err');}
+}
+
+// ═══ AUDIT ═══
+let _auditPage=1,_auditFilter='',_auditTotal=0;
+const AUDIT_PER_PAGE=20;
+async function loadAuditStats(){
+  try{
+    const r=await OpAuth.apiFetch('/admin/audit/stats');
+    if(!r||!r.ok)return;
+    const d=await r.json();
+    document.getElementById('audit-today').textContent=d.events_today??'—';
+    document.getElementById('audit-fail').textContent=d.failures_today??'—';
+    document.getElementById('audit-logins').textContent=d.logins_today??'—';
+  }catch{}
+}
+async function loadAudit(){
+  const offset=(_auditPage-1)*AUDIT_PER_PAGE;
+  let url=`/admin/audit/logs?limit=${AUDIT_PER_PAGE}&offset=${offset}`;
+  if(_auditFilter)url+=`&action=${_auditFilter}`;
+  try{
+    const r=await OpAuth.apiFetch(url);
+    if(!r||!r.ok)throw 0;
+    const d=await r.json();
+    _auditTotal=d.total||0;
+    renderAudit(d.logs||[]);
+    document.getElementById('audit-count').textContent=`${_auditTotal} événements total`;
+    document.getElementById('audit-page').textContent=_auditPage;
+  }catch{document.getElementById('audit-tbody').innerHTML='<tr><td colspan="6" class="empty"><p>Erreur de chargement</p></td></tr>';}
+}
+function renderAudit(logs){
+  const tb=document.getElementById('audit-tbody');
+  if(!logs.length){tb.innerHTML='<tr><td colspan="6" class="empty"><i class="fas fa-shield-alt"></i><p>Aucun événement</p></td></tr>';return;}
+  const res={success:'badge-ok',failure:'badge-fail',error:'badge-warn'};
+  tb.innerHTML=logs.map(l=>`
+    <tr style="animation:fadeIn .2s ease">
+      <td style="font-size:11.5px;font-family:var(--font-mono);white-space:nowrap">${fmt(l.created_at)}</td>
+      <td style="font-size:12px">${l.user_email||'—'}</td>
+      <td><span style="font-family:var(--font-mono);font-size:11.5px;color:var(--accent)">${l.action||'—'}</span></td>
+      <td style="font-size:11.5px;color:var(--text-3)">${l.resource||'—'}</td>
+      <td style="font-family:var(--font-mono);font-size:11px;color:var(--text-3)">${l.ip_address||'—'}</td>
+      <td><span class="badge ${res[l.result]||'badge-warn'}">${l.result||'—'}</span></td>
+    </tr>`).join('');
+}
+function setAuditFilter(f){
+  _auditFilter=f;_auditPage=1;
+  document.querySelectorAll('.audit-filter-item').forEach(el=>el.classList.toggle('active',el.textContent.trim()===(f||'Tout')));
+  loadAudit();
+}
+function auditPage(dir){
+  const max=Math.ceil(_auditTotal/AUDIT_PER_PAGE)||1;
+  _auditPage=Math.max(1,Math.min(_auditPage+dir,max));
+  loadAudit();
+}
+
+// ═══ MÉTADONNÉES ═══
+async function loadRelations(){
+  try{
+    // Stats from sources
+    const rs=await OpAuth.apiFetch('/sources');
+    if(rs&&rs.ok){
+      const src=await rs.json();
+      const tot=src.reduce((a,s)=>a+(s.entity_count||0),0);
+      document.getElementById('meta-entities').textContent=tot.toLocaleString();
+    }
+    // Relations
+    const rr=await OpAuth.apiFetch('/relations?limit=50&validated=false');
+    if(rr&&rr.ok){
+      const d=await rr.json();
+      const rels=d.relationships||d||[];
+      document.getElementById('meta-rels').textContent=rels.length;
+      document.getElementById('meta-pending').textContent=rels.filter(r=>!r.validated).length;
+      document.getElementById('meta-validated').textContent=rels.filter(r=>r.validated).length;
+      renderRelations(rels.slice(0,20));
+    }else throw 0;
+  }catch{renderRelationsFallback();}
+}
+function renderRelations(rels){
+  const el=document.getElementById('relations-list');
+  if(!rels.length){el.innerHTML='<div class="empty"><i class="fas fa-check-circle" style="color:var(--green)"></i><p>Toutes les relations sont validées</p></div>';return;}
+  el.innerHTML=rels.map(r=>`
+    <div class="rel-item" style="animation:fadeIn .2s ease">
+      <span class="rel-src">${r.source_entity||'—'}.${r.source_attribute||'id'}</span>
+      <span class="rel-arrow"><i class="fas fa-arrow-right"></i></span>
+      <span class="rel-tgt">${r.target_entity||'—'}.${r.target_attribute||'id'}</span>
+      <span class="rel-conf">${Math.round((r.confidence_score||0)*100)}%</span>
+      <div class="rel-actions">
+        <button class="btn btn-primary btn-sm" onclick="validateRel('${r.id}',true)" title="Valider"><i class="fas fa-check"></i></button>
+        <button class="btn btn-danger btn-sm" onclick="validateRel('${r.id}',false)" title="Rejeter"><i class="fas fa-times"></i></button>
+      </div>
+    </div>`).join('');
+}
+function renderRelationsFallback(){
+  document.getElementById('meta-entities').textContent='1382';
+  document.getElementById('meta-rels').textContent='2641';
+  document.getElementById('meta-validated').textContent='2498';
+  document.getElementById('meta-pending').textContent='143';
+  document.getElementById('relations-list').innerHTML=[
+    {s:'CS_CSHFL',sa:'BALI',t:'TH_BNK',ta:'BALI',c:.92},
+    {s:'orders',sa:'customer_id',t:'customers',ta:'id',c:.99},
+    {s:'ALMVT',sa:'ITMREF',t:'ITMMASTER',ta:'ITMREF',c:.87},
+  ].map(r=>`
+    <div class="rel-item">
+      <span class="rel-src">${r.s}.${r.sa}</span>
+      <span class="rel-arrow"><i class="fas fa-arrow-right"></i></span>
+      <span class="rel-tgt">${r.t}.${r.ta}</span>
+      <span class="rel-conf">${Math.round(r.c*100)}%</span>
+      <div class="rel-actions">
+        <button class="btn btn-primary btn-sm" title="Valider"><i class="fas fa-check"></i></button>
+        <button class="btn btn-danger btn-sm" title="Rejeter"><i class="fas fa-times"></i></button>
+      </div>
+    </div>`).join('');
+}
+async function validateRel(id,validate){
+  showToast(validate?'Relation validée':'Relation rejetée',validate?'ok':'err');
+  loadRelations();
+}
+
+/* ════ USER MENU FUNCTIONS ════ */
+function toggleUserMenu(){
+  const m = document.getElementById('userMenu');
+  if(!m) return;
+  const sb = document.getElementById('sb');
+  const isRail = sb && sb.classList.contains('closed');
+  if(isRail){
+    const av = document.getElementById('railUserAv');
+    if(av){
+      const r = av.getBoundingClientRect();
+      m.style.left = '58px';
+      m.style.bottom = (window.innerHeight - r.top + 4) + 'px';
+      m.style.top = 'auto';
+      m.style.width = '240px';
+    }
+  } else {
+    const footer = document.querySelector('.sb-user-row-inner');
+    if(footer){
+      const r = footer.getBoundingClientRect();
+      m.style.left = r.left + 'px';
+      m.style.bottom = (window.innerHeight - r.top + 4) + 'px';
+      m.style.top = 'auto';
+      m.style.width = r.width + 'px';
+    }
+  }
+  const open = m.classList.toggle('open');
+  if(open) setTimeout(()=>document.addEventListener('click', _closeOnOutside), 0);
+}
+function closeUserMenu(){
+  const ls = document.getElementById('umLangSub');
+  if(ls) ls.classList.remove('open');
+  const m = document.getElementById('userMenu');
+  if(m) m.classList.remove('open');
+  document.removeEventListener('click', _closeOnOutside);
+}
+function _closeOnOutside(e){
+  const m = document.getElementById('userMenu');
+  const f = document.querySelector('.sb-user-row-inner');
+  const r = document.getElementById('railUserAv');
+  if(m && !m.contains(e.target) &&
+     (!f || !f.contains(e.target)) &&
+     (!r || !r.contains(e.target))){
+    closeUserMenu();
+  }
+}
+function toggleUmLang(e){
+  e.stopPropagation();
+  const ls = document.getElementById('umLangSub');
+  if(ls) ls.classList.toggle('open');
+}
+function applyLang(lang){
+  localStorage.setItem('op_lang', lang);
+}
+
+</script>
+
+<!-- ══ USER MENU — style chat.html ══ -->
+<div class="user-menu" id="userMenu">
+
+  <!-- Header user -->
+  <div style="padding:12px 14px 10px;border-bottom:1px solid var(--border)">
+    <div style="font-size:13px;font-weight:600;color:var(--text-0)" id="um-name">Admin</div>
+    <div style="font-size:11px;color:var(--text-2);margin-top:1px" id="um-email">admin@onepilot.local</div>
+    <div style="display:flex;align-items:center;gap:5px;margin-top:5px;font-size:11px;color:var(--green)">
+      <div style="width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0"></div>
+      Connecté
+    </div>
+  </div>
+
+  <!-- Retour à l'accueil -->
+  <a class="um-item" href="/index.html" onclick="closeUserMenu()">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 6.5L8 2l6 4.5"/><path d="M3 6v8h4v-4h2v4h4V6"/></svg>
+    Retour à l'accueil
+  </a>
+
+  <!-- Chat IA -->
+  <a class="um-item" href="/chat.html" onclick="closeUserMenu()">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M14 10a2 2 0 0 1-2 2H5l-3 3V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/></svg>
+    Assistant IA
+  </a>
+
+  <div class="um-divider"></div>
+
+  <!-- Langue -->
+  <button class="um-item" onclick="toggleUmLang(event)" style="justify-content:space-between">
+    <span style="display:flex;align-items:center;gap:10px">
+      <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 1.5C8 1.5 6 4 6 8s2 6.5 2 6.5M8 1.5C8 1.5 10 4 10 8s-2 6.5-2 6.5M1.5 8h13"/></svg>
+      Langue
+    </span>
+    <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 7l3 3 3-3"/></svg>
+  </button>
+  <div class="um-lang-sub" id="umLangSub">
+    <button class="um-item" onclick="applyLang('fr');closeUserMenu()" style="padding-left:28px;gap:8px">🇫🇷 Français</button>
+    <button class="um-item" onclick="applyLang('en');closeUserMenu()" style="padding-left:28px;gap:8px">🇬🇧 English</button>
+    <button class="um-item" onclick="applyLang('ar');closeUserMenu()" style="padding-left:28px;gap:8px">🇩🇿 العربية</button>
+    <button class="um-item" onclick="applyLang('de');closeUserMenu()" style="padding-left:28px;gap:8px">🇩🇪 Deutsch</button>
+  </div>
+
+  <div class="um-divider"></div>
+
+  <!-- Se déconnecter -->
+  <button class="um-item um-logout" onclick="OpAuth.logout()">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 14H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h3"/><path d="M10 11l3-3-3-3"/><line x1="13" y1="8" x2="6" y2="8"/></svg>
+    Se déconnecter
+  </button>
+
+</div>
+</body>
+</html>

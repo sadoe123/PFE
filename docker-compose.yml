@@ -17,19 +17,16 @@ services:
       - REDIS_HOST=onepilot_redis
       - MEILI_HOST=http://onepilot_meilisearch:7700
       - MEILI_MASTER_KEY=${MEILI_MASTER_KEY:-onepilot_meili_key}
-      # ── Modèles IA — chemins persistants (volumes) ────────
       - PIPER_VOICES_DIR=/app/models/piper
       - PIPER_DEFAULT_VOICE=fr_FR-upmc-medium
       - VOSK_MODEL_PATH=/app/models/vosk/vosk-model-small-fr-0.22
       - WHISPER_MODEL=small
       - WHISPER_LANG=fr
-      # ── HuggingFace cache persistant ─────────────────────
       - HF_HOME=/app/models/hf
       - TRANSFORMERS_CACHE=/app/models/hf
       - SENTENCE_TRANSFORMERS_HOME=/app/models/hf
-      # ── Ollama LLM (hôte Windows GPU) ─────────────────────
       - OLLAMA_HOST=http://host.docker.internal:11434
-      - OLLAMA_MODEL=qwen2.5-coder:3b
+      - OLLAMA_MODEL=qwen2.5-coder:7b
     volumes:
       - ./core:/app/core
       - ./connectors:/app/connectors
@@ -37,7 +34,6 @@ services:
       - ./db:/app/db
       - ./ui:/app/ui
       - uploads_data:/app/uploads
-      # ── Modèles IA persistants (survivent aux restart) ────
       - piper_voices:/app/models/piper
       - vosk_model:/app/models/vosk
       - whisper_cache:/app/models/whisper
@@ -64,7 +60,7 @@ services:
       interval: 30s
       timeout: 60s
       retries: 5
-      start_period: 60s
+      start_period: 120s
 
   # ── UI (serveur statique) ─────────────────────────────────
   ui:
@@ -94,6 +90,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db/migrations/001_init.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
+      - ./db/migrations/021_admin_console.sql:/docker-entrypoint-initdb.d/021_admin_console.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-onepilot}"]
       interval: 5s
@@ -180,11 +177,10 @@ volumes:
   redis_data:
   uploads_data:
   meilisearch_data:
-  # ── Modèles IA persistants ────────────────────────────────
-  piper_voices:      # Voix TTS Piper (~100MB total)
-  vosk_model:        # Modèle Vosk FR (~50MB)
-  whisper_cache:     # Cache modèles Whisper (~240MB small)
-  hf_cache:          # HuggingFace / Sentence-BERT (~500MB)
+  piper_voices:
+  vosk_model:
+  whisper_cache:
+  hf_cache:
 
 networks:
   onepilot_net:

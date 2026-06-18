@@ -219,7 +219,8 @@ Rules:
   * "solde trésorerie" / "trésorerie" / "solde par société" → ONLY use [SI_Trésorerie]: SELECT [Société], SUM([AMOUNTI]) AS Solde FROM [SI_Trésorerie] GROUP BY [Société]
   * "flux bancaires" / "flux par compte" / "mouvements bancaires" → ONLY use [Transactions bancaires] or [Journal]
   * "transactions bancaires" / "transactions" → ONLY use [Transactions bancaires]
-  * "soldes bancaires" / "dernière intégration" / "closing balance" → ONLY use [Dernière integration bancaire]
+  * "soldes bancaires" / "dernière intégration" / "closing balance" / "solde" → ONLY use [Dernière integration bancaire]: SELECT [Société], [Banque], SUM([CLOSINGBALANCEAMOUNT]) AS Solde FROM [Dernière integration bancaire] GROUP BY [Société], [Banque]
+  * CRITICAL: [Dernière integration bancaire] uses [CLOSINGBALANCEAMOUNT] NOT [AMOUNTI] — NEVER use [AMOUNTI] with this view
   * "comptes avec banque" / "comptes et société" → ONLY use [Comptes]
   * "financement" / "crédit" / "emprunt" → ONLY use [FINANCEMENT_BI]
   * NEVER JOIN [SI_Trésorerie] with other tables — it already has Société, Banque, AMOUNTI
@@ -227,10 +228,33 @@ Rules:
   * NEVER JOIN [Comptes] with other tables — it already has Banque, Société, Devises
 - For date filters use DATEADD, MONTH(), YEAR(), GETDATE()
 - For "superieur a la moyenne": use WHERE col > (SELECT AVG(col) FROM table)
+- CRITICAL COLUMN MAPPING for SXA views:
+  * [Dernière integration bancaire] → amount column = [CLOSINGBALANCEAMOUNT] (NEVER [AMOUNTI])
+  * [SI_Trésorerie] → amount column = [AMOUNTI]
+  * [Transactions bancaires] → amount column = [AMOUNT]
+  * [FINANCEMENT_BI] → amount column = [Montant]
+  * For "solde dépasse N fois la moyenne" with [Dernière integration bancaire]:
+    SELECT [Société], [Banque], SUM([CLOSINGBALANCEAMOUNT]) AS Solde
+    FROM [Dernière integration bancaire]
+    GROUP BY [Société], [Banque]
+    HAVING SUM([CLOSINGBALANCEAMOUNT]) > N * (SELECT AVG([CLOSINGBALANCEAMOUNT]) FROM [Dernière integration bancaire])
+    ORDER BY Solde DESC
 - For "mois dernier": use WHERE col >= DATEADD(MONTH,-1,GETDATE()) AND col < GETDATE()
 - For "chiffre d'affaires" or "revenus" or "CA": revenue = SUM([UnitPrice]*[Quantity]) from [Order Details]
 - For specific month+year like "janvier 2024": use WHERE MONTH(col)=1 AND YEAR(col)=2024
 - Month names: janvier=1,fevrier=2,mars=3,avril=4,mai=5,juin=6,juillet=7,aout=8,septembre=9,octobre=10,novembre=11,decembre=12
+- CRITICAL FOR AGGREGATIONS: When question contains "total", "somme", "sum", "groupé par", "par société", "par devise", "par type", "par banque", "par compte", "nombre", "repartition", "evolution" → ALWAYS use SUM() or COUNT() with GROUP BY on ALL mentioned dimensions.
+- CRITICAL GROUP BY RULE: If question says "par X et par Y" or "par X et Y" → GROUP BY MUST include BOTH [X] AND [Y]. NEVER drop any dimension from GROUP BY.
+- Examples of correct multi-dimension GROUP BY:
+  * "par banque et par type" → GROUP BY [Banque], [type_transaction]
+  * "par banque et par société" → GROUP BY [Banque], [Société]  
+  * "par type et par état" → GROUP BY [type_transaction], [état]
+  * "par banque et par devise" → GROUP BY [Banque], [Devises du compte]
+  * "nombre par banque et par société" → SELECT [Banque], [Société], COUNT(*) AS Nb FROM [table] GROUP BY [Banque], [Société]
+  * "top 10 par banque et par type" → SELECT TOP 10 [Banque], [type_transaction], COUNT(*) AS Nb, SUM([Montant]) AS Total FROM [table] GROUP BY [Banque], [type_transaction] ORDER BY Total DESC
+- For "total par X et Y": SELECT [X], [Y], SUM([amount_col]) AS Total FROM [table] GROUP BY [X], [Y] ORDER BY Total DESC
+- For "top N": use SELECT TOP N not SELECT TOP 100
+- NEVER use SELECT TOP 100 with all columns when the question asks for aggregation
 - Always select all relevant columns, not just one column
 - Use proper JOINs between tables when needed
 - The tables mentioned in the schema are the ONLY tables available
@@ -259,11 +283,10 @@ async def _get_few_shot_examples(pg_pool, source_id: str = None, limit: int = 5)
             LEFT JOIN nlu_query_log nql
                    ON nql.conversation_id = cf.conversation_id
                   AND nql.question        = cf.question
-            WHERE  cf.feedback_type     = 'like'
-              AND  cf.used_for_training = TRUE
-              AND  cf.question          != ''
-              AND  nql.sql_generated    IS NOT NULL
-              AND  nql.sql_generated    != ''
+            WHERE  cf.feedback_type  = 'like'
+              AND  cf.question       != ''
+              AND  nql.sql_generated IS NOT NULL
+              AND  nql.sql_generated != ''
         """
         params = []
         if source_id:
