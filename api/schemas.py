@@ -37,13 +37,19 @@ class ConnectorType(str, Enum):
     # Files
     FILE_CSV    = "file_csv"
     FILE_EXCEL  = "file_excel"
+    FILE_XLSX   = "file_xlsx"
     FILE_JSON   = "file_json"
+    FILE_PARQUET = "file_parquet"
+    FILE_AVRO   = "file_avro"
+    # Custom plugins uploadés via la console admin
+    CUSTOM      = "custom"
 
 
 class SourceCategory(str, Enum):
     DATABASE   = "database"
     WEBSERVICE = "webservice"
     FILE       = "file"
+    CUSTOM     = "custom"
 
 
 class AuthType(str, Enum):
@@ -85,7 +91,12 @@ CONNECTOR_CATEGORY_MAP: Dict[ConnectorType, SourceCategory] = {
     # Files
     ConnectorType.FILE_CSV:    SourceCategory.FILE,
     ConnectorType.FILE_EXCEL:  SourceCategory.FILE,
+    ConnectorType.FILE_XLSX:   SourceCategory.FILE,
     ConnectorType.FILE_JSON:   SourceCategory.FILE,
+    ConnectorType.FILE_PARQUET:SourceCategory.FILE,
+    ConnectorType.FILE_AVRO:   SourceCategory.FILE,
+    # Custom
+    ConnectorType.CUSTOM:      SourceCategory.CUSTOM,
 }
 
 
@@ -122,6 +133,16 @@ class DataSourceCreate(BaseModel):
     name:           str = Field(..., min_length=1, max_length=255)
     description:    Optional[str] = None
     connector_type: ConnectorType
+
+    @field_validator('connector_type', mode='before')
+    @classmethod
+    def accept_custom_connector_types(cls, v):
+        """Accepte les types custom (plugins) en les mappant sur CUSTOM."""
+        known = {e.value for e in ConnectorType}
+        if isinstance(v, str) and v not in known:
+            # Type inconnu = plugin custom
+            return ConnectorType.CUSTOM
+        return v
 
     # DB fields
     host:           Optional[str] = None
@@ -168,6 +189,10 @@ class DataSourceCreate(BaseModel):
             # Tous les autres web services : base_url requise
             elif not self.base_url:
                 raise ValueError("base_url est requis pour un web service")
+
+        elif category == SourceCategory.CUSTOM:
+            # Plugins custom : aucun champ obligatoire
+            pass
 
         return self
 

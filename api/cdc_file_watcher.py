@@ -145,7 +145,7 @@ class FileCDCEngine:
 
         # Dernière entrée connue
         last = await self.pg.fetchrow("""
-            SELECT checksum, size_bytes, modified_at, detected_at
+            SELECT checksum, size_bytes, file_modified_at, detected_at
             FROM   file_cdc_history
             WHERE  source_id = $1
             ORDER  BY detected_at DESC

@@ -308,7 +308,34 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"⚠️  Redis non disponible: {e}")
 
+    # ── Rechargement plugins custom depuis DB ────────────────────────
+    try:
+        from core.plugin_manager import plugin_manager
+        import importlib.util
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                'SELECT name, class_name, file_path, enabled FROM registered_plugins'
+            )
+        for r in rows:
+            try:
+                import os as _os
+                if not _os.path.exists(r['file_path']): continue
+                spec   = importlib.util.spec_from_file_location(r['name'], r['file_path'])
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                cls    = getattr(module, r['class_name'])
+                plugin_manager.register(r['name'], cls)
+                if not r['enabled']:
+                    plugin_manager.disable(r['name'])
+                logger.info(f"[Plugins] ✅ {r['name']} ({r['class_name']}) rechargé")
+            except Exception as ep:
+                logger.warning(f"[Plugins] ⚠️ Impossible de recharger {r['name']}: {ep}")
+    except Exception as e:
+        logger.warning(f'[Plugins] Rechargement ignoré: {e}')
+
     # ── Démarrage WAL CDC listener ────────────────────────────────────
+
     _wal_task = None
     try:
         from .cdc_db_triggers import PostgreSQLWALCDC
@@ -593,6 +620,68 @@ async def root():
     return {"service": "OnePilot", "version": "3.0.0", "status": "running", "docs": "/docs"}
 
 
+@app.get("/notifications/stream", tags=["Notifications"])
+async def notifications_stream(source_id: str, token: str = "", request: Request = None):
+    """
+    SSE stream — notifications temps réel pour la console admin et chat.
+    S'abonne aux canaux Redis CDC de la source et pousse les événements.
+    """
+    import asyncio, json
+
+    async def event_generator():
+        # Ping initial
+        yield 'data: {"type":"connected"}\n\n'
+        try:
+            redis = await get_redis()
+            pubsub = redis.pubsub()
+            channels = [
+                f"cdc:notifications:{source_id}",
+                f"cdc:wal:{source_id}",
+                f"cdc:file:{source_id}",
+                f"cdc:mssql:{source_id}",
+                f"cdc:relations:{source_id}",
+            ]
+            await pubsub.subscribe(*channels)
+            logger.info(f"[SSE] Client connecté — source {source_id}")
+            heartbeat = 0
+            while True:
+                if request and await request.is_disconnected():
+                    break
+                msg = await pubsub.get_message(
+                    ignore_subscribe_messages=True, timeout=1.0
+                )
+                if msg and msg["type"] == "message":
+                    data = msg["data"]
+                    if isinstance(data, bytes): data = data.decode("utf-8")
+                    yield f"data: {data}\n\n"
+                heartbeat += 1
+                if heartbeat >= 30:  # Heartbeat toutes les 30s
+                    heartbeat = 0
+                    yield 'data: {"type":"heartbeat"}\n\n'
+                await asyncio.sleep(1)
+        except Exception as e:
+            logger.warning(f"[SSE] Erreur stream {source_id}: {e}")
+            yield 'data: {"type":"error"}\n\n'
+        finally:
+            try:
+                await pubsub.unsubscribe(*channels)
+                await pubsub.close()
+            except Exception:
+                pass
+            logger.info(f"[SSE] Client déconnecté — source {source_id}")
+
+    from fastapi.responses import StreamingResponse as _SR
+    return _SR(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control":     "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection":        "keep-alive",
+        }
+    )
+
+
 @app.get("/health", tags=["Health"])
 async def health():
     checks = {}
@@ -623,7 +712,7 @@ async def health():
 
 @app.get("/connector-types", tags=["Meta"])
 async def get_connector_types():
-    return {
+    result = {
         "database": {
             "label": "Base de données directe",
             "description": "Connexion directe via driver SQL",
@@ -666,6 +755,26 @@ async def get_connector_types():
             ],
         },
     }
+    # ── Ajouter les plugins custom depuis DB ──
+    try:
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT name, class_name FROM registered_plugins WHERE enabled = TRUE"
+            )
+        if rows:
+            result["custom"] = {
+                "label": "Connecteurs Custom",
+                "description": "Plugins uploadés via la console admin",
+                "icon": "puzzle",
+                "types": [
+                    {"id": r["name"], "label": r["class_name"], "icon": "🔌", "default_port": None}
+                    for r in rows
+                ],
+            }
+    except Exception:
+        pass
+    return result
 
 
 # ══════════════════════════════════════════════════════════════
@@ -780,6 +889,7 @@ async def _run_sync_background(source_id: UUID):
                 logger.warning(f"[Sync BG] Enrichissement sémantique failed (non-bloquant): {e}")
 
         logger.info(f"[Sync BG] ✅ Pipeline complet — source {source_id}: {entity_count} entités")
+        # last_synced_at est mis à jour par save_metadata() dans repository.py
     except Exception as e:
         logger.error(f"[Sync BG] ❌ Erreur — source {source_id}: {e}", exc_info=True)
 
@@ -1596,9 +1706,7 @@ async def reset_circuit_breaker(source_id: UUID):
     source = await get_source(source_id)
     if not source:
         raise HTTPException(404, f"Source {source_id} introuvable")
-    from .connection_service import CircuitBreaker
-    cb = CircuitBreaker.get(str(source_id))
-    cb.reset()
+    # CircuitBreaker non disponible dans connection_service v3.3
     return {
         "source_id": str(source_id),
         "success":   True,

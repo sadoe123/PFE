@@ -52,6 +52,10 @@ nav.sb{
 }
 nav.sb.closed{width:52px;}
 nav.sb.closed .logo-n{display:none!important;}
+nav.sb.closed .sb-nav-item{justify-content:center;padding:8px 0;}
+nav.sb.closed .sb-nav-item svg{margin:0;}
+nav.sb.closed .sb-nav-section{display:none!important;}
+nav.sb.closed #sidebarSources{display:none!important;}
 /* Logo row */
 .sb-logo-row{
   display:flex;align-items:center;justify-content:space-between;
@@ -112,7 +116,7 @@ nav.sb.closed .logo-n{display:none!important;}
 .sb-user-footer{padding:8px 10px;border-top:1px solid var(--border);flex-shrink:0;background:var(--bg-1);}
 .sb-user-row-inner{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:var(--r);cursor:pointer;transition:.14s;border:1px solid transparent;}
 .sb-user-row-inner:hover{background:var(--bg-3);border-color:var(--border);}
-.sb-user-av{width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#040e1a;}
+.sb-user-av{width:32px;height:32px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#040e1a;}
 .sb-user-av.adm{background:linear-gradient(135deg,var(--accent),var(--accent2));}
 .sb-user-info{flex:1;min-width:0;overflow:hidden;}
 .sb-user-name{font-size:12.5px;font-weight:500;color:var(--text-0);white-space:nowrap;}
@@ -235,6 +239,81 @@ html.light .tbl th{background:var(--bg-2);}
 html.light .form-input,html.light .form-select{background:var(--bg-2);}
 html.light .perm-item,html.light .cfg-item+.cfg-item,html.light .rel-item{background:var(--bg-2);}
 @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+/* ══ WIZARD AJOUT SOURCE (porté depuis index.html) ══ */
+.modal-step-indicator{margin-left:auto;font-family:var(--font-mono);font-size:11px;color:var(--text-2);background:var(--bg-3);padding:3px 10px;border-radius:20px;border:1px solid var(--border);}
+.wizard-steps{display:flex;align-items:center;gap:0;margin-bottom:14px;}
+.wstep{display:flex;align-items:center;gap:8px;flex:1;}
+.wstep::after{content:'';flex:1;height:1px;background:var(--border);margin:0 8px;}
+.wstep:last-child::after{display:none;}
+.wstep-num{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:11px;font-weight:700;border:2px solid var(--border);color:var(--text-3);flex-shrink:0;transition:all 0.2s;}
+.wstep-label{font-size:12px;color:var(--text-3);white-space:nowrap;font-weight:500;}
+.wstep.done .wstep-num{background:var(--green);border-color:var(--green);color:#030a07;}
+.wstep.active .wstep-num{background:linear-gradient(135deg,var(--accent),var(--accent2));border-color:var(--accent);color:#050e18;}
+.wstep.active .wstep-label{color:var(--text-0);font-weight:600;}
+.cat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;}
+.cat-card{padding:10px 8px;border:1.5px solid var(--border);border-radius:var(--r);cursor:pointer;text-align:center;transition:var(--tr);background:var(--bg-2);}
+.cat-card:hover{border-color:var(--border-hi);background:var(--bg-3);}
+.cat-card.selected{border-color:var(--accent);background:var(--accent-glow);}
+.cat-icon{width:32px;height:32px;margin:0 auto 6px;display:flex;align-items:center;justify-content:center;}.cat-icon svg{width:28px;height:28px;}
+.cat-name{font-weight:600;font-size:12px;color:var(--text-0);}
+.cat-desc{font-size:10.5px;color:var(--text-2);margin-top:2px;}
+.type-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-bottom:12px;}
+.type-pill{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--r);cursor:pointer;transition:var(--tr);background:var(--bg-2);}
+.type-pill:hover{border-color:var(--border-hi);background:var(--bg-3);}
+.type-pill.selected{border-color:var(--accent);background:var(--accent-glow);}
+.type-emoji{display:flex;align-items:center;justify-content:center;width:24px;height:24px;flex-shrink:0;}
+.type-emoji svg{width:18px;height:18px;}
+.type-name{font-size:12px;font-weight:500;color:var(--text-0);}
+.type-port{font-family:var(--font-mono);font-size:10px;color:var(--text-3);margin-left:auto;}
+.form-section{margin-bottom:14px;}
+.form-section-title{font-family:var(--font-mono);font-size:9.5px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-3);margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border);}
+.upload-zone{border:2px dashed var(--border-hi);border-radius:var(--r);padding:24px;text-align:center;cursor:pointer;transition:all 0.2s;background:var(--bg-2);}
+.upload-zone:hover{border-color:var(--accent);background:var(--accent-glow);}
+.upload-zone input[type=file]{display:none;}
+.upload-zone-icon{font-size:32px;margin-bottom:8px;}
+.upload-zone-text{font-size:13px;color:var(--text-1);}
+.upload-zone-hint{font-size:11px;color:var(--text-3);margin-top:4px;}
+.test-box{border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-top:16px;}
+.test-header{display:flex;align-items:center;gap:10px;padding:14px 16px;background:var(--bg-2);border-bottom:1px solid var(--border);}
+.test-title{font-weight:600;font-size:13px;}
+.test-status{margin-left:auto;font-size:12px;font-weight:600;}
+.ts-ok{color:var(--green);}
+.ts-err{color:var(--red);}
+.test-body{padding:14px 16px;}
+.test-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.test-row:last-child{margin-bottom:0;}
+.test-row-label{font-size:12px;color:var(--text-2);width:100px;flex-shrink:0;}
+.test-row-value{font-family:var(--font-mono);font-size:12px;color:var(--text-0);}
+.latency-bar{height:4px;background:var(--bg-3);border-radius:2px;width:120px;overflow:hidden;margin-left:8px;}
+.latency-fill{height:100%;border-radius:2px;transition:width 0.5s;}
+.latency-good{background:var(--green);}
+.latency-ok{background:var(--yellow);}
+.latency-slow{background:var(--red);}
+.spinner{width:16px;height:16px;border:2px solid var(--border-hi);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;display:inline-block;}
+
+/* CONNECTOR CATALOG */
+.conn-type-card{
+  display:flex;align-items:center;gap:8px;
+  padding:9px 12px;border-radius:var(--r);
+  border:1px solid var(--border);background:var(--bg-2);
+  cursor:pointer;font-size:12.5px;color:var(--text-1);
+  transition:var(--tr);text-align:left;font-family:var(--font-sans);
+  width:100%;
+}
+.conn-type-card:hover{background:var(--bg-3);border-color:var(--accent);color:var(--text-0);}
+.conn-type-icon{font-size:16px;flex-shrink:0;}
+.conn-type-label{flex:1;font-weight:500;}
+.conn-type-port{font-family:var(--font-mono);font-size:10px;color:var(--text-3);}
+/* CONNECTOR CHIPS (modal type selector) */
+.conn-chip{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:5px 10px;border-radius:20px;
+  border:1px solid var(--border);background:var(--bg-2);
+  cursor:pointer;font-size:11.5px;color:var(--text-1);
+  transition:var(--tr);font-family:var(--font-sans);
+}
+.conn-chip:hover{background:var(--bg-3);border-color:var(--border-hi);}
+.conn-chip.active{background:var(--accent-glow);border-color:rgba(0,200,245,.35);color:var(--accent);}
 
 /* ════ CONTEXT BAR ════ */
 .admin-ctx-bar{
@@ -247,6 +326,11 @@ html.light .perm-item,html.light .cfg-item+.cfg-item,html.light .rel-item{backgr
 .admin-ctx-sep{color:var(--text-3);}
 .admin-ctx-sub{font-size:11.5px;color:var(--text-2);}
 .admin-ctx-right{display:flex;align-items:center;gap:8px;}
+.notif-item{padding:10px 12px;border-radius:var(--r);margin-bottom:6px;border:1px solid var(--border);background:var(--bg-2);font-size:12px;}
+.notif-item.unread{border-color:rgba(0,200,245,.3);background:var(--accent-glow);}
+.notif-item-time{font-size:10.5px;color:var(--text-3);margin-top:3px;}
+.notif-item-icon{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;}
+
 .admin-ctx-pill{
   display:flex;align-items:center;gap:5px;padding:4px 10px;
   border-radius:20px;font-size:11px;
@@ -305,6 +389,54 @@ nav.sb.closed .sb-user-footer{display:none;}
 
 <!-- Toast -->
 <div class="toast hidden" id="toast"><i class="fas fa-check-circle"></i><span id="toast-msg"></span></div>
+
+<!-- Connector Wizard Modal (wizard 3 étapes — porté depuis index.html) -->
+<div class="modal-overlay hidden" id="addOverlay" onclick="closeOnBgAdmin(event)">
+  <div class="modal" style="max-width:560px;max-height:85vh;display:flex;flex-direction:column" onclick="event.stopPropagation()">
+    <div style="display:flex;align-items:center;gap:10px;padding:0 0 16px;border-bottom:1px solid var(--border);flex-shrink:0">
+      <i class="fas fa-plug" style="color:var(--accent);font-size:13px"></i>
+      <span style="font-size:15px;font-weight:600;color:var(--text-0)">Ajouter une source de données</span>
+      <span class="modal-step-indicator" id="stepIndicator">Étape 1 / 3</span>
+      <button class="modal-close" style="position:static;margin-left:auto" onclick="closeAddModal()"><i class="fas fa-times"></i></button>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding-top:16px">
+      <div class="wizard-steps">
+        <div class="wstep active" id="ws1"><div class="wstep-num">1</div><div class="wstep-label">Catégorie</div></div>
+        <div class="wstep" id="ws2"><div class="wstep-num">2</div><div class="wstep-label">Configuration</div></div>
+        <div class="wstep" id="ws3"><div class="wstep-num">3</div><div class="wstep-label">Test & Validation</div></div>
+      </div>
+      <div id="step1">
+        <div style="font-size:13px;color:var(--text-2);margin-bottom:16px">Sélectionnez le type de connexion :</div>
+        <div class="cat-grid" id="catGrid"></div>
+        <div id="typeGrid" style="display:none">
+          <div style="font-size:12px;color:var(--text-2);margin-bottom:10px;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.1em">Choisir le connecteur :</div>
+          <div class="type-grid" id="typeGridInner"></div>
+        </div>
+      </div>
+      <div id="step2" style="display:none"><div id="formContent"></div></div>
+      <div id="step3" style="display:none">
+        <div style="text-align:center;padding:16px 0 24px">
+          <div style="font-size:40px;margin-bottom:12px" id="testIcon">🔄</div>
+          <div style="font-size:15px;font-weight:500;color:var(--text-0)" id="testMsg">Prêt à tester</div>
+          <div style="font-size:12px;color:var(--text-2);margin-top:6px" id="testSub"></div>
+        </div>
+        <div class="test-box" id="testResultBox" style="display:none">
+          <div class="test-header"><span class="test-title">Résultats du test</span><span class="test-status" id="testStatusLabel">–</span></div>
+          <div class="test-body" id="testResultBody"></div>
+        </div>
+        <div id="entityPreview" style="margin-top:16px;display:none">
+          <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-3);margin-bottom:8px">Résultats de la synchronisation</div>
+          <div id="entityPreviewList"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer" style="flex-shrink:0;border-top:1px solid var(--border);margin-top:16px">
+      <button class="btn btn-ghost" onclick="closeAddModal()">Annuler</button>
+      <button class="btn btn-ghost" id="prevBtn" onclick="wizardPrev()" style="display:none">← Retour</button>
+      <button class="btn btn-primary" id="nextBtn" onclick="wizardNext()" disabled>Suivant →</button>
+    </div>
+  </div>
+</div>
 
 <!-- User Modal -->
 <div class="modal-overlay hidden" id="userModal">
@@ -372,40 +504,52 @@ nav.sb.closed .sb-user-footer{display:none;}
       </button>
     </div>
     <!-- Navigation -->
-    <div class="sb-nav-scroll logo-n">
-      <div class="sb-nav-section">Navigation</div>
+    <div class="sb-nav-scroll">
+      <div class="sb-nav-section logo-n">Navigation</div>
       <a href="/index.html" class="sb-nav-item">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4.03 3-9 3S3 13.66 3 12"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg>
-        <span>Sources de données</span>
+        <span class="logo-n">Sources de données</span>
       </a>
       <a href="/chat.html" class="sb-nav-item">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-        <span>Assistant IA</span>
+        <span class="logo-n">Assistant IA</span>
       </a>
-      <div class="sb-nav-section">Admin Console</div>
+      <div class="sb-nav-section logo-n">Admin Console</div>
+      <button class="sb-nav-item" onclick="switchTab('connectors',event)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/><rect x="3" y="2" width="18" height="4" rx="1"/></svg>
+        <span class="logo-n">Connecteurs</span>
+      </button>
+      <button class="sb-nav-item" onclick="switchTab('monitoring',event)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        <span class="logo-n">Monitoring</span>
+      </button>
       <button class="sb-nav-item" onclick="switchTab('users',event)">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        <span>Utilisateurs</span>
+        <span class="logo-n">Utilisateurs</span>
       </button>
       <button class="sb-nav-item" onclick="switchTab('perms',event)">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
-        <span>Permissions</span>
+        <span class="logo-n">Permissions</span>
       </button>
       <button class="sb-nav-item" onclick="switchTab('voice',event)">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-        <span>Voice AI</span>
+        <span class="logo-n">Voice AI</span>
       </button>
       <button class="sb-nav-item" onclick="switchTab('dashboards',event)">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-        <span>Dashboards</span>
+        <span class="logo-n">Dashboards</span>
+      </button>
+      <button class="sb-nav-item" onclick="switchTab('plugins',event)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5l6.74-6.76z"/><line x1="16" y1="8" x2="2" y2="22"/></svg>
+        <span class="logo-n">Plugins</span>
       </button>
       <button class="sb-nav-item" onclick="switchTab('audit',event)">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        <span>Audit Logs</span>
+        <span class="logo-n">Audit Logs</span>
       </button>
       <button class="sb-nav-item" onclick="switchTab('meta',event)">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-        <span>Métadonnées</span>
+        <span class="logo-n">Métadonnées</span>
       </button>
     </div>
     <!-- Rail user (sidebar réduite) -->
@@ -452,18 +596,39 @@ nav.sb.closed .sb-user-footer{display:none;}
           <div class="ctx-dot" id="ctx-llm-dot" style="background:var(--yellow)"></div>
           <span id="ctx-llm-txt">LLM: Vérif...</span>
         </div>
+        <button class="admin-ctx-btn" id="notif-btn" onclick="toggleNotifPanel()" title="Notifications" style="position:relative">
+          <i class="fas fa-bell"></i>
+          <span id="notif-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:var(--red);color:#fff;border-radius:50%;width:16px;height:16px;font-size:9px;font-weight:700;display:none;align-items:center;justify-content:center">0</span>
+        </button>
         <button class="admin-ctx-btn" id="theme-btn" onclick="toggleTheme()" title="Thème">
           <i class="fas fa-moon" id="theme-ico"></i>
         </button>
       </div>
     </div>
 
+    <!-- Panneau notifications -->
+    <div id="notif-panel" style="display:none;position:fixed;top:54px;right:12px;width:360px;max-height:480px;background:var(--bg-1);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:0 12px 40px rgba(0,0,0,.4);z-index:200;overflow:hidden;flex-direction:column">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:13px;font-weight:600"><i class="fas fa-bell" style="color:var(--accent)"></i> Notifications</span>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" onclick="clearNotifications()" style="font-size:11px">Tout effacer</button>
+          <button class="btn btn-ghost btn-sm" onclick="toggleNotifPanel()"><i class="fas fa-times"></i></button>
+        </div>
+      </div>
+      <div id="notif-list" style="overflow-y:auto;max-height:400px;padding:8px">
+        <div class="empty" style="padding:24px"><i class="fas fa-bell-slash"></i><p style="font-size:12px">Aucune notification</p></div>
+      </div>
+    </div>
+
     <!-- Tabs bar -->
     <div class="tabs-bar">
+      <a class="tab" id="tab-connectors"  href="javascript:void(0)" onclick="switchTab('connectors',event)"><i class="fas fa-plug"></i>Connecteurs</a>
+      <a class="tab" id="tab-monitoring" href="javascript:void(0)" onclick="switchTab('monitoring',event)"><i class="fas fa-chart-line"></i>Monitoring</a>
       <a class="tab active" id="tab-users"      href="javascript:void(0)" onclick="switchTab('users',event)"><i class="fas fa-users"></i>Utilisateurs &amp; RBAC</a>
       <a class="tab"        id="tab-perms"      href="javascript:void(0)" onclick="switchTab('perms',event)"><i class="fas fa-key"></i>Permissions Sources</a>
       <a class="tab"        id="tab-voice"      href="javascript:void(0)" onclick="switchTab('voice',event)"><i class="fas fa-microphone"></i>Voice AI</a>
       <a class="tab"        id="tab-dashboards" href="javascript:void(0)" onclick="switchTab('dashboards',event)"><i class="fas fa-chart-pie"></i>Dashboards</a>
+      <a class="tab"        id="tab-plugins"    href="javascript:void(0)" onclick="switchTab('plugins',event)"><i class="fas fa-puzzle-piece"></i>Plugins</a>
       <a class="tab"        id="tab-audit"      href="javascript:void(0)" onclick="switchTab('audit',event)"><i class="fas fa-shield-alt"></i>Audit Logs</a>
       <a class="tab"        id="tab-meta"       href="javascript:void(0)" onclick="switchTab('meta',event)"><i class="fas fa-sitemap"></i>Métadonnées</a>
     </div>
@@ -471,6 +636,95 @@ nav.sb.closed .sb-user-footer{display:none;}
     <div class="content">
 
       <!-- ═══ ONGLET 1 : USERS ═══ -->
+      <!-- ═══ ONGLET CONNECTEURS ═══ -->
+      <div class="tab-panel" id="panel-connectors">
+
+        <div class="section-hdr">
+          <div>
+            <div class="section-title"><i class="fas fa-plug"></i>Sources de données</div>
+            <div class="section-sub">Gérer les connecteurs · tester · synchroniser</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-ghost btn-sm" onclick="loadConnectors()"><i class="fas fa-sync"></i> Actualiser</button>
+            <button class="btn btn-primary btn-sm" onclick="openAddModal()"><i class="fas fa-plus"></i> Nouvelle source</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-body" style="padding:0">
+            <table class="tbl" id="connectors-table">
+              <thead>
+                <tr>
+                  <th style="width:32px"></th>
+                  <th>Nom</th>
+                  <th>Type</th>
+                  <th>Statut</th>
+                  <th>Entités</th>
+                  <th>Dernière sync</th>
+                  <th style="width:180px">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="connectors-tbody">
+                <tr><td colspan="7" class="empty"><i class="fas fa-spinner fa-spin"></i><p>Chargement…</p></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ═══ ONGLET MONITORING ═══ -->
+      <div class="tab-panel" id="panel-monitoring">
+
+        <div class="section-hdr">
+          <div>
+            <div class="section-title"><i class="fas fa-chart-line"></i>Monitoring des connecteurs</div>
+            <div class="section-sub">Métriques live · Circuit breaker · Alertes</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <select class="form-select" id="mon-window" onchange="loadMonitoring()" style="width:130px;padding:7px 10px;font-size:12px">
+              <option value="6">6 dernières h</option>
+              <option value="24" selected>24 dernières h</option>
+              <option value="72">3 derniers j</option>
+              <option value="168">7 derniers j</option>
+            </select>
+            <button class="btn btn-ghost btn-sm" onclick="loadMonitoring()"><i class="fas fa-sync"></i> Actualiser</button>
+          </div>
+        </div>
+
+        <!-- KPI cards -->
+        <div id="mon-kpis" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:18px"></div>
+
+        <!-- Alertes actives -->
+        <div id="mon-alerts" style="margin-bottom:14px"></div>
+
+        <!-- Tableau métriques -->
+        <div class="card">
+          <div class="card-body" style="padding:0">
+            <table class="tbl" id="mon-table">
+              <thead>
+                <tr>
+                  <th style="width:32px"></th>
+                  <th>Source</th>
+                  <th>Type</th>
+                  <th>Statut</th>
+                  <th>Circuit Breaker</th>
+                  <th>Latence</th>
+                  <th>Requêtes</th>
+                  <th>Taux erreur</th>
+                  <th>Dernière sync</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="mon-tbody">
+                <tr><td colspan="10" class="empty"><i class="fas fa-spinner fa-spin"></i><p>Chargement…</p></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
       <div class="tab-panel active" id="panel-users">
         <div class="section-hdr">
           <div><div class="section-title"><i class="fas fa-users"></i>Utilisateurs &amp; RBAC</div><div class="section-sub">Gestion des comptes et rôles</div></div>
@@ -489,20 +743,47 @@ nav.sb.closed .sb-user-footer{display:none;}
           </div>
         </div>
 
+        <!-- Filtres + bulk -->
+        <div class="card" style="margin-bottom:12px">
+          <div class="card-body" style="padding:10px 14px">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <div class="search-wrap" style="flex:1;min-width:160px"><i class="fas fa-search"></i><input id="user-search" placeholder="Rechercher..." oninput="filterUsers()"></div>
+              <select class="form-select" id="filter-role" onchange="filterUsers()" style="width:140px;padding:7px 10px;font-size:12px">
+                <option value="">Tous les rôles</option>
+                <option value="admin">Admin</option>
+                <option value="power_user">Power User</option>
+                <option value="user">Utilisateur</option>
+              </select>
+              <select class="form-select" id="filter-status" onchange="filterUsers()" style="width:130px;padding:7px 10px;font-size:12px">
+                <option value="">Tous statuts</option>
+                <option value="active">Actifs</option>
+                <option value="inactive">Inactifs</option>
+              </select>
+              <button class="btn btn-ghost btn-sm" onclick="loadUsers()"><i class="fas fa-sync"></i></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bulk action bar (apparaît quand sélection active) -->
+        <div id="bulk-bar" style="display:none;margin-bottom:10px;padding:10px 14px;background:var(--accent-glow);border:1px solid rgba(0,200,245,.2);border-radius:var(--r);display:none;align-items:center;gap:10px;flex-wrap:wrap">
+          <span id="bulk-count" style="font-size:12px;color:var(--accent);font-weight:600"></span>
+          <button class="btn btn-ghost btn-sm" onclick="bulkAction('activate')"><i class="fas fa-check-circle"></i> Activer</button>
+          <button class="btn btn-ghost btn-sm" onclick="bulkAction('deactivate')"><i class="fas fa-ban"></i> Désactiver</button>
+          <button class="btn btn-danger btn-sm" onclick="bulkAction('delete')"><i class="fas fa-trash"></i> Supprimer</button>
+          <button class="btn btn-ghost btn-sm" onclick="clearSelection()" style="margin-left:auto"><i class="fas fa-times"></i></button>
+        </div>
+
         <!-- Table users -->
         <div class="card">
-          <div class="card-body">
-            <div class="section-hdr" style="margin-bottom:12px">
-              <div class="search-wrap"><i class="fas fa-search"></i><input id="user-search" placeholder="Rechercher..." oninput="filterUsers()"></div>
-              <button class="btn btn-ghost btn-sm" onclick="loadUsers()"><i class="fas fa-sync"></i> Actualiser</button>
-            </div>
+          <div class="card-body" style="padding:0">
             <div style="overflow-x:auto">
               <table class="tbl" id="users-table">
                 <thead><tr>
-                  <th>Utilisateur</th><th>Email</th><th>Rôle</th><th>Statut</th><th>Dernière connexion</th><th>Actions</th>
+                  <th style="width:32px"><input type="checkbox" id="select-all" onchange="toggleSelectAll(this)"></th>
+                  <th>Utilisateur</th><th>Email</th><th>Rôle</th><th>Statut</th><th>Requêtes</th><th>Dernière connexion</th><th>Actions</th>
                 </tr></thead>
                 <tbody id="users-tbody">
-                  <tr><td colspan="6" class="empty"><i class="fas fa-spinner fa-spin"></i><p>Chargement...</p></td></tr>
+                  <tr><td colspan="8" class="empty"><i class="fas fa-spinner fa-spin"></i><p>Chargement...</p></td></tr>
                 </tbody>
               </table>
             </div>
@@ -629,29 +910,123 @@ nav.sb.closed .sb-user-footer{display:none;}
       </div>
 
       <!-- ═══ ONGLET 5 : AUDIT LOGS ═══ -->
+      <!-- ═══ ONGLET PLUGINS ═══ -->
+      <div class="tab-panel" id="panel-plugins">
+
+        <div class="section-hdr">
+          <div>
+            <div class="section-title"><i class="fas fa-puzzle-piece"></i>Plugin System</div>
+            <div class="section-sub">Connecteurs custom · upload · activation</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="loadPlugins()"><i class="fas fa-sync"></i> Actualiser</button>
+        </div>
+
+        <!-- Upload zone -->
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-body">
+            <div style="font-size:13px;font-weight:600;color:var(--text-0);margin-bottom:12px;display:flex;align-items:center;gap:7px">
+              <i class="fas fa-upload" style="color:var(--accent)"></i> Uploader un connecteur custom
+            </div>
+            <div class="upload-zone" id="plugin-drop-zone" onclick="document.getElementById('plugin-file-input').click()">
+              <input type="file" id="plugin-file-input" accept=".py" style="display:none" onchange="uploadPlugin(this)">
+              <div class="upload-zone-icon"><i class="fas fa-file-code" style="font-size:28px;color:var(--accent)"></i></div>
+              <div class="upload-zone-text">Cliquer pour sélectionner un fichier <strong>.py</strong></div>
+              <div class="upload-zone-hint">Votre classe doit hériter de <code>BaseConnector</code> et implémenter les 4 méthodes abstraites</div>
+            </div>
+            <div id="plugin-upload-status" style="display:none;margin-top:10px;padding:10px 14px;border-radius:var(--r);font-size:12.5px;background:var(--bg-2);border:1px solid var(--border)"></div>
+
+            <!-- Interface requise -->
+            <div style="margin-top:14px;padding:12px 14px;background:var(--bg-2);border-radius:var(--r);border:1px solid var(--border)">
+              <div style="font-size:11px;font-weight:600;color:var(--text-2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.08em">Interface requise</div>
+              <pre style="font-family:var(--font-mono);font-size:11px;color:var(--text-1);margin:0;line-height:1.7">from core.base_connector import BaseConnector, ConnectorMetadata
+
+class MonConnecteur(BaseConnector):
+    def connect(self) -> bool: ...
+    def test_connection(self) -> dict: ...
+    def get_metadata(self) -> ConnectorMetadata: ...
+    def execute_query(self, query, params=None) -> list: ...</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- Liste plugins -->
+        <div class="card">
+          <div class="card-body" style="padding:0">
+            <table class="tbl" id="plugins-table">
+              <thead>
+                <tr>
+                  <th>Nom</th><th>Classe</th><th>Module</th><th>Statut</th><th>Instances</th><th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="plugins-tbody">
+                <tr><td colspan="6" class="empty"><i class="fas fa-spinner fa-spin"></i><p>Chargement…</p></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
       <div class="tab-panel" id="panel-audit">
         <div class="section-hdr">
-          <div><div class="section-title"><i class="fas fa-shield-alt"></i>Audit Logs</div><div class="section-sub">Tous les accès loggés </div></div>
-          <button class="btn btn-ghost btn-sm" onclick="loadAudit()"><i class="fas fa-sync"></i> Actualiser</button>
+          <div><div class="section-title"><i class="fas fa-shield-alt"></i>Audit Logs</div><div class="section-sub">Tous les accès loggés · détection anomalies · export</div></div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-ghost btn-sm" onclick="exportAuditCSV()"><i class="fas fa-download"></i> Exporter CSV</button>
+            <button class="btn btn-ghost btn-sm" onclick="loadAudit();loadAuditStats();loadAuditAnomalies()"><i class="fas fa-sync"></i> Actualiser</button>
+          </div>
         </div>
-        <!-- Stats -->
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px" id="audit-stats">
-          <div class="card"><div class="card-body" style="text-align:center"><div style="font-size:22px;font-weight:700;font-family:var(--font-mono)" id="audit-today">—</div><div style="font-size:11px;color:var(--text-3);margin-top:2px">Événements (24h)</div></div></div>
-          <div class="card"><div class="card-body" style="text-align:center"><div style="font-size:22px;font-weight:700;font-family:var(--font-mono);color:var(--red)" id="audit-fail">—</div><div style="font-size:11px;color:var(--text-3);margin-top:2px">Échecs (24h)</div></div></div>
-          <div class="card"><div class="card-body" style="text-align:center"><div style="font-size:22px;font-weight:700;font-family:var(--font-mono);color:var(--green)" id="audit-logins">—</div><div style="font-size:11px;color:var(--text-3);margin-top:2px">Connexions (24h)</div></div></div>
+
+        <!-- Stats KPIs -->
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
+          <div class="card"><div class="card-body" style="text-align:center;padding:12px">
+            <div style="font-size:22px;font-weight:700;font-family:var(--font-mono)" id="audit-today">—</div>
+            <div style="font-size:11px;color:var(--text-3);margin-top:2px">Événements (24h)</div>
+          </div></div>
+          <div class="card"><div class="card-body" style="text-align:center;padding:12px">
+            <div style="font-size:22px;font-weight:700;font-family:var(--font-mono);color:var(--red)" id="audit-fail">—</div>
+            <div style="font-size:11px;color:var(--text-3);margin-top:2px">Échecs (24h)</div>
+          </div></div>
+          <div class="card"><div class="card-body" style="text-align:center;padding:12px">
+            <div style="font-size:22px;font-weight:700;font-family:var(--font-mono);color:var(--green)" id="audit-logins">—</div>
+            <div style="font-size:11px;color:var(--text-3);margin-top:2px">Connexions (24h)</div>
+          </div></div>
+          <div class="card"><div class="card-body" style="text-align:center;padding:12px">
+            <div style="font-size:22px;font-weight:700;font-family:var(--font-mono);color:var(--accent)" id="audit-queries">—</div>
+            <div style="font-size:11px;color:var(--text-3);margin-top:2px">Requêtes (24h)</div>
+          </div></div>
         </div>
-        <!-- Filtres -->
-        <div class="audit-filters">
-          <span class="audit-filter-item active" onclick="setAuditFilter('')">Tout</span>
-          <span class="audit-filter-item" onclick="setAuditFilter('LOGIN')">LOGIN</span>
-          <span class="audit-filter-item" onclick="setAuditFilter('LOGOUT')">LOGOUT</span>
-          <span class="audit-filter-item" onclick="setAuditFilter('QUERY')">QUERY</span>
-          <span class="audit-filter-item" onclick="setAuditFilter('LOGIN_FAILED')">ÉCHECS</span>
-          <span class="audit-filter-item" onclick="setAuditFilter('CONFIG_CHANGE')">CONFIG</span>
+
+        <!-- Sparkline 24h -->
+        <div class="card" style="margin-bottom:12px">
+          <div class="card-body" style="padding:12px 16px">
+            <div style="font-size:11px;color:var(--text-3);margin-bottom:6px;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.08em">Activité — 24 dernières heures</div>
+            <svg id="audit-sparkline" width="100%" height="40" viewBox="0 0 600 40" preserveAspectRatio="none">
+              <text x="300" y="24" text-anchor="middle" fill="var(--text-3)" font-size="11">Chargement…</text>
+            </svg>
+          </div>
         </div>
+
+        <!-- Alertes anomalies -->
+        <div id="audit-anomalies" style="margin-bottom:12px"></div>
+
+        <!-- Recherche + filtres -->
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
+          <div class="search-wrap" style="flex:1;min-width:160px">
+            <i class="fas fa-search"></i>
+            <input id="audit-search" placeholder="Email, IP, ressource…" oninput="onAuditSearch()">
+          </div>
+          <div class="audit-filters" style="margin-bottom:0;flex-wrap:nowrap">
+            <span class="audit-filter-item active" onclick="setAuditFilter('')">Tout</span>
+            <span class="audit-filter-item" onclick="setAuditFilter('LOGIN')">LOGIN</span>
+            <span class="audit-filter-item" onclick="setAuditFilter('QUERY')">QUERY</span>
+            <span class="audit-filter-item" onclick="setAuditFilter('LOGIN_FAILED')">ÉCHECS</span>
+            <span class="audit-filter-item" onclick="setAuditFilter('CONFIG_CHANGE')">CONFIG</span>
+          </div>
+        </div>
+
         <!-- Table -->
         <div class="card">
-          <div class="card-body">
+          <div class="card-body" style="padding:0">
             <div style="overflow-x:auto">
               <table class="tbl">
                 <thead><tr><th>Date</th><th>Utilisateur</th><th>Action</th><th>Ressource</th><th>IP</th><th>Résultat</th></tr></thead>
@@ -660,7 +1035,7 @@ nav.sb.closed .sb-user-footer{display:none;}
                 </tbody>
               </table>
             </div>
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:12px;color:var(--text-3)">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;font-size:12px;color:var(--text-3)">
               <span id="audit-count">—</span>
               <div style="display:flex;gap:6px">
                 <button class="btn btn-ghost btn-sm" id="audit-prev" onclick="auditPage(-1)"><i class="fas fa-chevron-left"></i></button>
@@ -675,22 +1050,56 @@ nav.sb.closed .sb-user-footer{display:none;}
       <!-- ═══ ONGLET 6 : MÉTADONNÉES ═══ -->
       <div class="tab-panel" id="panel-meta">
         <div class="section-hdr">
-          <div><div class="section-title"><i class="fas fa-sitemap"></i>Catalogue de métadonnées</div><div class="section-sub">Relations · Validation · Synonymes</div></div>
-          <button class="btn btn-ghost btn-sm" onclick="loadRelations()"><i class="fas fa-sync"></i> Actualiser</button>
+          <div><div class="section-title"><i class="fas fa-sitemap"></i>Catalogue de métadonnées</div><div class="section-sub">Relations · Validation · Synonymes · Sécurité</div></div>
+          <button class="btn btn-ghost btn-sm" onclick="loadRelations();loadSecretsStatus()"><i class="fas fa-sync"></i> Actualiser</button>
         </div>
-        <!-- Stats entités -->
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px" id="meta-stats">
-          <div class="card"><div class="card-body" style="text-align:center"><div style="font-size:22px;font-weight:700;font-family:var(--font-mono)" id="meta-entities">—</div><div style="font-size:11px;color:var(--text-3);margin-top:2px">Entités</div></div></div>
-          <div class="card"><div class="card-body" style="text-align:center"><div style="font-size:22px;font-weight:700;font-family:var(--font-mono)" id="meta-rels">—</div><div style="font-size:11px;color:var(--text-3);margin-top:2px">Relations</div></div></div>
-          <div class="card"><div class="card-body" style="text-align:center"><div style="font-size:22px;font-weight:700;font-family:var(--font-mono);color:var(--green)" id="meta-validated">—</div><div style="font-size:11px;color:var(--text-3);margin-top:2px">Validées</div></div></div>
-          <div class="card"><div class="card-body" style="text-align:center"><div style="font-size:22px;font-weight:700;font-family:var(--font-mono);color:var(--yellow)" id="meta-pending">—</div><div style="font-size:11px;color:var(--text-3);margin-top:2px">En attente</div></div></div>
+
+        <!-- Stats -->
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px">
+          <div class="card"><div class="card-body" style="text-align:center;padding:12px"><div style="font-size:22px;font-weight:700;font-family:var(--font-mono)" id="meta-entities">—</div><div style="font-size:11px;color:var(--text-3);margin-top:2px">Entités</div></div></div>
+          <div class="card"><div class="card-body" style="text-align:center;padding:12px"><div style="font-size:22px;font-weight:700;font-family:var(--font-mono)" id="meta-rels">—</div><div style="font-size:11px;color:var(--text-3);margin-top:2px">Relations</div></div></div>
+          <div class="card"><div class="card-body" style="text-align:center;padding:12px"><div style="font-size:22px;font-weight:700;font-family:var(--font-mono);color:var(--green)" id="meta-validated">—</div><div style="font-size:11px;color:var(--text-3);margin-top:2px">Validées</div></div></div>
+          <div class="card"><div class="card-body" style="text-align:center;padding:12px"><div style="font-size:22px;font-weight:700;font-family:var(--font-mono);color:var(--yellow)" id="meta-pending">—</div><div style="font-size:11px;color:var(--text-3);margin-top:2px">En attente</div></div></div>
         </div>
-        <!-- Relations à valider -->
-        <div class="card">
+
+        <!-- Sécurité credentials -->
+        <div class="card" style="margin-bottom:14px">
           <div class="card-body">
-            <div style="font-size:13px;font-weight:600;color:var(--text-0);margin-bottom:12px;display:flex;align-items:center;gap:7px"><i class="fas fa-project-diagram" style="color:var(--accent)"></i> Relations détectées — à valider</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+              <div style="font-size:13px;font-weight:600;color:var(--text-0);display:flex;align-items:center;gap:7px">
+                <i class="fas fa-lock" style="color:var(--accent)"></i> Sécurité des credentials
+              </div>
+              <button class="btn btn-ghost btn-sm" onclick="rotateAllSecrets()"><i class="fas fa-sync-alt"></i> Rotation globale</button>
+            </div>
+            <div id="secrets-list"><div class="empty"><i class="fas fa-spinner fa-spin"></i></div></div>
+          </div>
+        </div>
+
+        <!-- Relations à valider -->
+        <div class="card" style="margin-bottom:14px">
+          <div class="card-body">
+            <div style="font-size:13px;font-weight:600;color:var(--text-0);margin-bottom:12px;display:flex;align-items:center;gap:7px">
+              <i class="fas fa-project-diagram" style="color:var(--accent)"></i> Relations détectées — à valider
+            </div>
             <div id="relations-list">
               <div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Chargement...</p></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Éditeur synonymes / PII -->
+        <div class="card">
+          <div class="card-body">
+            <div style="font-size:13px;font-weight:600;color:var(--text-0);margin-bottom:12px;display:flex;align-items:center;gap:7px">
+              <i class="fas fa-tags" style="color:var(--accent)"></i> Synonymes métier &amp; colonnes sensibles
+            </div>
+            <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+              <input class="form-input" id="syn-term" placeholder="Terme technique (ex: ALMVT)" style="flex:1;min-width:140px">
+              <input class="form-input" id="syn-label" placeholder="Synonyme métier (ex: Mouvements stock)" style="flex:2;min-width:200px">
+              <button class="btn btn-primary btn-sm" onclick="addSynonym()"><i class="fas fa-plus"></i> Ajouter</button>
+            </div>
+            <div id="synonyms-list" style="max-height:200px;overflow-y:auto">
+              <div class="empty" style="padding:12px"><i class="fas fa-tags"></i><p style="font-size:12px">Aucun synonyme défini</p></div>
             </div>
           </div>
         </div>
@@ -782,10 +1191,13 @@ function switchTab(tab,e){
   document.querySelector(`.sb-item[onclick*="'${tab}'"]`)?.classList.add('active');
   _activeTab=tab;
   // Lazy load
+  if(tab==='connectors') {loadConnectors();}
+  if(tab==='monitoring')  {loadMonitoring();}
   if(tab==='users')    loadUsers();
   if(tab==='perms')    loadPermsOverview();
-  if(tab==='audit')    {loadAudit();loadAuditStats();}
-  if(tab==='meta')     loadRelations();
+  if(tab==='plugins')  {loadPlugins();}
+  if(tab==='audit')    {loadAudit();loadAuditStats();loadAuditAnomalies();}
+  if(tab==='meta')     {loadRelations();loadSecretsStatus();loadSynonyms();}
   if(tab==='voice')    loadConfig();
   if(tab==='dashboards') loadConfig();
   // Update URL hash
@@ -795,8 +1207,9 @@ function switchTab(tab,e){
 // ── Init from hash ────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded',()=>{
   const hash=(location.hash||'#users').replace('#','');
-  const valid=['users','perms','voice','dashboards','audit','meta'];
+  const valid=['connectors','monitoring','users','perms','voice','dashboards','plugins','audit','meta'];
   switchTab(valid.includes(hash)?hash:'users');
+  setTimeout(initNotificationsSSE, 2000);
 });
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -804,90 +1217,1153 @@ function fmt(ts){if(!ts)return'—';const d=new Date(ts);return d.toLocaleDateSt
 function ago(ts){if(!ts)return'';const s=Math.floor((new Date()-new Date(ts))/1000);if(s<60)return"À l'instant";if(s<3600)return Math.floor(s/60)+'min';if(s<86400)return Math.floor(s/3600)+'h';return Math.floor(s/86400)+'j';}
 function roleBadge(r){const m={admin:'badge-admin',power_user:'badge-power',user:'badge-user'};return`<span class="badge ${m[r]||'badge-user'}">${r||'user'}</span>`;}
 
-// ═══ USERS ═══
-let _users=[];
-async function loadUsers(){
-  try{
-    const r=await OpAuth.apiFetch('/admin/users?per_page=50');
-    if(!r||!r.ok)throw 0;
-    const d=await r.json();
-    _users=d.users||[];
-    renderUsers(_users);
-  }catch{
-    document.getElementById('users-tbody').innerHTML='<tr><td colspan="6" class="empty"><i class="fas fa-exclamation-triangle" style="color:var(--red)"></i><p>Erreur de chargement</p></td></tr>';
+// ═══ NOTIFICATIONS SSE ═══
+var _notifications = [];
+var _notifUnread   = 0;
+var _notifES       = null; // EventSource
+
+function toggleNotifPanel(){
+  var p = document.getElementById('notif-panel');
+  if(!p) return;
+  var open = p.style.display === 'flex';
+  p.style.display = open ? 'none' : 'flex';
+  if(!open){
+    // Marquer tout comme lu
+    _notifUnread = 0;
+    _updateNotifBadge();
+    document.querySelectorAll('.notif-item.unread').forEach(function(el){
+      el.classList.remove('unread');
+    });
+  }
+  // Fermer si clic en dehors
+  if(!open){
+    setTimeout(function(){
+      document.addEventListener('click', function closePanel(e){
+        var panel = document.getElementById('notif-panel');
+        var btn   = document.getElementById('notif-btn');
+        if(panel && !panel.contains(e.target) && !btn.contains(e.target)){
+          panel.style.display = 'none';
+          document.removeEventListener('click', closePanel);
+        }
+      });
+    }, 100);
   }
 }
+
+function _updateNotifBadge(){
+  var badge = document.getElementById('notif-badge');
+  if(!badge) return;
+  if(_notifUnread > 0){
+    badge.style.display = 'flex';
+    badge.textContent   = _notifUnread > 9 ? '9+' : _notifUnread;
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function _addNotification(type, message, severity){
+  var colors = {info:'var(--accent)', success:'var(--green)', warning:'var(--yellow)', error:'var(--red)'};
+  var icons  = {info:'fa-info-circle', success:'fa-check-circle', warning:'fa-exclamation-triangle', error:'fa-times-circle'};
+  var sev    = severity || 'info';
+  var notif  = {id: Date.now(), type:type, message:message, severity:sev, time: new Date(), read:false};
+  _notifications.unshift(notif);
+  if(_notifications.length > 50) _notifications = _notifications.slice(0, 50);
+  _notifUnread++;
+  _updateNotifBadge();
+  // Render dans le panel
+  var list = document.getElementById('notif-list');
+  if(list){
+    var col  = colors[sev]||'var(--accent)';
+    var icon = icons[sev] ||'fa-info-circle';
+    var item = document.createElement('div');
+    item.className = 'notif-item unread';
+    item.innerHTML = '<div style="display:flex;align-items:flex-start;gap:8px">'+
+      '<div class="notif-item-icon" style="background:'+col+'22;color:'+col+'"><i class="fas '+icon+'"></i></div>'+
+      '<div style="flex:1">'+
+        '<div style="color:var(--text-0);font-weight:500">'+type+'</div>'+
+        '<div style="color:var(--text-2);margin-top:2px">'+message+'</div>'+
+        '<div class="notif-item-time">'+new Date().toLocaleTimeString('fr-FR')+'</div>'+
+      '</div>'+
+    '</div>';
+    // Supprimer le message vide si présent
+    var empty = list.querySelector('.empty');
+    if(empty) empty.remove();
+    list.insertBefore(item, list.firstChild);
+  }
+}
+
+function clearNotifications(){
+  _notifications = [];
+  _notifUnread   = 0;
+  _updateNotifBadge();
+  var list = document.getElementById('notif-list');
+  if(list) list.innerHTML = '<div class="empty" style="padding:24px"><i class="fas fa-bell-slash"></i><p style="font-size:12px">Aucune notification</p></div>';
+}
+
+// Connexion SSE pour les notifications en temps réel
+function connectNotificationsSSE(sourceId){
+  if(_notifES){ _notifES.close(); }
+  try{
+    var token = OpAuth.getToken();
+    var url   = '/api/notifications/stream?source_id='+sourceId+'&token='+encodeURIComponent(token||'');
+    _notifES  = new EventSource(url);
+    _notifES.onmessage = function(e){
+      try{
+        var d = JSON.parse(e.data);
+        if(d.type === 'heartbeat' || d.type === 'connected') return;
+        // Mapper les types d'événements
+        var msgs = {
+          'BREAKING_CHANGE': {msg: 'Breaking change sur '+( d.source_id||''), sev:'warning'},
+          'WAL_DDL_CHANGE':  {msg: 'Schéma modifié — '+( d.count||0)+' changement(s)', sev:'warning'},
+          'FILE_CHANGED':    {msg: 'Fichier modifié: '+(d.filepath||''), sev:'info'},
+          'MSSQL_DDL_CHANGE':{msg: 'DDL MSSQL: '+( d.count||0)+' événement(s)', sev:'info'},
+        };
+        var ev = msgs[d.event] || {msg: JSON.stringify(d).slice(0,80), sev:'info'};
+        _addNotification(d.event||'Notification', ev.msg, ev.sev);
+      }catch{}
+    };
+    _notifES.onerror = function(){
+      // SSE non disponible — silencieux
+      if(_notifES) _notifES.close();
+      _notifES = null;
+    };
+  }catch{}
+}
+
+// Connecter aux sources actives au démarrage
+function initNotificationsSSE(){
+  // Utiliser la première source active disponible
+  if(_connectors && _connectors.length){
+    var active = _connectors.find(function(s){ return s.status === 'active'; });
+    if(active) connectNotificationsSSE(active.id);
+  }
+  // Ajouter des notifications de démarrage
+  _addNotification('Système', 'Admin Console connectée — monitoring actif', 'success');
+}
+
+// ═══ PLUGINS ═══
+
+async function loadPlugins(){
+  const tb = document.getElementById('plugins-tbody');
+  if(tb) tb.innerHTML = '<tr><td colspan="6" class="empty"><i class="fas fa-spinner fa-spin"></i><p>Chargement…</p></td></tr>';
+  try{
+    const r = await OpAuth.apiFetch('/admin/plugins');
+    if(!r||!r.ok) throw 0;
+    const d = await r.json();
+    _renderPlugins(d.plugins||[]);
+  }catch{
+    if(tb) tb.innerHTML = '<tr><td colspan="6" class="empty"><i class="fas fa-exclamation-triangle" style="color:var(--red)"></i>'+
+      '<p>Erreur chargement — ou aucun plugin enregistré</p></td></tr>';
+  }
+}
+
+function _renderPlugins(plugins){
+  const tb = document.getElementById('plugins-tbody');
+  if(!plugins.length){
+    tb.innerHTML = '<tr><td colspan="6" class="empty"><i class="fas fa-puzzle-piece"></i>'+
+      '<p>Aucun plugin custom enregistré</p>'+
+      '<div style="font-size:11.5px;color:var(--text-3);margin-top:6px">Uploadez un fichier .py ci-dessus pour commencer</div></td></tr>';
+    return;
+  }
+  tb.innerHTML = plugins.map(function(p){
+    var pname = (p.name||'').replace(/'/g, "\\'");
+    return '<tr style="animation:fadeIn .2s ease">'+
+      '<td><span style="font-weight:500;font-family:var(--font-mono);font-size:12px">'+p.name+'</span></td>'+
+      '<td style="font-family:var(--font-mono);font-size:11.5px;color:var(--accent)">'+p.class_name+'</td>'+
+      '<td style="font-family:var(--font-mono);font-size:11px;color:var(--text-3)">'+p.module+'</td>'+
+      '<td><span class="badge '+(p.enabled?'badge-ok':'badge-warn')+'">'+( p.enabled?'Actif':'Désactivé')+'</span></td>'+
+      '<td style="font-family:var(--font-mono);font-size:12px;text-align:center">'+(p.active_instances||0)+'</td>'+
+      '<td><div style="display:flex;gap:4px">'+
+        '<button class="btn '+(p.enabled?'btn-ghost':'btn-primary')+' btn-sm" onclick="togglePlugin(\''+pname+'\')" title="'+(p.enabled?'Désactiver':'Activer')+'">'+
+          (p.enabled?'<i class="fas fa-ban"></i> Désactiver':'<i class="fas fa-check"></i> Activer')+
+        '</button>'+
+      '</div></td>'+
+    '</tr>';
+  }).join('');
+}
+
+async function togglePlugin(name){
+  try{
+    const r = await OpAuth.apiFetch('/admin/plugins/'+encodeURIComponent(name)+'/toggle', {method:'POST'});
+    if(!r||!r.ok){ const e=await r?.json(); showToast(e?.detail||'Erreur','err'); return; }
+    const d = await r.json();
+    showToast('Plugin "'+name+'" '+(d.enabled?'activé':'désactivé'));
+    loadPlugins();
+  }catch{ showToast('Erreur réseau','err'); }
+}
+
+async function uploadPlugin(input){
+  const file = input.files[0];
+  if(!file) return;
+  const st = document.getElementById('plugin-upload-status');
+  st.style.display = 'block';
+  st.style.borderColor = 'var(--border)';
+  st.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Validation et upload en cours…';
+  const fd = new FormData();
+  fd.append('file', file);
+  try{
+    const r = await fetch('/api/admin/plugins/upload', {
+      method: 'POST',
+      headers: OpAuth.authHeaders(),
+      body: fd,
+    });
+    const d = await r.json();
+    if(r.ok){
+      st.style.borderColor = 'rgba(0,217,160,.35)';
+      st.innerHTML = '<i class="fas fa-check-circle" style="color:var(--green)"></i> '+
+        '<strong>'+d.plugin_name+'</strong> enregistré — classe: <code>'+d.class_name+'</code>';
+      showToast('Plugin uploadé avec succès');
+      _connectorTypes = {}; // Vider le cache catalogue
+      await _loadConnectorTypes(true); // Recharger avec le nouveau plugin
+      loadPlugins();
+    }else{
+      st.style.borderColor = 'rgba(255,54,99,.35)';
+      st.innerHTML = '<i class="fas fa-times-circle" style="color:var(--red)"></i> '+
+        (d.detail||'Erreur upload');
+      showToast(d.detail||'Erreur upload','err');
+    }
+  }catch{
+    st.style.borderColor = 'rgba(255,54,99,.35)';
+    st.innerHTML = '<i class="fas fa-times-circle" style="color:var(--red)"></i> Erreur réseau';
+    showToast('Erreur réseau','err');
+  }
+  input.value = ''; // reset input
+}
+
+// ═══ MONITORING ═══
+
+async function loadMonitoring(){
+  const tb = document.getElementById('mon-tbody');
+  if(tb) tb.innerHTML = '<tr><td colspan="10" class="empty"><i class="fas fa-spinner fa-spin"></i><p>Chargement…</p></td></tr>';
+  document.getElementById('mon-kpis').innerHTML = '';
+  document.getElementById('mon-alerts').innerHTML = '';
+  const win = document.getElementById('mon-window')?.value || '24';
+  try{
+    const r = await OpAuth.apiFetch('/admin/sources/metrics?window_hours='+win);
+    if(!r||!r.ok) throw new Error('HTTP '+r?.status);
+    const d = await r.json();
+    _renderMonKpis(d.sources);
+    _renderMonAlerts(d.sources);
+    _renderMonTable(d.sources);
+  }catch(e){
+    console.error('monitoring:', e);
+    if(tb) tb.innerHTML = '<tr><td colspan="10" class="empty"><i class="fas fa-exclamation-triangle" style="color:var(--red)"></i><p>Erreur chargement — <button class="btn btn-ghost btn-sm" onclick="loadMonitoring()">Réessayer</button></p></td></tr>';
+  }
+}
+
+function _renderMonKpis(sources){
+  const total    = sources.length;
+  const active   = sources.filter(s => s.status === 'active').length;
+  const errors   = sources.filter(s => s.status === 'error' || s.status === 'disconnected').length;
+  const cbOpen   = sources.filter(s => s.cb_state === 'open').length;
+  const queries  = sources.reduce((a,s) => a + s.query_count, 0);
+  const kpis = [
+    {label:'Sources actives',  value: active+'/'+total,  color:'var(--green)',  icon:'fa-plug'},
+    {label:'En erreur',        value: errors,             color:errors>0?'var(--red)':'var(--text-2)', icon:'fa-exclamation-triangle'},
+    {label:'Circuit breaker',  value: cbOpen+' ouverts',  color:cbOpen>0?'var(--red)':'var(--text-2)', icon:'fa-shield-alt'},
+    {label:'Requêtes (fenêtre)',value: queries,            color:'var(--accent)', icon:'fa-database'},
+  ];
+  document.getElementById('mon-kpis').innerHTML = kpis.map(k =>
+    '<div style="padding:14px 16px;background:var(--bg-1);border:1px solid var(--border);border-radius:var(--r)">'+
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'+
+    '<i class="fas '+k.icon+'" style="color:'+k.color+';font-size:13px"></i>'+
+    '<span style="font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em">'+k.label+'</span></div>'+
+    '<div style="font-size:22px;font-weight:700;color:'+k.color+'">'+k.value+'</div></div>'
+  ).join('');
+}
+
+function _renderMonAlerts(sources){
+  const alerts = [];
+  sources.forEach(s => {
+    if(s.status === 'error' || s.status === 'disconnected')
+      alerts.push({sev:'high', msg: s.name+' — statut '+s.status, icon:'fa-times-circle'});
+    if(s.cb_state === 'open')
+      alerts.push({sev:'high', msg: s.name+' — circuit breaker OUVERT', icon:'fa-shield-alt'});
+    if(s.error_rate_pct > 20)
+      alerts.push({sev:'med',  msg: s.name+' — taux erreur '+s.error_rate_pct+'%', icon:'fa-exclamation-triangle'});
+  });
+  if(!alerts.length) return;
+  const el = document.getElementById('mon-alerts');
+  el.innerHTML = '<div style="padding:12px 14px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:var(--r);margin-bottom:4px">'+
+    '<div style="font-size:11.5px;font-weight:600;color:var(--red);margin-bottom:8px"><i class="fas fa-bell"></i> '+alerts.length+' alerte'+( alerts.length>1?'s':'')+' active'+( alerts.length>1?'s':'')+'</div>'+
+    alerts.map(a => '<div style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text-1);margin-bottom:4px">'+
+      '<i class="fas '+a.icon+'" style="color:'+(a.sev==='high'?'var(--red)':'var(--yellow)')+';flex-shrink:0"></i>'+a.msg+'</div>'
+    ).join('')+'</div>';
+}
+
+function _cbBadge(state){
+  var m = {closed:'var(--green)',open:'var(--red)',half_open:'var(--yellow)',unknown:'var(--text-3)'};
+  var l = {closed:'Fermé',open:'Ouvert',half_open:'Semi-ouvert',unknown:'—'};
+  var col = m[state]||'var(--text-3)';
+  return '<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px">'+
+    '<span style="width:7px;height:7px;border-radius:50%;background:'+col+';flex-shrink:0"></span>'+
+    '<span style="color:'+col+'">'+(l[state]||state)+'</span></span>';
+}
+
+function _latencyBar(ms){
+  if(ms == null) return '<span style="color:var(--text-3)">—</span>';
+  var col = ms < 100 ? 'var(--green)' : ms < 500 ? 'var(--yellow)' : 'var(--red)';
+  return '<span style="font-family:var(--font-mono);font-size:12px;color:'+col+'">'+ms+'ms</span>';
+}
+
+function _renderMonTable(sources){
+  var tb = document.getElementById('mon-tbody');
+  if(!sources.length){
+    tb.innerHTML = '<tr><td colspan="10" class="empty"><i class="fas fa-chart-line"></i><p>Aucune donnée</p></td></tr>';
+    return;
+  }
+  tb.innerHTML = sources.map(function(s){
+    var sid = s.id.replace(/'/g, "\\'");
+    var hasAlert = s.status==='error'||s.status==='disconnected'||s.cb_state==='open'||s.error_rate_pct>20;
+    return '<tr style="animation:fadeIn .2s ease'+(hasAlert?';background:rgba(248,113,113,.04)':'')+'">'+
+      '<td style="padding:10px 8px 10px 14px">'+_connTypeIcon(s.connector_type)+'</td>'+
+      '<td><div style="font-weight:500;color:var(--text-0)">'+s.name+'</div>'+
+        '<div style="font-size:10.5px;color:var(--text-3);font-family:var(--font-mono)">'+s.id.substring(0,8)+'…</div></td>'+
+      '<td><span class="badge '+_connBadgeClass(s.connector_type)+'">'+s.connector_type+'</span></td>'+
+      '<td><div style="display:flex;align-items:center">'+_connStatusDot(s.status)+'<span style="font-size:12px">'+(s.status||'unknown')+'</span></div></td>'+
+      '<td><span style="color:var(--text-3);font-size:11px">—</span></td>'+
+      '<td>'+_latencyBar(s.test_latency_ms)+'</td>'+
+      '<td style="font-family:var(--font-mono);font-size:12px">'+s.query_count+'</td>'+
+      '<td>'+_errorRateBadge(s.error_rate_pct)+'</td>'+
+      '<td style="font-size:11.5px;color:var(--text-3)">'+( s.last_synced_at?ago(s.last_synced_at):'Jamais')+'</td>'+
+      '<td><div style="display:flex;gap:3px">'+
+        '<button class="btn btn-ghost btn-sm" onclick="_monTest(\''+sid+'\')" title="Tester"><i class="fas fa-plug"></i></button>'+
+        '<button class="btn btn-ghost btn-sm" onclick="_monSync(\''+sid+'\')" title="Sync"><i class="fas fa-sync"></i></button>'+
+        '<button class="btn btn-ghost btn-sm" onclick="resetCB(\''+sid+'\')" title="Reset circuit breaker"><i class="fas fa-shield-alt"></i></button>'+
+      '</div></td></tr>';
+  }).join('');
+}
+
+function _errorRateBadge(pct){
+  if(pct == null || pct === 0) return '<span style="color:var(--text-3);font-size:12px">0%</span>';
+  var col = pct < 5 ? 'var(--green)' : pct < 20 ? 'var(--yellow)' : 'var(--red)';
+  return '<span style="font-family:var(--font-mono);font-size:12px;color:'+col+'">'+pct+'%</span>';
+}
+
+async function _monTest(id){
+  showToast('Test en cours…');
+  try{
+    var r = await OpAuth.apiFetch('/sources/'+id+'/test', {method:'POST'});
+    if(!r) throw 0;
+    var d = await r.json();
+    showToast(d.success ? '✓ OK — '+d.latency_ms+'ms' : '✗ '+d.message, d.success?'ok':'err');
+    setTimeout(loadMonitoring, 1000);
+  }catch{ showToast('Erreur réseau','err'); }
+}
+async function _monSync(id){
+  showToast('Sync lancé…');
+  try{
+    await OpAuth.apiFetch('/sources/'+id+'/sync', {method:'POST'});
+    setTimeout(loadMonitoring, 4000);
+  }catch{ showToast('Erreur sync','err'); }
+}
+async function resetCB(id){
+  // Circuit breaker non implémenté dans cette version
+  showToast('Circuit breaker non disponible dans cette version','err');
+}
+
+// ═══ CONNECTEURS ═══
+
+// Variables wizard (partagées)
+var _connectorTypes = {};
+var _wizardStep = 1;
+var _selectedCategory = null;
+var _selectedType = null;
+var _createdSourceId = null;
+var _formData = {};
+var _uploadedFilePath = null;
+
+// ── Chargement types de connecteurs ────────────────────────
+async function _loadConnectorTypes(force){
+  // force=true pour vider le cache (ex: après upload d'un plugin)
+  if(!force && Object.keys(_connectorTypes).length) return;
+  try{
+    var r = await fetch('/api/connector-types');
+    if(r&&r.ok) _connectorTypes = await r.json();
+  }catch(e){ console.warn('connector-types:', e); }
+}
+
+// ── Helpers catalogue ──────────────────────────────────────
+function _connStatusDot(status){
+  var c={active:'var(--green)',connected:'var(--green)',error:'var(--red)',disconnected:'var(--red)',unknown:'var(--yellow)',syncing:'var(--yellow)'};
+  return '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+(c[status]||'var(--yellow)')+';margin-right:5px;flex-shrink:0"></span>';
+}
+function _connBadgeClass(type){
+  var m={mssql:'badge-warn',postgresql:'badge-power',mysql:'badge-power',odata:'badge-ok',sap_rfc:'badge-admin',sap_odata:'badge-admin',dynamics365:'badge-admin',sage_x3:'badge-ok',sage_100:'badge-ok'};
+  return m[type]||'badge-user';
+}
+
+// ── Chargement tableau sources ──────────────────────────────
+var _connectors=[];
+async function loadConnectors(){
+  var tb=document.getElementById('connectors-tbody');
+  if(!tb)return;
+  tb.innerHTML='<tr><td colspan="7" class="empty"><i class="fas fa-spinner fa-spin"></i><p>Chargement…</p></td></tr>';
+  try{
+    // /sources retourne {sources:[...], total:N} — endpoint fiable
+    var r=await OpAuth.apiFetch('/sources');
+    if(!r||!r.ok)throw new Error('HTTP '+r.status);
+    var d=await r.json();
+    // DataSourceList : champ "sources" ou tableau direct
+    _connectors = Array.isArray(d) ? d : (d.sources || []);
+    _renderConnectors(_connectors);
+  }catch(e){
+    console.error('loadConnectors:', e);
+    tb.innerHTML='<tr><td colspan="7" class="empty"><i class="fas fa-exclamation-triangle" style="color:var(--red)"></i>'+
+      '<p>Erreur de chargement — <button class="btn btn-ghost btn-sm" onclick="loadConnectors()">Réessayer</button></p></td></tr>';
+  }
+}
+function _connTypeIcon(type){
+  // Couleurs par famille
+  var c={
+    postgresql:'#336791',mysql:'#00758f',mssql:'#CC2927',sqlite:'#7b8b99',sage_100:'#00a650',
+    rest:'#6c63ff',odata:'#f5a623',graphql:'#e535ab',soap:'#7b8b99',
+    sap_rfc:'#0070f3',sap_odata:'#fa6400',dynamics365:'#0078d4',sage_x3:'#00a650',sage_cloud:'#0ea5e9',
+    file_csv:'#16a34a',file_excel:'#217346',file_xlsx:'#217346',file_json:'#f59e0b',
+    file_parquet:'#7c3aed',file_avro:'#db2777',
+  };
+  var col = c[type] || '#5a7d96';
+
+  // SVG par type
+  var svgs = {
+    // ── Bases de données ──────────────────────────────
+    postgresql: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="COL" stroke-width="1.8" stroke-linecap="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/></svg>',
+    mysql:      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="COL" stroke-width="1.8" stroke-linecap="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/></svg>',
+    mssql:      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="COL" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>',
+    sqlite:     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="COL" stroke-width="1.8" stroke-linecap="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg>',
+    sage_100:   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="COL" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8M12 8v8"/></svg>',
+    // ── Web Services ──────────────────────────────────
+    rest:       '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="COL" stroke-width="1.8" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>',
+    odata:      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="COL" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10A15.3 15.3 0 0 1 8 12a15.3 15.3 0 0 1 4-10z"/></svg>',
+    graphql:    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="COL" stroke-width="1.8" stroke-linecap="round"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5"/><line x1="12" y1="2" x2="12" y2="22"/><path d="M2 8.5l20 7M2 15.5l20-7"/></svg>',
+    soap:       '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="COL" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M8 4v16M2 9h6"/></svg>',
+    sap_rfc:    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="COL" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M7 3v18M2 9h5M2 15h5"/></svg>',
+    sap_odata:  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="COL" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="3" width="20" height="18" rx="2"/><circle cx="15" cy="12" r="4"/><path d="M7 3v18"/></svg>',
+    dynamics365:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="COL" stroke-width="1.8" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>',
+    sage_x3:    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="COL" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M8 9h8M8 12h6M8 15h4"/></svg>',
+    sage_cloud: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="COL" stroke-width="1.8" stroke-linecap="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>',
+    // ── Fichiers ──────────────────────────────────────
+    file_csv:   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="COL" stroke-width="1.8" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>',
+    file_excel: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="COL" stroke-width="1.8" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="9"/><line x1="15" y1="15" x2="9" y2="9"/></svg>',
+    file_xlsx:  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="COL" stroke-width="1.8" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="9"/><line x1="15" y1="15" x2="9" y2="9"/></svg>',
+    file_json:  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="COL" stroke-width="1.8" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M10 13c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2"/><path d="M16 11c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2"/></svg>',
+    file_parquet:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="COL" stroke-width="1.8" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="12" y2="17"/></svg>',
+    file_avro:  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="COL" stroke-width="1.8" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><polyline points="8 17 12 13 16 17"/></svg>',
+  };
+
+  var fallback = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="COL" stroke-width="1.8" stroke-linecap="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>';
+  var svg = (svgs[type] || fallback).replace(/COL/g, col);
+  return '<span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px">' + svg + '</span>';
+}
+function _renderConnectors(sources){
+  var tb=document.getElementById('connectors-tbody');
+  if(!sources.length){
+    tb.innerHTML='<tr><td colspan="7" class="empty"><i class="fas fa-plug"></i><p>Aucune source configurée</p>'+
+      '<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="openAddModal()">'+
+      '<i class="fas fa-plus"></i> Ajouter une source</button></td></tr>';
+    return;
+  }
+  tb.innerHTML=sources.map(function(s){
+    var sid=s.id.replace(/'/g,"\'");
+    var sname=(s.name||'').replace(/'/g,"\'");
+    return '<tr style="animation:fadeIn .2s ease">'+
+      '<td style="padding:10px 8px 10px 14px;font-size:16px">'+_connTypeIcon(s.connector_type)+'</td>'+
+      '<td><div style="font-weight:500;color:var(--text-0)">'+s.name+'</div>'+
+        '<div style="font-size:10.5px;color:var(--text-3);font-family:var(--font-mono)">'+s.id.substring(0,8)+'…</div></td>'+
+      '<td><span class="badge '+_connBadgeClass(s.connector_type)+'" style="font-size:10px">'+s.connector_type+'</span></td>'+
+      '<td><div style="display:flex;align-items:center">'+_connStatusDot(s.status)+'<span style="font-size:12px">'+(s.status||'unknown')+'</span></div></td>'+
+      '<td style="font-size:12px;color:var(--text-2)">'+(s.entity_count||0).toLocaleString()+'</td>'+
+      '<td style="font-size:11.5px;color:var(--text-3)">'+(s.last_synced_at?ago(s.last_synced_at):'Jamais')+'</td>'+
+      '<td><div style="display:flex;gap:4px;align-items:center">'+
+        '<button class="btn btn-primary btn-sm" onclick="openEditConnector(\'' + sid + '\')">'+
+          '<i class="fas fa-cog"></i> Gérer</button>'+
+        '<button class="btn btn-ghost btn-sm" onclick="testConnector(\'' + sid + '\')" title="Tester">'+
+          '<i class="fas fa-plug"></i></button>'+
+        '<button class="btn btn-ghost btn-sm" data-sync="'+s.id+'" onclick="syncConnector(\'' + sid + '\')" title="Synchroniser">'+
+          '<i class="fas fa-sync"></i></button>'+
+        '<button class="btn btn-danger btn-sm" onclick="deleteConnector(\'' + sid + '\',\'' + sname + '\')" title="Supprimer">'+
+          '<i class="fas fa-trash"></i></button>'+
+      '</div></td></tr>';
+  }).join('');
+}
+async function syncConnector(id){
+  // Afficher "Sync…" immédiatement sur la ligne
+  var row = document.querySelector('tr[data-sid="'+id+'"]');
+  var syncBtn = document.querySelector('button[data-sync="'+id+'"]');
+  if(syncBtn){syncBtn.innerHTML='<i class="fas fa-spinner fa-spin"></i>';syncBtn.disabled=true;}
+
+  showToast('Sync lancé — mise à jour dans quelques secondes…');
+  try{
+    await OpAuth.apiFetch('/sources/'+id+'/sync',{method:'POST'});
+    // Polling toutes les 5s pendant 90s max pour détecter last_synced_at mis à jour
+    var attempts = 0;
+    var prevSync = (_connectors.find(function(s){return s.id===id;})||{}).last_synced_at || null;
+    var poll = setInterval(async function(){
+      attempts++;
+      await loadConnectors();
+      var updated = (_connectors.find(function(s){return s.id===id;})||{}).last_synced_at;
+      if((updated && updated !== prevSync) || attempts >= 18){
+        clearInterval(poll);
+        if(updated && updated !== prevSync){
+          showToast('Sync terminée ✓');
+        }
+      }
+    }, 5000);
+  }catch{
+    showToast('Erreur sync','err');
+    if(syncBtn){syncBtn.innerHTML='<i class="fas fa-sync"></i>';syncBtn.disabled=false;}
+  }
+}
+async function openEditConnector(id){
+  // Charge les détails de la source et ouvre le wizard en mode édition (étape 2)
+  try{
+    var r=await OpAuth.apiFetch('/sources/'+id);
+    if(!r||!r.ok)throw 0;
+    var src=await r.json();
+    await _loadConnectorTypes();
+    _wizardStep=2;_selectedCategory=null;_selectedType=src.connector_type;
+    _createdSourceId=src.id;
+    _formData={
+      defaultPort:src.port||null,
+      host:src.host||null,
+      port:src.port||null,
+      database_name:src.database_name||null,
+      schema_name:src.schema_name||null,
+      base_url:src.base_url||null,
+      username:src.username||null,
+      description:src.description||null,
+    };
+    _uploadedFilePath=null;
+    // Trouver la catégorie
+    var cat=Object.entries(_connectorTypes).find(function(e){
+      return e[1].types.some(function(t){return t.id===src.connector_type;});
+    });
+    if(cat)_selectedCategory=cat[0];
+    _buildForm();
+    // Pré-remplir les champs après construction du formulaire
+    setTimeout(function(){
+      if(document.getElementById('f_name'))document.getElementById('f_name').value=src.name||'';
+      if(document.getElementById('f_desc'))document.getElementById('f_desc').value=src.description||'';
+      if(document.getElementById('f_host'))document.getElementById('f_host').value=src.host||'';
+      if(document.getElementById('f_port'))document.getElementById('f_port').value=src.port||'';
+      if(document.getElementById('f_db'))document.getElementById('f_db').value=src.database_name||'';
+      if(document.getElementById('f_schema'))document.getElementById('f_schema').value=src.schema_name||'';
+      if(document.getElementById('f_user'))document.getElementById('f_user').value=src.username||'';
+      if(document.getElementById('f_url'))document.getElementById('f_url').value=src.base_url||'';
+    },50);
+    // Changer le bouton "Créer" en "Modifier"
+    var nb=document.getElementById('nextBtn');
+    nb.textContent='Enregistrer les modifications';
+    nb.disabled=false;
+    nb.onclick=function(){_updateForm(id);};
+    // Changer le titre + indicateur étape
+    document.getElementById('stepIndicator').textContent='Modifier la source';
+    _updateWizardSteps();
+    document.getElementById('addOverlay').classList.remove('hidden');
+  }catch{showToast('Impossible de charger la source','err');}
+}
+
+function _updateWizardSteps(){
+  // En mode édition on est à l'étape 2 directement
+  for(var i=1;i<=3;i++){
+    document.getElementById('step'+i).style.display=i===2?'block':'none';
+    var ws=document.getElementById('ws'+i);
+    ws.className='wstep';
+    if(i<2)ws.classList.add('done');
+    if(i===2)ws.classList.add('active');
+  }
+  document.getElementById('prevBtn').style.display='none';
+}
+
+async function _updateForm(id){
+  var name=document.getElementById('f_name')&&document.getElementById('f_name').value.trim();
+  if(!name){showToast('Le nom est requis','err');return;}
+  var payload={
+    name:name,
+    description:document.getElementById('f_desc')&&document.getElementById('f_desc').value.trim()||null,
+    host:document.getElementById('f_host')&&document.getElementById('f_host').value.trim()||null,
+    port:document.getElementById('f_port')&&(parseInt(document.getElementById('f_port').value)||null),
+    database_name:document.getElementById('f_db')&&document.getElementById('f_db').value.trim()||null,
+    schema_name:document.getElementById('f_schema')&&document.getElementById('f_schema').value.trim()||null,
+    username:document.getElementById('f_user')&&document.getElementById('f_user').value.trim()||null,
+    base_url:document.getElementById('f_url')&&document.getElementById('f_url').value.trim()||null,
+  };
+  // Mot de passe seulement si renseigné
+  var pass=document.getElementById('f_pass')&&document.getElementById('f_pass').value;
+  if(pass)payload.password=pass;
+  // Supprimer les nulls
+  Object.keys(payload).forEach(function(k){if(payload[k]===null||payload[k]===undefined)delete payload[k];});
+  var nb=document.getElementById('nextBtn');
+  nb.disabled=true;nb.innerHTML='<div class="spinner"></div> Enregistrement…';
+  try{
+    var r=await OpAuth.apiFetch('/sources/'+id,{method:'PATCH',body:JSON.stringify(payload)});
+    if(!r||!r.ok){var e=await r?.json();showToast(e?.detail||'Erreur modification','err');nb.disabled=false;nb.textContent='Enregistrer les modifications';return;}
+    showToast('Source modifiée avec succès');
+    closeAddModal();
+    loadConnectors();
+  }catch{showToast('Erreur réseau','err');nb.disabled=false;nb.textContent='Enregistrer les modifications';}
+}
+
+async function deleteConnector(id,name){
+  if(!confirm('Supprimer "'+name+'" ? Action irréversible.'))return;
+  try{
+    var r=await OpAuth.apiFetch('/sources/'+id,{method:'DELETE'});
+    if(!r||!r.ok){var e=await r?.json();showToast(e?.detail||'Erreur','err');return;}
+    showToast('Source supprimée');loadConnectors();
+  }catch{showToast('Erreur réseau','err');}
+}
+
+// ── Wizard : ouvrir / fermer ─────────────────────────────────
+// Icônes catégories
+var _CAT_ICONS = {
+  database:   '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2" y="4" width="16" height="4" rx="1"/><rect x="2" y="10" width="16" height="4" rx="1"/><circle cx="16" cy="6" r="1" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="1" fill="currentColor" stroke="none"/></svg>',
+  webservice: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="10" cy="10" r="8"/><path d="M10 2c0 0-4 4-4 8s4 8 4 8"/><path d="M10 2c0 0 4 4 4 8s-4 8-4 8"/><line x1="2" y1="10" x2="18" y2="10"/></svg>',
+  file:       '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 6a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6z"/></svg>',
+  custom:     '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7l-4-5z"/><path d="M14 2v5h5"/><line x1="9" y1="12" x2="15" y2="12"/></svg>',
+};
+
+function _renderCatGrid(){
+  var grid = document.getElementById('catGrid');
+  if(!grid) return;
+  var cats = Object.keys(_connectorTypes);
+  if(!cats.length){
+    // Fallback statique si catalogue pas encore chargé
+    grid.innerHTML = [
+      {id:'database',  name:'Base de données',  desc:'Connexion directe SQL'},
+      {id:'webservice',name:'Web Service / ERP', desc:'REST, OData, SAP'},
+      {id:'file',      name:'Fichiers',          desc:'CSV, Excel, JSON'},
+    ].map(function(c){
+      return '<div class="cat-card" onclick="selectCategory(\''+c.id+'\')" id="cat-'+c.id+'">'+
+        '<div class="cat-icon">'+(_CAT_ICONS[c.id]||'')+'</div>'+
+        '<div class="cat-name">'+c.name+'</div><div class="cat-desc">'+c.desc+'</div></div>';
+    }).join('');
+    return;
+  }
+  // Générer depuis _connectorTypes (inclut custom)
+  grid.innerHTML = cats.map(function(catKey){
+    var cat = _connectorTypes[catKey];
+    var icon = _CAT_ICONS[catKey] || _CAT_ICONS.custom;
+    return '<div class="cat-card" onclick="selectCategory(\''+catKey+'\')" id="cat-'+catKey+'">'+
+      '<div class="cat-icon">'+icon+'</div>'+
+      '<div class="cat-name">'+cat.label+'</div>'+
+      '<div class="cat-desc">'+(cat.description||'')+'</div></div>';
+  }).join('');
+  // Ajuster la grille selon nb catégories
+  grid.style.gridTemplateColumns = 'repeat('+Math.min(cats.length,3)+',1fr)';
+}
+
+function closeOnBgAdmin(e){
+  if(e.target===document.getElementById('addOverlay'))closeAddModal();
+}
+async function openAddModal(preselectedType){
+  await _loadConnectorTypes();
+  _wizardStep=1;_selectedCategory=null;_selectedType=null;
+  _createdSourceId=null;_formData={};_uploadedFilePath=null;
+  _updateWizard();
+  // Générer les catégories dynamiquement depuis _connectorTypes
+  _renderCatGrid();
+  // Pré-sélectionner un type si cliqué depuis le catalogue
+  if(preselectedType){
+    // Trouver la catégorie
+    var cat=Object.entries(_connectorTypes).find(function(e){
+      return e[1].types.some(function(t){return t.id===preselectedType;});
+    });
+    if(cat){
+      _selectedCategory=cat[0];
+      selectCategory(cat[0]);
+      selectType(preselectedType,
+        (cat[1].types.find(function(t){return t.id===preselectedType;})||{}).default_port||null
+      );
+    }
+  }
+  document.getElementById('addOverlay').classList.remove('hidden');
+}
+function closeAddModal(){
+  document.getElementById('addOverlay').classList.add('hidden');
+}
+
+// ── Wizard : navigation ──────────────────────────────────────
+function selectCategory(cat){
+  _selectedCategory=cat;_selectedType=null;
+  document.querySelectorAll('.cat-card').forEach(function(c){c.classList.remove('selected');});
+  var el=document.getElementById('cat-'+cat);
+  if(el)el.classList.add('selected');
+  var types=_connectorTypes[cat]&&_connectorTypes[cat].types||[];
+  document.getElementById('typeGridInner').innerHTML=types.map(function(t){
+    return '<div class="type-pill" onclick="selectType(\''+t.id+'\','+(t.default_port||'null')+')" id="type-'+t.id+'">'+
+      '<span class="type-emoji">'+_connTypeIcon(t.id)+'</span>'+
+      '<span class="type-name">'+t.label+'</span>'+
+      (t.default_port?'<span class="type-port">:'+t.default_port+'</span>':'')+
+      '</div>';
+  }).join('');
+  document.getElementById('typeGrid').style.display='block';
+  document.getElementById('nextBtn').disabled=true;
+}
+function selectType(type,defaultPort){
+  _selectedType=type;_formData.defaultPort=defaultPort;
+  document.querySelectorAll('.type-pill').forEach(function(p){p.classList.remove('selected');});
+  var el=document.getElementById('type-'+type);
+  if(el)el.classList.add('selected');
+  document.getElementById('nextBtn').disabled=false;
+}
+function _updateWizard(){
+  for(var i=1;i<=3;i++){
+    document.getElementById('step'+i).style.display=i===_wizardStep?'block':'none';
+    var ws=document.getElementById('ws'+i);
+    ws.className='wstep';
+    if(i<_wizardStep)ws.classList.add('done');
+    if(i===_wizardStep)ws.classList.add('active');
+  }
+  document.getElementById('stepIndicator').textContent='Étape '+_wizardStep+' / 3';
+  document.getElementById('prevBtn').style.display=_wizardStep>1?'inline-flex':'none';
+  var nb=document.getElementById('nextBtn');
+  if(_wizardStep===1){
+    nb.textContent='Suivant →';nb.disabled=!_selectedType;nb.onclick=wizardNext;
+  }else if(_wizardStep===2){
+    nb.textContent='Créer la source →';nb.disabled=false;nb.onclick=_submitForm;
+  }else{
+    nb.innerHTML='<i class="fas fa-check"></i> Terminer';nb.disabled=false;
+    nb.onclick=function(){closeAddModal();loadConnectors();};
+  }
+}
+function wizardNext(){
+  if(_wizardStep===1&&_selectedType){_wizardStep=2;_buildForm();_updateWizard();}
+}
+function wizardPrev(){
+  if(_wizardStep>1){_wizardStep--;_updateWizard();}
+}
+
+// ── Wizard : construction du formulaire ─────────────────────
+function _buildForm(){
+  var isDB  =['postgresql','mysql','mssql','sqlite','sage_100'].indexOf(_selectedType)>=0;
+  var isWS  =['rest','odata','graphql','soap','sap_rfc','sap_odata','dynamics365','sage_x3','sage_cloud'].indexOf(_selectedType)>=0;
+  var isFile=['file_csv','file_excel','file_xlsx','file_json','file_parquet','file_avro'].indexOf(_selectedType)>=0;
+  var types =_connectorTypes[_selectedCategory]&&_connectorTypes[_selectedCategory].types||[];
+  var typeObj=types.find(function(t){return t.id===_selectedType;})||{};
+  var icon  =_connTypeIcon(_selectedType);
+  var label =typeObj.label||_selectedType;
+
+  var html='<div style="display:flex;align-items:center;gap:10px;margin-bottom:24px;padding:14px 16px;background:var(--bg-2);border-radius:var(--r);border:1px solid var(--border)">'+
+    '<span style="font-size:22px">'+icon+'</span><div><div style="font-weight:500">'+label+'</div>'+
+    '<div style="font-size:11px;color:var(--text-3)">Remplissez les informations de connexion</div></div></div>'+
+    '<div class="form-section"><div class="form-section-title">Identification</div>'+
+    '<div class="form-group"><label class="form-label">Nom <span style="color:var(--red)">*</span></label>'+
+    '<input type="text" class="form-input" id="f_name" placeholder="Ma source" oninput="_formData.name=this.value"></div>'+
+    '<div class="form-group"><label class="form-label">Description</label>'+
+    '<input type="text" class="form-input" id="f_desc" placeholder="Optionnel" oninput="_formData.description=this.value"></div></div>';
+
+  if(isDB){
+    html+='<div class="form-section"><div class="form-section-title">Connexion</div>'+
+      '<div class="form-row cols2">'+
+      '<div class="form-group"><label class="form-label">Hôte <span style="color:var(--red)">*</span></label>'+
+      '<input type="text" class="form-input" id="f_host" placeholder="localhost" oninput="_formData.host=this.value"></div>'+
+      '<div class="form-group"><label class="form-label">Port</label>'+
+      '<input type="number" class="form-input" id="f_port" value="'+(_formData.defaultPort||'')+'" oninput="_formData.port=parseInt(this.value)||null"></div></div>'+
+      '<div class="form-row cols2">'+
+      '<div class="form-group"><label class="form-label">Base <span style="color:var(--red)">*</span></label>'+
+      '<input type="text" class="form-input" id="f_db" placeholder="my_database" oninput="_formData.database_name=this.value"></div>'+
+      '<div class="form-group"><label class="form-label">Schéma</label>'+
+      '<input type="text" class="form-input" id="f_schema" placeholder="public" oninput="_formData.schema_name=this.value"></div></div></div>'+
+      '<div class="form-section"><div class="form-section-title">Auth</div>'+
+      '<div class="form-row cols2">'+
+      '<div class="form-group"><label class="form-label">Utilisateur</label>'+
+      '<input type="text" class="form-input" id="f_user" oninput="_formData.username=this.value"></div>'+
+      '<div class="form-group"><label class="form-label">Mot de passe</label>'+
+      '<input type="password" class="form-input" id="f_pass" oninput="_formData.password=this.value"></div></div></div>';
+  }else if(isWS){
+    html+='<div class="form-section"><div class="form-section-title">Connexion</div>'+
+      '<div class="form-group"><label class="form-label">URL <span style="color:var(--red)">*</span></label>'+
+      '<input type="url" class="form-input" id="f_url" placeholder="https://api.example.com" oninput="_formData.base_url=this.value"></div></div>'+
+      '<div class="form-section"><div class="form-section-title">Auth</div>'+
+      '<div class="form-group"><label class="form-label">Type</label>'+
+      '<select class="form-select" id="f_auth" onchange="updateAuthFields(this.value)">'+
+      '<option value="none">Aucune</option><option value="basic">Basic</option>'+
+      '<option value="bearer">Bearer Token</option><option value="api_key">API Key</option></select></div>'+
+      '<div id="authFields"></div></div>';
+  }else if(isFile){
+    var acceptMap={file_csv:'.csv,.txt,.tsv',file_excel:'.xlsx,.xls',file_xlsx:'.xlsx,.xls',file_json:'.json',file_parquet:'.parquet',file_avro:'.avro'};
+    html+='<div class="form-section"><div class="form-section-title">Fichier</div>'+
+      '<div class="form-group"><label class="form-label">Uploader <span style="color:var(--red)">*</span></label>'+
+      '<div class="upload-zone" onclick="document.getElementById(\'f_file\').click()">'+
+      '<input type="file" id="f_file" accept="'+(acceptMap[_selectedType]||'.csv,.json,.xlsx')+'" onchange="_uploadFileAdmin(this)">'+
+      '<div class="upload-zone-icon">📁</div>'+
+      '<div class="upload-zone-text">Cliquez pour sélectionner</div>'+
+      '<div class="upload-zone-hint">'+(acceptMap[_selectedType]||'Fichier de données')+'</div></div>'+
+      '<div id="uploadStatus" style="display:none;margin-top:8px;font-size:12px;color:var(--text-2)"></div></div></div>';
+  }
+  document.getElementById('formContent').innerHTML=html;
+  if(isDB&&_formData.defaultPort){
+    var p=document.getElementById('f_port');
+    if(p){p.value=_formData.defaultPort;_formData.port=_formData.defaultPort;}
+  }
+}
+
+function updateAuthFields(type){
+  _formData.auth_type=type;
+  var el=document.getElementById('authFields');
+  var fields={
+    none:'',
+    basic:'<div class="form-row cols2"><div class="form-group"><label class="form-label">User</label><input type="text" class="form-input" oninput="_formData.username=this.value"></div><div class="form-group"><label class="form-label">Pass</label><input type="password" class="form-input" oninput="_formData.password=this.value"></div></div>',
+    bearer:'<div class="form-group"><label class="form-label">Token</label><input type="text" class="form-input" placeholder="eyJ..." oninput="_formData.token=this.value"></div>',
+    api_key:'<div class="form-row cols2"><div class="form-group"><label class="form-label">Header</label><input type="text" class="form-input" value="X-API-Key" oninput="_formData.api_key_header=this.value"></div><div class="form-group"><label class="form-label">Valeur</label><input type="password" class="form-input" oninput="_formData.api_key_value=this.value"></div></div>',
+  };
+  if(el)el.innerHTML=fields[type]||'';
+}
+
+async function _uploadFileAdmin(input){
+  var file=input.files[0];if(!file)return;
+  var st=document.getElementById('uploadStatus');
+  st.style.display='block';st.innerHTML='<i class="fas fa-spinner fa-spin"></i> Upload en cours…';
+  var fd=new FormData();fd.append('file',file);
+  try{
+    var r=await fetch('/api/upload',{method:'POST',headers:OpAuth.authHeaders(),body:fd});
+    if(!r.ok)throw new Error('Upload échoué');
+    var d=await r.json();
+    _uploadedFilePath=d.uploaded_path||d.path||null;
+    st.innerHTML='<span style="color:var(--green)"><i class="fas fa-check-circle"></i> '+file.name+' chargé</span>';
+  }catch(e){
+    st.innerHTML='<span style="color:var(--red)"><i class="fas fa-times-circle"></i> '+e.message+'</span>';
+  }
+}
+
+async function _submitForm(){
+  var name=document.getElementById('f_name')&&document.getElementById('f_name').value.trim();
+  if(!name){showToast('Le nom est requis','err');return;}
+  var isFile=['file_csv','file_excel','file_xlsx','file_json','file_parquet','file_avro'].indexOf(_selectedType)>=0;
+  if(isFile&&!_uploadedFilePath){showToast('Veuillez uploader un fichier','err');return;}
+  var payload={
+    name:name,connector_type:_selectedType,
+    description:_formData.description||null,
+    host:document.getElementById('f_host')&&document.getElementById('f_host').value.trim()||null,
+    port:_formData.port||null,
+    database_name:document.getElementById('f_db')&&document.getElementById('f_db').value.trim()||null,
+    schema_name:document.getElementById('f_schema')&&document.getElementById('f_schema').value.trim()||null,
+    base_url:_uploadedFilePath||document.getElementById('f_url')&&document.getElementById('f_url').value.trim()||null,
+    auth_type:_formData.auth_type||'none',
+    username:_formData.username||document.getElementById('f_user')&&document.getElementById('f_user').value.trim()||null,
+    password:_formData.password||document.getElementById('f_pass')&&document.getElementById('f_pass').value||null,
+    token:_formData.token||null,
+    options:_formData.options||{},
+  };
+  var nb=document.getElementById('nextBtn');
+  nb.disabled=true;nb.innerHTML='<div class="spinner"></div> Création…';
+  try{
+    var r=await OpAuth.apiFetch('/sources',{method:'POST',body:JSON.stringify(payload)});
+    if(!r||!r.ok){var e=await r?.json();showToast(e?.detail||'Erreur création','err');nb.disabled=false;nb.textContent='Créer la source →';return;}
+    var src=await r.json();
+    _createdSourceId=src.id;
+    showToast('Source "'+src.name+'" créée');
+    _wizardStep=3;_updateWizard();
+    setTimeout(function(){_autoTest(src.id);},500);
+  }catch{showToast('Erreur réseau','err');nb.disabled=false;nb.textContent='Créer la source →';}
+}
+
+async function _autoTest(id){
+  document.getElementById('testIcon').textContent='🔄';
+  document.getElementById('testMsg').textContent='Test de connexion en cours…';
+  document.getElementById('testSub').textContent='';
+  try{
+    var r=await OpAuth.apiFetch('/sources/'+id+'/test',{method:'POST'});
+    if(!r||!r.ok)throw 0;
+    var d=await r.json();
+    document.getElementById('testResultBox').style.display='block';
+    document.getElementById('testIcon').textContent=d.success?'✅':'❌';
+    document.getElementById('testMsg').textContent=d.success?'Connexion établie !':'Connexion échouée';
+    document.getElementById('testSub').textContent=d.message||'';
+    var sl=document.getElementById('testStatusLabel');
+    sl.textContent=d.success?'OK — '+d.latency_ms+'ms':'ERREUR';
+    sl.className='test-status '+(d.success?'ts-ok':'ts-err');
+    document.getElementById('testResultBody').innerHTML=
+      '<div class="test-row"><span class="test-row-label">Statut</span><span class="test-row-value" style="color:'+(d.success?'var(--green)':'var(--red)')+'">'+
+      (d.success?'✓ Succès':'✗ Échec')+'</span></div>'+
+      '<div class="test-row"><span class="test-row-label">Message</span><span class="test-row-value">'+d.message+'</span></div>'+
+      (d.success?'<div class="test-row"><span class="test-row-label">Latence</span><span class="test-row-value">'+d.latency_ms+'ms</span></div>':'');
+    if(d.success)setTimeout(function(){_autoSync(id);},800);
+  }catch{
+    document.getElementById('testIcon').textContent='⚠️';
+    document.getElementById('testMsg').textContent='Erreur lors du test';
+  }
+}
+
+async function _autoSync(id){
+  document.getElementById('testSub').textContent='Synchronisation…';
+  try{
+    var r=await OpAuth.apiFetch('/sources/'+id+'/sync',{method:'POST'});
+    if(r&&r.ok){
+      var d=await r.json();
+      document.getElementById('testSub').textContent=d.message||'Sync lancé';
+      document.getElementById('entityPreview').style.display='block';
+      document.getElementById('entityPreviewList').innerHTML=
+        '<div style="display:flex;gap:12px">'+
+        [['Entités',d.entity_count||0,'var(--accent)'],['Champs',d.field_count||0,'var(--green)'],['Relations',d.relation_count||0,'var(--purple)'],['Durée',(d.duration_ms||0)+'ms','var(--text-1)']].map(function(x){
+          return '<div style="text-align:center;flex:1;padding:14px;background:var(--bg-2);border-radius:var(--r);border:1px solid var(--border)">'+
+          '<div style="font-size:18px;font-weight:700;color:'+x[2]+'">'+x[1]+'</div>'+
+          '<div style="font-size:12px;color:var(--text-2)">'+x[0]+'</div></div>';
+        }).join('')+'</div>';
+    }
+  }catch{}
+}
+
+// ═══ USERS ═══
+let _users = [];
+let _selectedUsers = new Set();
+
+// ── Chargement ──────────────────────────────────────────────
+async function loadUsers(){
+  const tb = document.getElementById('users-tbody');
+  if(tb) tb.innerHTML = '<tr><td colspan="8" class="empty"><i class="fas fa-spinner fa-spin"></i><p>Chargement...</p></td></tr>';
+  try{
+    const r = await OpAuth.apiFetch('/admin/users?per_page=100');
+    if(!r||!r.ok) throw 0;
+    const d = await r.json();
+    _users = d.users || [];
+    _selectedUsers.clear();
+    _updateBulkBar();
+    filterUsers();
+  }catch{
+    if(tb) tb.innerHTML = '<tr><td colspan="8" class="empty"><i class="fas fa-exclamation-triangle" style="color:var(--red)"></i><p>Erreur de chargement</p></td></tr>';
+  }
+}
+
+// ── Filtres ──────────────────────────────────────────────────
+function filterUsers(){
+  const q   = (document.getElementById('user-search')?.value || '').toLowerCase();
+  const rol = document.getElementById('filter-role')?.value   || '';
+  const sta = document.getElementById('filter-status')?.value || '';
+  const filtered = _users.filter(u => {
+    const matchQ   = !q   || (u.username||'').toLowerCase().includes(q) || (u.email||'').toLowerCase().includes(q);
+    const matchR   = !rol || u.role === rol;
+    const matchS   = !sta || (sta === 'active' ? u.is_active : !u.is_active);
+    return matchQ && matchR && matchS;
+  });
+  renderUsers(filtered);
+}
+
+// ── Rendu tableau ────────────────────────────────────────────
 function renderUsers(users){
-  const tb=document.getElementById('users-tbody');
-  if(!users.length){tb.innerHTML='<tr><td colspan="6" class="empty"><i class="fas fa-users"></i><p>Aucun utilisateur</p></td></tr>';return;}
-  tb.innerHTML=users.map(u=>`
-    <tr style="animation:fadeIn .2s ease">
+  const tb = document.getElementById('users-tbody');
+  if(!users.length){
+    tb.innerHTML = '<tr><td colspan="8" class="empty"><i class="fas fa-users"></i><p>Aucun utilisateur</p></td></tr>';
+    return;
+  }
+  tb.innerHTML = users.map(u => {
+    const sel     = _selectedUsers.has(u.id);
+    const initCol = u.role === 'admin' ? 'var(--purple)' : u.role === 'power_user' ? 'var(--accent)' : 'var(--accent2)';
+    const queryBadge = u._query_count != null
+      ? `<span style="font-family:var(--font-mono);font-size:11px">${u._query_count}</span>`
+      : '<span style="color:var(--text-3);font-size:11px">—</span>';
+    const uid = u.id;
+    const uname = (u.username||'').replace(/'/g, "\\'");
+    return `<tr style="animation:fadeIn .2s ease${sel?' background:var(--accent-glow)':''}" data-uid="${uid}">
+      <td style="padding:10px 8px 10px 14px"><input type="checkbox" class="user-cb" data-id="${uid}" ${sel?'checked':''} onchange="toggleSelectUser(${uid},this.checked)"></td>
       <td><div style="display:flex;align-items:center;gap:8px">
-        <div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--purple),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#040e1a;flex-shrink:0">${(u.username||'?')[0].toUpperCase()}</div>
+        <div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,${initCol},var(--accent2));display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#040e1a;flex-shrink:0">${(u.username||'?')[0].toUpperCase()}</div>
         <span style="font-weight:500;color:var(--text-0)">${u.username||'—'}</span>
       </div></td>
       <td style="font-family:var(--font-mono);font-size:12px">${u.email}</td>
       <td>${roleBadge(u.role)}</td>
-      <td><span class="badge ${u.is_active?'badge-ok':'badge-warn'}">${u.is_active?'Actif':'Inactif'}</span></td>
-      <td style="font-size:11.5px;color:var(--text-3)">${u.last_login?ago(u.last_login):'Jamais'}</td>
       <td>
-        <div style="display:flex;gap:4px">
-          <button class="btn btn-ghost btn-sm" onclick="openEditUser(${JSON.stringify(u).replace(/"/g,'&quot;')})" title="Modifier"><i class="fas fa-edit"></i></button>
-          <button class="btn btn-ghost btn-sm" onclick="openPermsModal(${u.id},'${u.username}')" title="Permissions"><i class="fas fa-key"></i></button>
-          <button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id},'${u.username}')" title="Supprimer"><i class="fas fa-trash"></i></button>
-        </div>
+        <button class="btn btn-sm ${u.is_active?'badge-ok':'badge-warn'}" onclick="toggleStatus(${uid})"
+          style="border:none;cursor:pointer;padding:3px 8px;font-size:11px;border-radius:20px;background:${u.is_active?'rgba(52,211,153,.15)':'rgba(248,113,113,.15)'};color:${u.is_active?'var(--green)':'var(--red)'}">
+          ${u.is_active?'● Actif':'● Inactif'}
+        </button>
       </td>
-    </tr>`).join('');
+      <td>${queryBadge}</td>
+      <td style="font-size:11.5px;color:var(--text-3)">${u.last_login?ago(u.last_login):'Jamais'}</td>
+      <td><div style="display:flex;gap:3px;flex-wrap:nowrap">
+        <button class="btn btn-ghost btn-sm" onclick='openEditUser(${JSON.stringify(u).replace(/'/g,"&#39;")})' title="Modifier"><i class="fas fa-edit"></i></button>
+        <button class="btn btn-ghost btn-sm" onclick="openPermsModal(${uid},'${uname}')" title="Permissions"><i class="fas fa-key"></i></button>
+        <button class="btn btn-ghost btn-sm" onclick="resetPassword(${uid},'${uname}')" title="Reset mot de passe"><i class="fas fa-lock-open"></i></button>
+        <button class="btn btn-danger btn-sm" onclick="deleteUser(${uid},'${uname}')" title="Supprimer"><i class="fas fa-trash"></i></button>
+      </div></td>
+    </tr>`;
+  }).join('');
+  // Charger les stats en arrière-plan (non bloquant)
+  users.forEach(u => { if(u._query_count == null) _loadUserStats(u.id); });
 }
-function filterUsers(){
-  const q=document.getElementById('user-search').value.toLowerCase();
-  renderUsers(_users.filter(u=>(u.username||'').toLowerCase().includes(q)||(u.email||'').toLowerCase().includes(q)));
+
+// ── Stats par user (lazy) ────────────────────────────────────
+const _statsCache = {};
+async function _loadUserStats(uid){
+  if(_statsCache[uid]) return;
+  try{
+    const r = await OpAuth.apiFetch(`/admin/users/${uid}/stats`);
+    if(!r||!r.ok) return;
+    const s = await r.json();
+    _statsCache[uid] = s;
+    // Mettre à jour la ligne dans le DOM
+    const row = document.querySelector(`tr[data-uid="${uid}"]`);
+    if(row){
+      const cells = row.querySelectorAll('td');
+      if(cells[5]){
+        cells[5].innerHTML = `<span style="font-family:var(--font-mono);font-size:11px" title="${s.queries_7d} ce mois">${s.query_count}</span>`;
+      }
+    }
+  }catch{}
 }
+
+// ── Sélection / Bulk ─────────────────────────────────────────
+function toggleSelectUser(id, checked){
+  if(checked) _selectedUsers.add(id); else _selectedUsers.delete(id);
+  _updateBulkBar();
+  // Highlight ligne
+  const row = document.querySelector(`tr[data-uid="${id}"]`);
+  if(row) row.style.background = checked ? 'var(--accent-glow)' : '';
+}
+function toggleSelectAll(cb){
+  document.querySelectorAll('.user-cb').forEach(c => {
+    c.checked = cb.checked;
+    const id = parseInt(c.dataset.id);
+    if(cb.checked) _selectedUsers.add(id); else _selectedUsers.delete(id);
+  });
+  document.querySelectorAll('tr[data-uid]').forEach(r => r.style.background = cb.checked ? 'var(--accent-glow)' : '');
+  _updateBulkBar();
+}
+function clearSelection(){
+  _selectedUsers.clear();
+  document.querySelectorAll('.user-cb').forEach(c => c.checked = false);
+  const sa = document.getElementById('select-all'); if(sa) sa.checked = false;
+  document.querySelectorAll('tr[data-uid]').forEach(r => r.style.background = '');
+  _updateBulkBar();
+}
+function _updateBulkBar(){
+  const bar = document.getElementById('bulk-bar');
+  const cnt = document.getElementById('bulk-count');
+  if(!bar) return;
+  if(_selectedUsers.size > 0){
+    bar.style.display = 'flex';
+    if(cnt) cnt.textContent = `${_selectedUsers.size} utilisateur${_selectedUsers.size>1?'s':''} sélectionné${_selectedUsers.size>1?'s':''}`;
+  } else {
+    bar.style.display = 'none';
+  }
+}
+async function bulkAction(action){
+  const ids = Array.from(_selectedUsers);
+  if(!ids.length) return;
+  const labels = {activate:'activer',deactivate:'désactiver',delete:'supprimer'};
+  if(!confirm(`${labels[action]} ${ids.length} utilisateur${ids.length>1?'s':''} ?`)) return;
+  let ok = 0, err = 0;
+  for(const id of ids){
+    try{
+      let r;
+      if(action === 'delete'){
+        r = await OpAuth.apiFetch(`/admin/users/${id}`, {method:'DELETE'});
+      } else {
+        // toggle-status : appeler jusqu'à avoir le bon état
+        const user = _users.find(u => u.id === id);
+        const wantActive = action === 'activate';
+        if(user && user.is_active === wantActive){ ok++; continue; }
+        r = await OpAuth.apiFetch(`/admin/users/${id}/toggle-status`, {method:'POST'});
+      }
+      if(r && (r.ok || r.status === 204)) ok++; else err++;
+    }catch{ err++; }
+  }
+  clearSelection();
+  showToast(`${ok} réussi${ok>1?'s':''}`+(err?` · ${err} erreur${err>1?'s':''}`:``), err?'err':'ok');
+  loadUsers();
+}
+
+// ── Toggle statut individuel ─────────────────────────────────
+async function toggleStatus(id){
+  try{
+    const r = await OpAuth.apiFetch(`/admin/users/${id}/toggle-status`, {method:'POST'});
+    if(!r||!r.ok){ const e=await r?.json(); showToast(e?.detail||'Erreur','err'); return; }
+    const d = await r.json();
+    showToast(d.is_active ? 'Compte activé' : 'Compte désactivé');
+    loadUsers();
+  }catch{ showToast('Erreur réseau','err'); }
+}
+
+// ── Reset mot de passe ───────────────────────────────────────
+async function resetPassword(id, name){
+  if(!confirm(`Générer un lien de reset pour ${name} ?`)) return;
+  try{
+    const r = await OpAuth.apiFetch(`/admin/users/${id}/reset-password`, {method:'POST'});
+    if(!r||!r.ok){ const e=await r?.json(); showToast(e?.detail||'Erreur','err'); return; }
+    const d = await r.json();
+    // Afficher le modal avec le lien
+    _showResetModal(d);
+  }catch{ showToast('Erreur réseau','err'); }
+}
+function _showResetModal(d){
+  // Créer un modal temporaire pour afficher + copier le lien
+  const existing = document.getElementById('resetLinkModal');
+  if(existing) existing.remove();
+  const m = document.createElement('div');
+  m.id = 'resetLinkModal';
+  m.className = 'modal-overlay';
+  m.innerHTML = `
+    <div class="modal" style="max-width:500px" onclick="event.stopPropagation()">
+      <button class="modal-close" onclick="document.getElementById('resetLinkModal').remove()"><i class="fas fa-times"></i></button>
+      <div class="modal-title"><i class="fas fa-lock-open"></i>Lien de reset généré</div>
+      <div style="font-size:12px;color:var(--text-2);margin-bottom:10px">Pour : <strong>${d.user_email}</strong> · Expire dans : <strong>${d.expires_in}</strong></div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input class="form-input" id="reset-url-input" value="${d.reset_url}" readonly style="font-family:var(--font-mono);font-size:11px;flex:1">
+        <button class="btn btn-primary btn-sm" onclick="navigator.clipboard.writeText('${d.reset_url}').then(()=>showToast('Lien copié'))">
+          <i class="fas fa-copy"></i> Copier
+        </button>
+      </div>
+      <div style="font-size:11px;color:var(--text-3);margin-top:8px">Transmettez ce lien à l'utilisateur de façon sécurisée.</div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="document.getElementById('resetLinkModal').remove()">Fermer</button>
+      </div>
+    </div>`;
+  m.onclick = e => { if(e.target===m) m.remove(); };
+  document.body.appendChild(m);
+}
+
+// ── Créer / éditer ───────────────────────────────────────────
 function openCreateUser(){
-  document.getElementById('modal-title').textContent='Créer un utilisateur';
-  document.getElementById('modal-user-id').value='';
-  document.getElementById('f-username').value='';
-  document.getElementById('f-email').value='';
-  document.getElementById('f-password').value='';
-  document.getElementById('f-role').value='user';
-  document.getElementById('f-active').checked=true;
+  document.getElementById('modal-title').textContent = 'Créer un utilisateur';
+  document.getElementById('modal-user-id').value = '';
+  document.getElementById('f-username').value = '';
+  document.getElementById('f-email').value = '';
+  document.getElementById('f-password').value = '';
+  document.getElementById('f-role').value = 'user';
+  document.getElementById('f-active').checked = true;
   document.getElementById('userModal').classList.remove('hidden');
 }
 function openEditUser(u){
-  document.getElementById('modal-title').textContent='Modifier l\'utilisateur';
-  document.getElementById('modal-user-id').value=u.id;
-  document.getElementById('f-username').value=u.username||'';
-  document.getElementById('f-email').value=u.email||'';
-  document.getElementById('f-password').value='';
-  document.getElementById('f-role').value=u.role||'user';
-  document.getElementById('f-active').checked=!!u.is_active;
+  document.getElementById('modal-title').textContent = 'Modifier l\'utilisateur';
+  document.getElementById('modal-user-id').value = u.id;
+  document.getElementById('f-username').value = u.username||'';
+  document.getElementById('f-email').value = u.email||'';
+  document.getElementById('f-password').value = '';
+  document.getElementById('f-role').value = u.role||'user';
+  document.getElementById('f-active').checked = !!u.is_active;
   document.getElementById('userModal').classList.remove('hidden');
 }
-function closeModal(){document.getElementById('userModal').classList.add('hidden');}
+function closeModal(){ document.getElementById('userModal').classList.add('hidden'); }
 async function saveUser(){
-  const id=document.getElementById('modal-user-id').value;
-  const body={username:document.getElementById('f-username').value,email:document.getElementById('f-email').value,role:document.getElementById('f-role').value,is_active:document.getElementById('f-active').checked};
-  const pwd=document.getElementById('f-password').value;
-  if(pwd)body.password=pwd;
+  const id  = document.getElementById('modal-user-id').value;
+  const pwd = document.getElementById('f-password').value;
+  const body = {
+    username:  document.getElementById('f-username').value.trim(),
+    email:     document.getElementById('f-email').value.trim(),
+    role:      document.getElementById('f-role').value,
+    is_active: document.getElementById('f-active').checked,
+  };
+  if(pwd) body.password = pwd;
+  if(!body.username || !body.email){ showToast('Nom et email requis','err'); return; }
+  if(!id && !pwd){ showToast('Mot de passe requis pour la création','err'); return; }
   try{
-    let r;
-    if(id){
-      r=await OpAuth.apiFetch(`/admin/users/${id}`,{method:'PUT',body:JSON.stringify(body)});
-    }else{
-      if(!body.email||!pwd){showToast('Email et mot de passe requis','err');return;}
-      r=await OpAuth.apiFetch('/admin/users',{method:'POST',body:JSON.stringify({...body,password:pwd})});
-    }
-    if(!r||!r.ok){const e=await r?.json();showToast(e?.detail||'Erreur','err');return;}
-    closeModal();showToast(id?'Utilisateur modifié':'Utilisateur créé');loadUsers();
-  }catch{showToast('Erreur réseau','err');}
+    const r = id
+      ? await OpAuth.apiFetch(`/admin/users/${id}`, {method:'PUT',  body:JSON.stringify(body)})
+      : await OpAuth.apiFetch('/admin/users',        {method:'POST', body:JSON.stringify({...body,password:pwd})});
+    if(!r||!r.ok){ const e=await r?.json(); showToast(e?.detail||'Erreur','err'); return; }
+    closeModal();
+    showToast(id ? 'Utilisateur modifié' : 'Utilisateur créé');
+    loadUsers();
+  }catch{ showToast('Erreur réseau','err'); }
 }
-async function deleteUser(id,name){
-  if(!confirm(`Supprimer ${name} ?`))return;
+async function deleteUser(id, name){
+  if(!confirm(`Supprimer ${name} ? Action irréversible.`)) return;
   try{
-    const r=await OpAuth.apiFetch(`/admin/users/${id}`,{method:'DELETE'});
-    if(!r||!r.ok){const e=await r?.json();showToast(e?.detail||'Erreur','err');return;}
-    showToast('Utilisateur supprimé');loadUsers();
-  }catch{showToast('Erreur réseau','err');}
+    const r = await OpAuth.apiFetch(`/admin/users/${id}`, {method:'DELETE'});
+    if(!r||(r.status!==204&&!r.ok)){ const e=await r?.json().catch(()=>{}); showToast(e?.detail||'Erreur','err'); return; }
+    showToast('Utilisateur supprimé');
+    loadUsers();
+  }catch{ showToast('Erreur réseau','err'); }
 }
 
 // ═══ PERMISSIONS ═══
@@ -1006,58 +2482,301 @@ async function saveConfigBatch(updates,msg){
 }
 
 // ═══ AUDIT ═══
-let _auditPage=1,_auditFilter='',_auditTotal=0;
+let _auditPage=1, _auditFilter='', _auditTotal=0, _auditSearch='';
 const AUDIT_PER_PAGE=20;
+
+// ── Stats ──────────────────────────────────────────────────
 async function loadAuditStats(){
   try{
-    const r=await OpAuth.apiFetch('/admin/audit/stats');
-    if(!r||!r.ok)return;
-    const d=await r.json();
-    document.getElementById('audit-today').textContent=d.events_today??'—';
-    document.getElementById('audit-fail').textContent=d.failures_today??'—';
-    document.getElementById('audit-logins').textContent=d.logins_today??'—';
+    const r = await OpAuth.apiFetch('/admin/audit/stats');
+    if(!r||!r.ok) return;
+    const d = await r.json();
+    document.getElementById('audit-today').textContent   = d.events_today   ?? '—';
+    document.getElementById('audit-fail').textContent    = d.failures_today ?? '—';
+    document.getElementById('audit-logins').textContent  = d.logins_today   ?? '—';
+    document.getElementById('audit-queries').textContent = d.queries_today  ?? '—';
   }catch{}
 }
-async function loadAudit(){
-  const offset=(_auditPage-1)*AUDIT_PER_PAGE;
-  let url=`/admin/audit/logs?limit=${AUDIT_PER_PAGE}&offset=${offset}`;
-  if(_auditFilter)url+=`&action=${_auditFilter}`;
+
+// ── Sparkline 24h ────────────────────────────────────────────
+async function loadAuditSparkline(){
   try{
-    const r=await OpAuth.apiFetch(url);
-    if(!r||!r.ok)throw 0;
-    const d=await r.json();
-    _auditTotal=d.total||0;
-    renderAudit(d.logs||[]);
-    document.getElementById('audit-count').textContent=`${_auditTotal} événements total`;
-    document.getElementById('audit-page').textContent=_auditPage;
-  }catch{document.getElementById('audit-tbody').innerHTML='<tr><td colspan="6" class="empty"><p>Erreur de chargement</p></td></tr>';}
+    // Charge les logs des 24h et groupe par heure
+    const r = await OpAuth.apiFetch('/admin/audit/logs?limit=200&offset=0');
+    if(!r||!r.ok) return;
+    const d = await r.json();
+    const logs = d.logs || [];
+    // Grouper par heure
+    const now = new Date();
+    const hours = Array(24).fill(0);
+    logs.forEach(function(l){
+      if(!l.created_at) return;
+      const diff = Math.floor((now - new Date(l.created_at)) / 3600000);
+      if(diff >= 0 && diff < 24) hours[23 - diff]++;
+    });
+    _drawSparkline(hours);
+  }catch{}
 }
+function _drawSparkline(hours){
+  const svg = document.getElementById('audit-sparkline');
+  if(!svg) return;
+  const max = Math.max(...hours, 1);
+  const w = 600, h = 36, pad = 2;
+  const bw = Math.floor((w - pad * 2) / 24) - 1;
+  let bars = '';
+  hours.forEach(function(v, i){
+    const bh = Math.max(2, Math.floor((v / max) * (h - 4)));
+    const x  = pad + i * (bw + 1);
+    const y  = h - bh;
+    const col = v === 0 ? 'var(--border)' : 'var(--accent)';
+    bars += '<rect x="'+x+'" y="'+y+'" width="'+bw+'" height="'+bh+'" fill="'+col+'" rx="1" opacity="0.7"/>';
+  });
+  svg.innerHTML = bars;
+}
+
+// ── Anomalies ─────────────────────────────────────────────────
+async function loadAuditAnomalies(){
+  const el = document.getElementById('audit-anomalies');
+  if(!el) return;
+  try{
+    const r = await OpAuth.apiFetch('/admin/audit/anomalies');
+    if(!r||!r.ok){ el.innerHTML=''; return; }
+    const d = await r.json();
+    const anomalies = d.anomalies || [];
+    if(!anomalies.length){ el.innerHTML=''; return; }
+    el.innerHTML = '<div style="padding:12px 14px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:var(--r)">'+
+      '<div style="font-size:11.5px;font-weight:600;color:var(--red);margin-bottom:8px">'+
+      '<i class="fas fa-exclamation-triangle"></i> '+anomalies.length+' anomalie'+(anomalies.length>1?'s':'')+' détectée'+(anomalies.length>1?'s':'')+'</div>'+
+      anomalies.map(function(a){
+        var col = a.severity==='high' ? 'var(--red)' : 'var(--yellow)';
+        return '<div style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text-1);margin-bottom:4px">'+
+          '<i class="fas fa-circle" style="color:'+col+';font-size:7px;flex-shrink:0"></i>'+a.message+'</div>';
+      }).join('')+'</div>';
+  }catch{ el.innerHTML=''; }
+}
+
+// ── Chargement logs ───────────────────────────────────────────
+async function loadAudit(){
+  const offset = (_auditPage - 1) * AUDIT_PER_PAGE;
+  let url = `/admin/audit/logs?limit=${AUDIT_PER_PAGE}&offset=${offset}`;
+  if(_auditFilter) url += `&action=${_auditFilter}`;
+  if(_auditSearch) url += `&user_email=${encodeURIComponent(_auditSearch)}`;
+  const tb = document.getElementById('audit-tbody');
+  try{
+    const r = await OpAuth.apiFetch(url);
+    if(!r||!r.ok) throw 0;
+    const d = await r.json();
+    _auditTotal = d.total || 0;
+    renderAudit(d.logs || []);
+    document.getElementById('audit-count').textContent = `${_auditTotal} événements total`;
+    document.getElementById('audit-page').textContent  = _auditPage;
+    // Charger sparkline en parallèle
+    loadAuditSparkline();
+  }catch{
+    if(tb) tb.innerHTML='<tr><td colspan="6" class="empty"><i class="fas fa-exclamation-triangle" style="color:var(--red)"></i><p>Erreur de chargement</p></td></tr>';
+  }
+}
+
 function renderAudit(logs){
-  const tb=document.getElementById('audit-tbody');
-  if(!logs.length){tb.innerHTML='<tr><td colspan="6" class="empty"><i class="fas fa-shield-alt"></i><p>Aucun événement</p></td></tr>';return;}
-  const res={success:'badge-ok',failure:'badge-fail',error:'badge-warn'};
-  tb.innerHTML=logs.map(l=>`
-    <tr style="animation:fadeIn .2s ease">
-      <td style="font-size:11.5px;font-family:var(--font-mono);white-space:nowrap">${fmt(l.created_at)}</td>
-      <td style="font-size:12px">${l.user_email||'—'}</td>
-      <td><span style="font-family:var(--font-mono);font-size:11.5px;color:var(--accent)">${l.action||'—'}</span></td>
-      <td style="font-size:11.5px;color:var(--text-3)">${l.resource||'—'}</td>
-      <td style="font-family:var(--font-mono);font-size:11px;color:var(--text-3)">${l.ip_address||'—'}</td>
-      <td><span class="badge ${res[l.result]||'badge-warn'}">${l.result||'—'}</span></td>
-    </tr>`).join('');
+  const tb = document.getElementById('audit-tbody');
+  if(!logs.length){
+    tb.innerHTML='<tr><td colspan="6" class="empty"><i class="fas fa-shield-alt"></i><p>Aucun événement</p></td></tr>';
+    return;
+  }
+  const res = {success:'badge-ok', failure:'badge-fail', error:'badge-warn'};
+  const actionColors = {
+    LOGIN:'var(--green)', LOGOUT:'var(--text-2)', QUERY:'var(--accent)',
+    LOGIN_FAILED:'var(--red)', CONFIG_CHANGE:'var(--yellow)', DELETE_USER:'var(--red)',
+  };
+  tb.innerHTML = logs.map(function(l){
+    var acol = actionColors[l.action] || 'var(--text-1)';
+    return '<tr style="animation:fadeIn .2s ease">'+
+      '<td style="font-size:11.5px;font-family:var(--font-mono);white-space:nowrap">'+fmt(l.created_at)+'</td>'+
+      '<td style="font-size:12px">'+( l.user_email||'—')+'</td>'+
+      '<td><span style="font-family:var(--font-mono);font-size:11px;color:'+acol+';">'+( l.action||'—')+'</span></td>'+
+      '<td style="font-size:11.5px;color:var(--text-3);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(l.resource||'')+'">'+( l.resource||'—')+'</td>'+
+      '<td style="font-family:var(--font-mono);font-size:11px;color:var(--text-3)">'+( l.ip_address||'—')+'</td>'+
+      '<td><span class="badge '+(res[l.result]||'badge-warn')+'">'+( l.result||'—')+'</span></td>'+
+    '</tr>';
+  }).join('');
 }
+
 function setAuditFilter(f){
-  _auditFilter=f;_auditPage=1;
-  document.querySelectorAll('.audit-filter-item').forEach(el=>el.classList.toggle('active',el.textContent.trim()===(f||'Tout')));
-  loadAudit();
-}
-function auditPage(dir){
-  const max=Math.ceil(_auditTotal/AUDIT_PER_PAGE)||1;
-  _auditPage=Math.max(1,Math.min(_auditPage+dir,max));
+  _auditFilter = f; _auditPage = 1;
+  document.querySelectorAll('.audit-filter-item').forEach(function(el){
+    el.classList.toggle('active', el.textContent.trim() === (f||'Tout'));
+  });
   loadAudit();
 }
 
+function onAuditSearch(){
+  _auditSearch = document.getElementById('audit-search')?.value.trim() || '';
+  _auditPage   = 1;
+  loadAudit();
+}
+
+function auditPage(dir){
+  const max = Math.ceil(_auditTotal / AUDIT_PER_PAGE) || 1;
+  _auditPage = Math.max(1, Math.min(_auditPage + dir, max));
+  loadAudit();
+}
+
+// ── Export CSV ────────────────────────────────────────────────
+async function exportAuditCSV(){
+  showToast('Export CSV en cours…');
+  try{
+    // Charger tous les logs (max 1000)
+    let url = '/admin/audit/logs?limit=1000&offset=0';
+    if(_auditFilter) url += `&action=${_auditFilter}`;
+    if(_auditSearch) url += `&user_email=${encodeURIComponent(_auditSearch)}`;
+    const r = await OpAuth.apiFetch(url);
+    if(!r||!r.ok) throw 0;
+    const d  = await r.json();
+    const logs = d.logs || [];
+    if(!logs.length){ showToast('Aucun log à exporter','err'); return; }
+    // Construire le CSV
+    const header = ['Date','Utilisateur','Action','Ressource','IP','Résultat'];
+    const rows   = logs.map(function(l){
+      return [
+        l.created_at || '',
+        l.user_email || '',
+        l.action     || '',
+        (l.resource  || '').replace(/,/g,''),
+        l.ip_address || '',
+        l.result     || '',
+      ].join(',');
+    });
+    const csv  = [header.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+    const url2 = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url2;
+    a.style.display = 'none';
+    a.download = 'audit_logs_'+new Date().toISOString().slice(0,10)+'.csv';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url2); }, 100);
+    showToast(logs.length+' événements exportés');
+  }catch{ showToast('Erreur export','err'); }
+}
+
+// ═══ SECRETS & MÉTADONNÉES ═══
+
+// ── Secrets / Credentials sécurité ─────────────────────────
+async function loadSecretsStatus(){
+  var el = document.getElementById('secrets-list');
+  if(!el) return;
+  try{
+    var r = await OpAuth.apiFetch('/admin/secrets/status');
+    if(!r||!r.ok) throw 0;
+    var d = await r.json();
+    var secrets = d.secrets||[];
+    if(!secrets.length){ el.innerHTML='<div class="empty"><p>Aucun credential stocké</p></div>'; return; }
+    // Badge résumé
+    var summary = '<div style="display:flex;gap:12px;margin-bottom:10px;font-size:12px">'+
+      '<span style="color:var(--green)"><i class="fas fa-lock"></i> '+d.encrypted+' chiffré(s)</span>'+
+      (d.not_encrypted>0?'<span style="color:var(--red)"><i class="fas fa-lock-open"></i> '+d.not_encrypted+' en clair</span>':'')+
+    '</div>';
+    el.innerHTML = summary+'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px">'+ 
+      secrets.map(function(s){
+        var col = s.encrypted ? 'var(--green)' : 'var(--red)';
+        var icon = s.encrypted ? 'fa-lock' : 'fa-lock-open';
+        var label = s.encrypted ? 'AES-256-GCM' : 'En clair !';
+        var sid = s.source_id.replace(/'/g, "\\'");
+        return '<div style="padding:10px 12px;background:var(--bg-2);border:1px solid '+(s.encrypted?'var(--border)':'rgba(248,113,113,.3)')+';border-radius:var(--r);display:flex;align-items:center;gap:8px">'+
+          _connTypeIcon(s.connector_type)+
+          '<div style="flex:1">'+
+            '<div style="font-size:12px;font-weight:500">'+s.source_name+'</div>'+
+            '<div style="font-size:11px;color:var(--text-3)">'+s.connector_type+'</div>'+
+          '</div>'+
+          '<span style="font-size:11px;color:'+col+'"><i class="fas '+icon+'"></i> '+label+'</span>'+
+          (!s.encrypted ? '<button class="btn btn-primary btn-sm" style="margin-left:6px;padding:3px 8px;font-size:10px" onclick="rotateOneSecret(\''+sid+'\',\''+s.source_name+'\')" title="Chiffrer"><i class="fas fa-lock"></i></button>' : '')+
+        '</div>';
+      }).join('')+'</div>';
+  }catch{ el.innerHTML='<div class="empty"><p>Erreur chargement</p></div>'; }
+}
+
+async function rotateOneSecret(sourceId, sourceName){
+  if(!confirm('Chiffrer les credentials de "'+sourceName+'" avec AES-256-GCM ?')) return;
+  try{
+    var r = await OpAuth.apiFetch('/admin/secrets/rotate/'+sourceId, {method:'POST'});
+    if(!r||!r.ok){ var e=await r?.json(); showToast(e?.detail||'Erreur','err'); return; }
+    var d = await r.json();
+    showToast('"'+sourceName+'" — '+d.message);
+    loadSecretsStatus();
+  }catch{ showToast('Erreur réseau','err'); }
+}
+async function rotateAllSecrets(){
+  if(!confirm('Chiffrer tous les credentials en clair avec AES-256-GCM ? Cette opération est irréversible.')) return;
+  showToast('Chiffrement en cours…');
+  try{
+    var r = await OpAuth.apiFetch('/admin/secrets/rotate', {method:'POST'});
+    if(!r||!r.ok){ var e=await r?.json(); showToast(e?.detail||'Erreur','err'); return; }
+    var d = await r.json();
+    showToast(d.message||'Rotation terminée');
+    loadSecretsStatus(); // Rafraîchir l'affichage
+  }catch{ showToast('Erreur réseau','err'); }
+}
+
+// ── Synonymes métier ─────────────────────────────────────────
+var _synonyms = [];
+
+function loadSynonyms(){
+  var saved = localStorage.getItem('op_synonyms');
+  if(saved){
+    try{ _synonyms = JSON.parse(saved); }catch{ _synonyms = []; }
+  }
+  _renderSynonyms();
+}
+
+function _renderSynonyms(){
+  var el = document.getElementById('synonyms-list');
+  if(!el) return;
+  if(!_synonyms.length){
+    el.innerHTML = '<div class="empty" style="padding:12px"><i class="fas fa-tags"></i><p style="font-size:12px">Aucun synonyme défini</p></div>';
+    return;
+  }
+  el.innerHTML = '<table class="tbl"><thead><tr><th>Terme technique</th><th>Synonyme métier</th><th>PII</th><th></th></tr></thead><tbody>'+
+    _synonyms.map(function(s, i){
+      return '<tr>'+
+        '<td style="font-family:var(--font-mono);font-size:12px">'+s.term+'</td>'+
+        '<td style="font-size:12px">'+s.label+'</td>'+
+        '<td><input type="checkbox" '+(s.pii?'checked':'')+' onchange="togglePII('+i+',this.checked)"></td>'+
+        '<td><button class="btn btn-danger btn-sm" onclick="removeSynonym('+i+')"><i class="fas fa-times"></i></button></td>'+
+      '</tr>';
+    }).join('')+
+  '</tbody></table>';
+}
+
+function addSynonym(){
+  var term  = document.getElementById('syn-term')?.value.trim();
+  var label = document.getElementById('syn-label')?.value.trim();
+  if(!term || !label){ showToast('Terme et synonyme requis','err'); return; }
+  if(_synonyms.find(function(s){ return s.term===term; })){
+    showToast('Ce terme existe déjà','err'); return;
+  }
+  _synonyms.push({term:term, label:label, pii:false});
+  localStorage.setItem('op_synonyms', JSON.stringify(_synonyms));
+  document.getElementById('syn-term').value  = '';
+  document.getElementById('syn-label').value = '';
+  _renderSynonyms();
+  showToast('Synonyme ajouté');
+}
+
+function removeSynonym(i){
+  _synonyms.splice(i, 1);
+  localStorage.setItem('op_synonyms', JSON.stringify(_synonyms));
+  _renderSynonyms();
+}
+
+function togglePII(i, checked){
+  _synonyms[i].pii = checked;
+  localStorage.setItem('op_synonyms', JSON.stringify(_synonyms));
+  showToast(checked ? 'Colonne marquée PII 🔒' : 'PII retiré');
+}
+
 // ═══ MÉTADONNÉES ═══
+
 async function loadRelations(){
   try{
     // Stats from sources

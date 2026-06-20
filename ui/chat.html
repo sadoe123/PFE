@@ -2094,16 +2094,18 @@ function applyAuth(){
   // Sync rail avatar
   const railAv=document.getElementById('railUserAv');
   if(railAv){railAv.textContent=AUTH.username.charAt(0).toUpperCase();railAv.className='rail-user '+(AUTH.role==='admin'?'adm':'usr');}
-  // CDC visible admin seulement
+  const isAdmin     = AUTH.role === 'admin';
+  const isPowerUser = AUTH.role === 'power_user';
+  // CDC visible admin + power_user
   const cdcItem=document.getElementById('cdcMenuItem');
   const cdcDiv=document.getElementById('cdcMenuDivider');
-  if(cdcItem)cdcItem.style.display=AUTH.role==='admin'?'flex':'none';
-  if(cdcDiv)cdcDiv.style.display=AUTH.role==='admin'?'block':'none';
-  // Bouton Admin Console — visible admin seulement (sidebar + userMenu)
+  if(cdcItem)cdcItem.style.display=(isAdmin||isPowerUser)?'flex':'none';
+  if(cdcDiv)cdcDiv.style.display=(isAdmin||isPowerUser)?'block':'none';
+  // Bouton Admin Console — visible admin seulement
   const sbAdminBtn=document.getElementById('sbAdminBtn');
-  if(sbAdminBtn)sbAdminBtn.style.display=AUTH.role==='admin'?'flex':'none';
+  if(sbAdminBtn)sbAdminBtn.style.display=isAdmin?'flex':'none';
   const adminMenuBtn=document.getElementById('adminConsoleMenuItem');
-  if(adminMenuBtn)adminMenuBtn.style.display=AUTH.role==='admin'?'flex':'none';
+  if(adminMenuBtn)adminMenuBtn.style.display=isAdmin?'flex':'none';
 }
 
 // ════ STATE ════
@@ -2236,7 +2238,12 @@ async function init(){
 async function loadSources(){
   try{
     const d=await api('/sources');
-    S.sources=d.sources||d||[];
+    let allSources=d.sources||d||[];
+    // Filtrer selon les permissions du user (non-admin avec sources restreintes)
+    if(AUTH && AUTH.role !== 'admin' && AUTH.allowed_sources && AUTH.allowed_sources.length > 0){
+      allSources = allSources.filter(s => AUTH.allowed_sources.includes(s.id));
+    }
+    S.sources=allSources;
     const sel=document.getElementById('srcSel');
     const inpSel=document.getElementById('inpSrcSel');
     const opts='<option value="">— Sélectionner une source —</option>'+S.sources.map(s=>`<option value="${s.id}">${s.name} (${s.connector_type})</option>`).join('');
@@ -7600,13 +7607,58 @@ function initForecastNotifications(sourceId){
     _fcNotifES.onmessage = function(e){
       try{
         const notif = JSON.parse(e.data);
+        // Forecast
         if(notif.type === 'forecast_deviation') showForecastNotif(notif);
+        // CDC événements
+        if(notif.event === 'BREAKING_CHANGE'){
+          _showCDCAlert('⚠️ Breaking change détecté', notif.count+' modification(s) de schéma', 'high');
+          _incrementCDCBadge();
+        }
+        if(notif.event === 'WAL_DDL_CHANGE'){
+          _showCDCAlert('🔄 Schéma modifié', notif.count+' changement(s) DDL détecté(s)', 'medium');
+          _incrementCDCBadge();
+        }
+        if(notif.event === 'FILE_CHANGED'){
+          _showCDCAlert('📁 Fichier modifié', 'Resynchronisation recommandée', 'medium');
+        }
+        if(notif.event === 'MSSQL_DDL_CHANGE'){
+          _showCDCAlert('🪟 DDL SQL Server', notif.count+' événement(s) DDL', 'medium');
+          _incrementCDCBadge();
+        }
+        if(notif.event === 'RELATIONS_NEED_REVIEW'){
+          _showCDCAlert('🔗 Relations à revalider', notif.relations_count+' relation(s) affectée(s)', 'high');
+        }
       }catch(err){}
     };
     _fcNotifES.onerror = function(){
       // Reconnexion automatique gérée par EventSource — pas de log intrusif
     };
   }catch(err){}
+}
+
+// ── Alertes CDC dans le toast + badge ──────────────────────────
+function _showCDCAlert(title, message, severity){
+  const el = document.getElementById('fc-notif-toast');
+  if(!el) return;
+  const col  = severity==='high' ? '#dc3232' : '#e09c20';
+  const sev  = severity==='high' ? 'CRITIQUE' : 'ALERTE';
+  el.style.borderLeftColor = col;
+  el.innerHTML = `<span class="fc-notif-close" onclick="hideForecastNotif()">×</span>`
+    + `<span class="fc-notif-sev-${severity}">${sev}</span> `
+    + `<strong>${title}</strong> — <span style="font-size:11px">${message}</span>`;
+  el.classList.add('on');
+  clearTimeout(_fcNotifTimer);
+  _fcNotifTimer = setTimeout(hideForecastNotif, 8000);
+}
+
+function _incrementCDCBadge(){
+  // Incrémenter le badge sur le bouton CDC s'il existe
+  const btn = document.getElementById('cdcBadge');
+  if(btn){
+    const cur = parseInt(btn.textContent)||0;
+    btn.textContent = cur+1;
+    btn.style.display='flex';
+  }
 }
 
 let _fcNotifTimer = null;
@@ -8488,20 +8540,43 @@ function closeOnOutside(e){
   const m=document.getElementById('userMenu');
   if(p&&m&&!p.contains(e.target)&&!m.contains(e.target))closeUserMenu();
 }
-// ════ BOOT — Sans authentification ════
+// ════ BOOT — Lecture du rôle depuis JWT ════
 window.addEventListener('load', () => {
   if (localStorage.getItem('op_theme') === 'light') document.documentElement.classList.add('light');
-  // Auth désactivée — accès direct
-  AUTH = {
-    username: 'Admin',
-    role:     'admin',
-    label:    'Administrateur',
-    token:    null,
-    allowed_sources: [],
-    user_id:  null,
-  };
+  // Lire le vrai rôle depuis le JWT stocké par OpAuth
+  try {
+    const token = localStorage.getItem('op_token') || sessionStorage.getItem('op_token');
+    if (token) {
+      // Décoder le payload JWT (base64url)
+      const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+      const roleMap = { admin: 'Administrateur', power_user: 'Power User', user: 'Utilisateur' };
+      AUTH = {
+        username:        payload.username || payload.sub || 'Utilisateur',
+        role:            payload.role     || 'user',
+        label:           roleMap[payload.role] || 'Utilisateur',
+        token:           token,
+        allowed_sources: payload.allowed_sources || [],
+        user_id:         payload.user_id || null,
+        email:           payload.email   || '',
+      };
+    } else {
+      // Pas de token — rediriger vers login
+      window.location.href = '/op_auth.html';
+      return;
+    }
+  } catch(e) {
+    // Token invalide — fallback user
+    AUTH = { username: 'Utilisateur', role: 'user', label: 'Utilisateur',
+             token: null, allowed_sources: [], user_id: null };
+  }
   applyAuth();
-  init();
+  init().then(() => {
+    // Recharger les sources APRES que AUTH soit initialisé
+    // pour appliquer le filtre des permissions
+    if(AUTH.role !== 'admin' && AUTH.allowed_sources && AUTH.allowed_sources.length > 0){
+      loadSources();
+    }
+  }).catch(()=>{});
 });
 
 /* ══ SPRINT 5B — PARTAGE PAR LIEN ══ */

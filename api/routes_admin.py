@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, status, UploadFile
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -255,6 +255,477 @@ async def delete_user(user_id: int, request: Request, caller=Depends(_admin)):
 
 
 # ════════════════════════════════════════════════════════════
+# PLUGIN SYSTEM — CDC 2.6.1.A
+# ════════════════════════════════════════════════════════════
+
+@router.get("/plugins")
+async def list_plugins(request: Request, _=Depends(_admin)):
+    """Liste tous les connecteurs depuis DB + PluginManager."""
+    from api.database import get_pg_pool
+    try:
+        from core.plugin_manager import plugin_manager
+        pm_status = plugin_manager.status()
+    except Exception:
+        pm_status = {'registered': [], 'disabled': [], 'active_instances': []}
+    try:
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                'SELECT name, class_name, filename, file_path, enabled, uploaded_by, created_at '
+                'FROM registered_plugins ORDER BY created_at DESC'
+            )
+        plugins = []
+        for r in rows:
+            in_memory = r['name'] in pm_status['registered']
+            plugins.append({
+                'name':             r['name'],
+                'class_name':       r['class_name'],
+                'module':           r['filename'],
+                'enabled':          r['enabled'],
+                'in_memory':        in_memory,
+                'active_instances': sum(1 for k in pm_status['active_instances'] if k.startswith(r['name'])),
+                'uploaded_by':      r['uploaded_by'],
+                'created_at':       r['created_at'].isoformat() if r['created_at'] else None,
+            })
+        return {'plugins': plugins, 'total': len(plugins)}
+    except Exception as e:
+        logger.error(f'[Admin/plugins] list: {e}')
+        return {'plugins': [], 'total': 0}
+
+
+@router.post("/plugins/{plugin_name}/toggle")
+async def toggle_plugin(
+    plugin_name: str,
+    request: Request,
+    caller=Depends(_admin),
+):
+    """Active ou désactive un connecteur custom."""
+    from core.plugin_manager import plugin_manager
+    from core.audit import log_event, AuditAction
+    if plugin_name not in plugin_manager.list_registered():
+        raise HTTPException(404, f"Plugin '{plugin_name}' non trouvé")
+    currently_enabled = plugin_manager.is_enabled(plugin_name)
+    if currently_enabled:
+        plugin_manager.disable(plugin_name)
+        new_state = 'disabled'
+    else:
+        plugin_manager.enable(plugin_name)
+        new_state = 'enabled'
+    await log_event(
+        action=AuditAction.CONFIG_CHANGE,
+        user_id=int(caller['sub']), user_email=caller['email'],
+        resource=f'plugin:{plugin_name}',
+        details={'action': 'toggle', 'new_state': new_state},
+    )
+    # Persister l'état en DB
+    try:
+        from api.database import get_pg_pool
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                'UPDATE registered_plugins SET enabled=$1, updated_at=NOW() WHERE name=$2',
+                new_state == 'enabled', plugin_name
+            )
+    except Exception as e:
+        logger.warning(f'[Plugins] Erreur update DB: {e}')
+    return {'plugin': plugin_name, 'enabled': new_state == 'enabled'}
+
+
+@router.post("/plugins/upload", status_code=201)
+async def upload_plugin(
+    request: Request,
+    file: UploadFile = File(...),
+    caller=Depends(_admin),
+):
+    """
+    Upload d'un connecteur custom .py.
+    Valide que le fichier contient une classe héritant de BaseConnector
+    avec les 4 méthodes abstraites requises.
+    """
+    import ast, os, importlib.util
+    from core.audit import log_event, AuditAction
+
+    if not file.filename.endswith('.py'):
+        raise HTTPException(400, 'Le fichier doit être un fichier Python (.py)')
+
+    content_bytes = await file.read()
+    if len(content_bytes) > 500_000:
+        raise HTTPException(400, 'Fichier trop volumineux (max 500KB)')
+
+    source_code = content_bytes.decode('utf-8', errors='replace')
+
+    # ── Validation AST ──
+    try:
+        tree = ast.parse(source_code)
+    except SyntaxError as e:
+        raise HTTPException(400, f'Erreur de syntaxe Python: {e}')
+
+    # Chercher une classe héritant de BaseConnector
+    required_methods = {'connect', 'test_connection', 'get_metadata', 'execute_query'}
+    found_class = None
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef): continue
+        bases = [b.id if isinstance(b, ast.Name) else
+                 b.attr if isinstance(b, ast.Attribute) else ''
+                 for b in node.bases]
+        if 'BaseConnector' not in bases: continue
+        methods = {n.name for n in ast.walk(node) if isinstance(n, ast.FunctionDef)}
+        missing = required_methods - methods
+        if missing:
+            raise HTTPException(400,
+                f"Classe '{node.name}': méthodes manquantes: {', '.join(missing)}")
+        found_class = node.name
+        break
+
+    if not found_class:
+        raise HTTPException(400,
+            'Aucune classe héritant de BaseConnector trouvée. '
+            'Votre classe doit étendre BaseConnector.')
+
+    # ── Sauvegarder dans /app/api/connectors/custom/ ──
+    plugin_dir = '/app/api/connectors/custom'
+    os.makedirs(plugin_dir, exist_ok=True)
+    plugin_name = file.filename[:-3]  # sans .py
+    plugin_path = os.path.join(plugin_dir, file.filename)
+    with open(plugin_path, 'w', encoding='utf-8') as f:
+        f.write(source_code)
+
+    # ── Enregistrer dans le PluginManager ──
+    try:
+        from core.plugin_manager import plugin_manager
+        spec   = importlib.util.spec_from_file_location(plugin_name, plugin_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        cls    = getattr(module, found_class)
+        plugin_manager.register(plugin_name, cls)
+    except Exception as e:
+        os.remove(plugin_path)
+        raise HTTPException(500, f'Erreur chargement plugin: {e}')
+
+    # ── Persister en DB ──
+    try:
+        from api.database import get_pg_pool
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            await conn.execute("""
+                INSERT INTO registered_plugins (name, class_name, filename, file_path, enabled, uploaded_by)
+                VALUES ($1, $2, $3, $4, TRUE, $5)
+                ON CONFLICT (name) DO UPDATE SET
+                    class_name  = EXCLUDED.class_name,
+                    filename    = EXCLUDED.filename,
+                    file_path   = EXCLUDED.file_path,
+                    enabled     = TRUE,
+                    updated_at  = NOW()
+            """, plugin_name, found_class, file.filename, plugin_path,
+                 caller.get('email', 'admin'))
+    except Exception as e:
+        logger.warning(f'[Plugins] Erreur persistance DB: {e}')
+        # Non bloquant — le plugin est quand même enregistré en mémoire
+
+    await log_event(
+        action=AuditAction.CONFIG_CHANGE,
+        user_id=int(caller['sub']), user_email=caller['email'],
+        resource=f'plugin:{plugin_name}',
+        details={'action': 'upload', 'class': found_class, 'file': file.filename},
+    )
+
+    return {
+        'plugin_name':  plugin_name,
+        'class_name':   found_class,
+        'filename':     file.filename,
+        'registered':   True,
+        'message':      f"Plugin '{plugin_name}' enregistré avec succès",
+    }
+
+
+# ════════════════════════════════════════════════════════════
+# SECRETS — Chiffrement AES-256-GCM
+# ════════════════════════════════════════════════════════════
+
+@router.post("/secrets/rotate")
+async def rotate_secrets(request: Request, caller=Depends(_admin)):
+    """
+    Rechiffre tous les secrets en clair avec AES-256-GCM.
+    CDC §2.1.7 : Rotation automatique des credentials.
+    """
+    from api.database import get_pg_pool
+    from core.audit   import log_event, AuditAction
+    try:
+        from core.secrets import rotate_all_secrets
+        pool   = await get_pg_pool()
+        result = await rotate_all_secrets(pool)
+        await log_event(
+            action=AuditAction.CONFIG_CHANGE,
+            user_id=int(caller['sub']), user_email=caller['email'],
+            resource='connection_secrets',
+            details={'action': 'rotate_all', **result},
+        )
+        return {
+            'success':   True,
+            'encrypted': result['encrypted'],
+            'skipped':   result['skipped'],
+            'message':   f"{result['encrypted']} secret(s) chiffré(s), {result['skipped']} déjà chiffré(s)"
+        }
+    except Exception as e:
+        logger.error(f'[Admin/secrets/rotate] {e}')
+        raise HTTPException(500, f'Erreur rotation: {e}')
+
+
+@router.post("/secrets/rotate/{source_id}")
+async def rotate_source_secret(source_id: str, request: Request, caller=Depends(_admin)):
+    """Chiffre les credentials d'une seule source."""
+    from api.database import get_pg_pool
+    from core.audit   import log_event, AuditAction
+    try:
+        from core.secrets import encrypt_secret, is_encrypted
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT id, secret_value FROM connection_secrets WHERE source_id=$1",
+                source_id
+            )
+            if not rows:
+                raise HTTPException(404, 'Aucun credential pour cette source')
+            count = 0
+            for row in rows:
+                val = row['secret_value']
+                if val and not is_encrypted(val):
+                    new_val = encrypt_secret(val)
+                    await conn.execute(
+                        'UPDATE connection_secrets SET secret_value=$1 WHERE id=$2',
+                        new_val, row['id']
+                    )
+                    count += 1
+        await log_event(
+            action=AuditAction.CONFIG_CHANGE,
+            user_id=int(caller['sub']), user_email=caller['email'],
+            resource=f'secret:{source_id}',
+            details={'action': 'rotate_single', 'encrypted': count},
+        )
+        return {'success': True, 'source_id': source_id, 'encrypted': count,
+                'message': f'{count} credential(s) chiffré(s)'}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f'[Admin/secrets/rotate/{source_id}] {e}')
+        raise HTTPException(500, f'Erreur: {e}')
+
+
+@router.get("/secrets/status")
+async def secrets_status(request: Request, _=Depends(_admin)):
+    """Retourne le statut de chiffrement de chaque source."""
+    from api.database import get_pg_pool
+    try:
+        from core.secrets import is_encrypted
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT cs.source_id, ds.name, ds.connector_type, "
+                "       cs.secret_key, cs.secret_value "
+                "FROM connection_secrets cs "
+                "JOIN data_sources ds ON ds.id = cs.source_id"
+            )
+        result = []
+        for r in rows:
+            ct = r['connector_type']
+            ct_str = ct.value if hasattr(ct, 'value') else str(ct)
+            result.append({
+                'source_id':     str(r['source_id']),
+                'source_name':   r['name'],
+                'connector_type':ct_str,
+                'secret_key':    r['secret_key'],
+                'encrypted':     is_encrypted(r['secret_value'] or ''),
+            })
+        total      = len(result)
+        encrypted  = sum(1 for x in result if x['encrypted'])
+        return {
+            'secrets':        result,
+            'total':          total,
+            'encrypted':      encrypted,
+            'not_encrypted':  total - encrypted,
+        }
+    except Exception as e:
+        logger.error(f'[Admin/secrets/status] {e}')
+        raise HTTPException(500, 'Erreur statut secrets')
+
+
+# ════════════════════════════════════════════════════════════
+# MONITORING CONNECTEURS
+# ════════════════════════════════════════════════════════════
+
+@router.get("/sources/metrics")
+async def get_sources_metrics(request: Request, window_hours: int = 24, _=Depends(_admin)):
+    from api.database   import get_pg_pool
+    from api.repository import list_sources
+    try:
+        pool    = await get_pg_pool()
+        sources = await list_sources()
+        result  = []
+        async with pool.acquire() as conn:
+            for src in sources:
+                src_id = str(src.id)
+                ct     = src.connector_type
+                ct_str = ct.value if hasattr(ct, 'value') else str(ct)
+                row = await conn.fetchrow(
+                    "SELECT "
+                    "  COUNT(*) FILTER (WHERE action='QUERY') AS query_count, "
+                    "  COUNT(*) FILTER (WHERE action='QUERY' AND result='failure') AS error_count, "
+                    "  COUNT(DISTINCT user_email) AS unique_users, "
+                    "  MAX(created_at) AS last_activity "
+                    "FROM audit_logs "
+                    "WHERE resource LIKE $1 "
+                    "  AND created_at >= NOW() - ($2 || ' hours')::INTERVAL",
+                    f"%{src_id}%", str(window_hours)
+                )
+                total      = int(row['query_count'] or 0)
+                errors     = int(row['error_count']  or 0)
+                error_rate = round(errors / total * 100, 1) if total > 0 else 0.0
+                cb_state   = 'unknown'
+                try:
+                    from api.connection_service import CircuitBreaker
+                    cb       = CircuitBreaker.get(src_id, src.options or {})
+                    cb_state = cb.state.value
+                except Exception:
+                    pass
+                result.append({
+                    'id':              src_id,
+                    'name':            src.name,
+                    'connector_type':  ct_str,
+                    'status':          src.status or 'unknown',
+                    'entity_count':    src.entity_count or 0,
+                    'test_latency_ms': src.test_latency_ms,
+                    'last_synced_at':  src.last_synced_at.isoformat() if src.last_synced_at else None,
+                    'last_tested_at':  src.last_tested_at.isoformat() if src.last_tested_at else None,
+                    'query_count':     total,
+                    'error_count':     errors,
+                    'error_rate_pct':  error_rate,
+                    'unique_users':    int(row['unique_users'] or 0),
+                    'last_activity':   row['last_activity'].isoformat() if row['last_activity'] else None,
+                    'cb_state':        cb_state,
+                })
+        result.sort(key=lambda x: (-int(x['status'] in ['error','disconnected']), -x['query_count']))
+        return {'sources': result, 'total': len(result), 'window_hours': window_hours}
+    except Exception as e:
+        logger.error(f'[Admin/sources/metrics] {e}')
+        raise HTTPException(500, 'Erreur métriques sources')
+
+
+# ════════════════════════════════════════════════════════════
+# ACTIONS UTILISATEUR — Reset password · Toggle statut · Stats
+# ════════════════════════════════════════════════════════════
+
+@router.post("/users/{user_id}/reset-password")
+async def reset_password(user_id: int, request: Request, caller=Depends(_admin)):
+    """Génère un lien de reset valable 24h. L'admin copie le lien manuellement."""
+    import uuid
+    from api.database import get_pg_pool
+    from core.audit   import log_event, AuditAction
+    token = str(uuid.uuid4())
+    try:
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            user = await conn.fetchrow(
+                "SELECT id, email, username FROM op_users WHERE id = $1", user_id
+            )
+            if not user:
+                raise HTTPException(404, "Utilisateur introuvable")
+            sql = (
+                "INSERT INTO password_reset_tokens (user_id, token, expires_at) "
+                "VALUES ($1, $2, NOW() + INTERVAL '24 hours') "
+                "ON CONFLICT (user_id) DO UPDATE "
+                "    SET token = EXCLUDED.token, "
+                "        expires_at = EXCLUDED.expires_at, "
+                "        created_at = NOW()"
+            )
+            await conn.execute(sql, user_id, token)
+        await log_event(
+            action=AuditAction.CONFIG_CHANGE,
+            user_id=int(caller["sub"]), user_email=caller["email"],
+            resource=f"user:{user_id}",
+            details={"action": "reset_password_link", "target": user["email"]},
+        )
+        base = str(request.base_url).rstrip("/")
+        return {"reset_url": f"{base}/reset-password?token={token}",
+                "token": token, "expires_in": "24h", "user_email": user["email"]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[Admin/users] reset-password {user_id}: {e}")
+        raise HTTPException(500, "Erreur génération token reset")
+
+
+@router.post("/users/{user_id}/toggle-status")
+async def toggle_user_status(user_id: int, request: Request, caller=Depends(_admin)):
+    """Active ou désactive un compte utilisateur."""
+    from api.database import get_pg_pool
+    from core.audit   import log_event, AuditAction
+    if user_id == int(caller["sub"]):
+        raise HTTPException(400, "Impossible de modifier votre propre statut")
+    try:
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            user = await conn.fetchrow(
+                "SELECT id, email, is_active FROM op_users WHERE id = $1", user_id
+            )
+            if not user:
+                raise HTTPException(404, "Utilisateur introuvable")
+            new_status = not user["is_active"]
+            await conn.execute(
+                "UPDATE op_users SET is_active = $1, updated_at = NOW() WHERE id = $2",
+                new_status, user_id
+            )
+        await log_event(
+            action=AuditAction.UPDATE_USER,
+            user_id=int(caller["sub"]), user_email=caller["email"],
+            resource=f"user:{user_id}",
+            details={"action": "toggle_status", "new_status": new_status},
+        )
+        return {"user_id": user_id, "is_active": new_status}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[Admin/users] toggle-status {user_id}: {e}")
+        raise HTTPException(500, "Erreur modification statut")
+
+
+@router.get("/users/{user_id}/stats")
+async def get_user_stats(user_id: int, request: Request, _=Depends(_admin)):
+    """Statistiques d'activité depuis audit_logs."""
+    from api.database import get_pg_pool
+    try:
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            user = await conn.fetchrow(
+                "SELECT email FROM op_users WHERE id = $1", user_id
+            )
+            if not user:
+                raise HTTPException(404, "Utilisateur introuvable")
+            row = await conn.fetchrow(
+                "SELECT "
+                "  COUNT(*) FILTER (WHERE action='QUERY') AS query_count, "
+                "  COUNT(*) FILTER (WHERE action='LOGIN') AS login_count, "
+                "  COUNT(*) FILTER (WHERE action='QUERY' "
+                "    AND created_at >= NOW() - INTERVAL '7 days') AS queries_7d, "
+                "  MAX(created_at) FILTER (WHERE action='QUERY') AS last_query_at "
+                "FROM audit_logs WHERE user_email = $1",
+                user["email"]
+            )
+            return {
+                "user_id":       user_id,
+                "query_count":   int(row["query_count"]  or 0),
+                "login_count":   int(row["login_count"]  or 0),
+                "queries_7d":    int(row["queries_7d"]   or 0),
+                "last_query_at": row["last_query_at"].isoformat() if row["last_query_at"] else None,
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[Admin/users] stats {user_id}: {e}")
+        return {"user_id": user_id, "query_count": 0, "login_count": 0,
+                "queries_7d": 0, "last_query_at": None}
+
+
+# ════════════════════════════════════════════════════════════
 # PERMISSIONS SOURCES — CDC 2.6.1.B
 # ════════════════════════════════════════════════════════════
 
@@ -272,7 +743,7 @@ async def get_user_permissions(user_id: int, request: Request, _=Depends(_admin)
                        usp.can_export, usp.can_query, usp.granted_at,
                        s.name AS source_name, s.connector_type
                 FROM user_source_permissions usp
-                LEFT JOIN sources s ON s.id::text = usp.source_id
+                LEFT JOIN data_sources s ON s.id::text = usp.source_id
                 WHERE usp.user_id = $1
                 ORDER BY usp.granted_at DESC
                 """,
@@ -372,10 +843,57 @@ async def revoke_user_permission(
 # AUDIT LOGS — CDC 2.6.1 (Phase 10)
 # ════════════════════════════════════════════════════════════
 
+@router.get("/audit/anomalies")
+async def detect_anomalies(request: Request, _=Depends(_admin)):
+    from api.database import get_pg_pool
+    from datetime import datetime, timezone
+    try:
+        pool = await get_pg_pool()
+        anomalies = []
+        async with pool.acquire() as conn:
+            # Brute force : > 5 LOGIN_FAILED depuis la même IP en 1h
+            rows = await conn.fetch(
+                "SELECT ip_address, COUNT(*) AS cnt FROM audit_logs "
+                "WHERE action='LOGIN_FAILED' AND created_at >= NOW() - INTERVAL '1 hour' "
+                "GROUP BY ip_address HAVING COUNT(*) >= 5"
+            )
+            for r in rows:
+                anomalies.append({
+                    'type': 'brute_force', 'severity': 'high',
+                    'message': f"IP {r['ip_address']}: {r['cnt']} tentatives échouées en 1h",
+                })
+            # Volume anormal : > 50 QUERY en 1h pour un user
+            rows2 = await conn.fetch(
+                "SELECT user_email, COUNT(*) AS cnt FROM audit_logs "
+                "WHERE action='QUERY' AND created_at >= NOW() - INTERVAL '1 hour' "
+                "GROUP BY user_email HAVING COUNT(*) >= 50"
+            )
+            for r in rows2:
+                anomalies.append({
+                    'type': 'high_volume', 'severity': 'medium',
+                    'message': f"{r['user_email']}: {r['cnt']} requêtes en 1h (volume anormal)",
+                })
+            # Accès refusés répétés
+            rows3 = await conn.fetch(
+                "SELECT user_email, COUNT(*) AS cnt FROM audit_logs "
+                "WHERE action='ACCESS_DENIED' AND created_at >= NOW() - INTERVAL '24 hours' "
+                "GROUP BY user_email HAVING COUNT(*) >= 3"
+            )
+            for r in rows3:
+                anomalies.append({
+                    'type': 'access_denied', 'severity': 'medium',
+                    'message': f"{r['user_email']}: {r['cnt']} accès refusés en 24h",
+                })
+        return {'anomalies': anomalies, 'checked_at': datetime.now(timezone.utc).isoformat()}
+    except Exception as e:
+        logger.error(f'[Admin/audit/anomalies] {e}')
+        return {'anomalies': [], 'checked_at': ''}
+
+
 @router.get("/audit/logs")
 async def get_audit_logs(
     request:    Request,
-    limit:      int           = Query(50,  ge=1, le=500),
+    limit:      int           = Query(50,  ge=1, le=1000),
     offset:     int           = Query(0,   ge=0),
     user_email: Optional[str] = Query(None),
     action:     Optional[str] = Query(None),
@@ -396,14 +914,21 @@ async def get_audit_logs(
 
 @router.get("/audit/stats")
 async def get_audit_stats(request: Request, _=Depends(_admin)):
-    """Statistiques rapides pour le cockpit (24h)."""
     from core.audit import get_stats
-    return await get_stats()
-
-
-# ════════════════════════════════════════════════════════════
-# CONFIG ADMIN — CDC 2.6.1.C (Voice) + 2.6.1.D (Dashboards)
-# ════════════════════════════════════════════════════════════
+    from api.database import get_pg_pool
+    stats = await get_stats()
+    # Ajouter queries_today
+    try:
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            queries = await conn.fetchval(
+                "SELECT COUNT(*) FROM audit_logs "
+                "WHERE action='QUERY' AND created_at >= NOW() - INTERVAL '24 hours'"
+            )
+        stats['queries_today'] = int(queries or 0)
+    except Exception:
+        stats['queries_today'] = 0
+    return stats
 
 @router.get("/config")
 async def get_config(request: Request, _=Depends(_admin)):
@@ -493,7 +1018,7 @@ async def get_sources_status(request: Request, _=Depends(_admin)):
                 "status":         src.status or "unknown",
                 "entity_count":   src.entity_count or 0,
                 "test_latency_ms": src.test_latency_ms,
-                "last_sync":      src.last_sync.isoformat() if src.last_sync else None,
+                "last_sync":      src.last_synced_at.isoformat() if src.last_synced_at else None,
                 "error_count":    0,
             })
         return {"sources": result, "total": len(result)}
